@@ -1,0 +1,13 @@
+{
+  "name": "@age3/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Message types exchanged between the game client and the server.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@age3/core": "*"
+  }
+}

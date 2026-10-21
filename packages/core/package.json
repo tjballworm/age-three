@@ -1,0 +1,10 @@
+{
+  "name": "@age3/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared game rules, data and types. Pure TypeScript, no DOM: runs on both client and server.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

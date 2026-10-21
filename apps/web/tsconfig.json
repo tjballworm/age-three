@@ -1,0 +1,17 @@
+{
+  "extends": ["../../tsconfig.base.json", "@tsconfig/svelte/tsconfig.json"],
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["svelte", "vite/client", "node"],
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "paths": {
+      "$game/*": ["./src/game/*"],
+      "$ui/*": ["./src/ui/*"],
+      "$state/*": ["./src/state/*"],
+      "$net/*": ["./src/net/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte", "vite.config.ts"]
+}

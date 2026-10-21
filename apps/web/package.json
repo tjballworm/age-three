@@ -1,0 +1,25 @@
+{
+  "name": "@age3/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@age3/core": "*",
+    "@age3/protocol": "*",
+    "pixi.js": "8.6.6"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "4.0.4",
+    "@tsconfig/svelte": "5.0.4",
+    "@types/node": "^20.17.10",
+    "svelte": "5.19.0",
+    "svelte-check": "4.1.4",
+    "vite": "5.4.14"
+  }
+}

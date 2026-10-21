@@ -1,0 +1,26 @@
+/* Design tokens from docs/style-guide.md */
+:root {
+  --gold-light: #ffe38a;
+  --gold: #ffca3c;
+  --gold-deep: #f5a71c;
+  --bronze: #b9760f;
+  --bronze-dark: #7a4a12;
+  --brown-text: #3a2400;
+  --parchment: #e9d185;
+
+  --panel-blue: #b0dbf1;
+  --row: #eef6fc;
+  --navy: #04223e;
+  --navy-mid: #123246;
+
+  --title: #ffe9b0;
+  --hud-text: #fff4dc;
+  --hud-panel: #141e18b8;
+  --hud-border: #7a3d10;
+
+  --ok: #1c7a2e;
+  --err: #b02a1a;
+
+  --font-display: 'Cinzel', Georgia, serif;
+  --font-body: 'Noto Sans', 'DejaVu Sans', Arial, sans-serif;
+}

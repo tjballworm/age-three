@@ -1,0 +1,22 @@
+@import './tokens.css';
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0d1a10;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--hud-text);
+  user-select: none;
+  -webkit-user-select: none;
+}
