@@ -32,8 +32,8 @@ export function sampleCities(): City[] {
     {
       id: 'c1',
       name: 'Ardenhold',
-      x: 212,
-      y: 418,
+      x: 50,
+      y: 50,
       level: 9,
       resources: res({
         gold: stock(48_210, 1_240),
@@ -49,8 +49,8 @@ export function sampleCities(): City[] {
     {
       id: 'c2',
       name: 'Vale Rest',
-      x: 230,
-      y: 405,
+      x: 54,
+      y: 47,
       level: 6,
       resources: res({}),
       population: { current: 4_100, max: 5_200, idle: 600 },
@@ -60,8 +60,8 @@ export function sampleCities(): City[] {
     {
       id: 'c3',
       name: 'Stonecairn',
-      x: 198,
-      y: 440,
+      x: 46,
+      y: 55,
       level: 4,
       resources: res({ food: stock(18_000, 600) }),
       population: { current: 2_300, max: 3_000, idle: 900 },
@@ -92,7 +92,7 @@ export function sampleQueue(now: number): TimedTask[] {
     task('t2', 'build', 'Cottage → Lv 9', 0.2, 48 * MIN),
     task('t3', 'train', 'Archer × 500', 0.35, 34 * MIN),
     task('t4', 'research', 'Military Science Lv 4', 0.12, 1.2 * HOUR),
-    task('t5', 'march', 'Attack → Valley Lv 6 (209,428)', 0.9, 8 * MIN),
+    task('t5', 'march', 'Attack → Valley Lv 6 (48,53)', 0.9, 8 * MIN),
     task('t6', 'build', 'Barracks → Lv 5', 0.6, 25 * MIN, 'c2'),
     // Finishes shortly after load so the completion message can be seen.
     task('t7', 'build', 'Inn → Lv 2', 0, 20_000),
@@ -102,7 +102,7 @@ export function sampleQueue(now: number): TimedTask[] {
 export function sampleChat(now: number): ChatMessage[] {
   return [
     { id: 'm1', channel: 'system', from: null, text: 'Welcome to Age Three.', at: now - 9 * MIN },
-    { id: 'm2', channel: 'alliance', from: 'Mira', text: 'rally at 210,420 in 10 min', at: now - 6 * MIN },
+    { id: 'm2', channel: 'alliance', from: 'Mira', text: 'rally at 52,49 in 10 min', at: now - 6 * MIN },
     {
       id: 'm3',
       channel: 'world',
@@ -114,7 +114,7 @@ export function sampleChat(now: number): ChatMessage[] {
       id: 'm4',
       channel: 'alliance',
       from: 'Oskar',
-      text: 'barbarian keep at 220,431 cleared',
+      text: 'barbarian keep at 57,52 cleared',
       at: now - 2 * MIN,
     },
   ];

@@ -4,6 +4,7 @@
   import Tabs from '$ui/components/Tabs.svelte';
   import Window from '$ui/components/Window.svelte';
   import CityOverview from './CityOverview.svelte';
+  import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
 
   // Title and tabs for every window. Content is filled in as each feature is built.
   const WINDOWS: Record<WindowId, { title: string; tabs: string[] }> = {
@@ -13,7 +14,7 @@
     alliance: { title: 'Alliance', tabs: ['Info', 'Members', 'Diplomacy'] },
     reports: { title: 'Reports', tabs: ['All', 'Battles', 'Scouting', 'Trade'] },
     mail: { title: 'Mail', tabs: ['Inbox', 'Sent', 'Compose'] },
-    rank: { title: 'Rankings', tabs: ['Players', 'Alliances', 'Cities'] },
+    leaderboard: { title: 'Leaderboard', tabs: ['Player', 'Hero', 'Alliance'] },
     shop: { title: 'Shop', tabs: ['Featured', 'Speed-ups', 'Resources', 'Chests'] },
     tech: { title: 'Academy', tabs: ['Economy', 'Military'] },
     market: { title: 'Marketplace', tabs: ['Buy', 'Sell', 'My Orders'] },
@@ -40,6 +41,8 @@
 
     {#if game.openWindow === 'city' && tab === 'Resources'}
       <CityOverview />
+    {:else if game.openWindow === 'leaderboard'}
+      <LeaderboardPlaceholder board={tab} />
     {:else}
       <div class="placeholder">
         <div class="caption">{def.title} · {tab}</div>

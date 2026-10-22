@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { game } from '$state/game.svelte';
   import Hud from './hud/Hud.svelte';
+  import TileHoverCard from './hud/TileHoverCard.svelte';
+  import TileWindow from './windows/TileWindow.svelte';
   import WindowHost from './windows/WindowHost.svelte';
 
   // The UI is laid out on a stage that is never smaller than 1024×720 design pixels. On smaller
@@ -24,7 +27,12 @@
   >
     <Hud />
     <WindowHost />
+    {#if game.selectedTile}
+      <TileWindow tile={game.selectedTile} />
+    {/if}
   </div>
+  <!-- Positioned in screen pixels next to the hovered map tile, so it lives outside the scaled stage. -->
+  <TileHoverCard />
 </div>
 
 <style>

@@ -9,12 +9,8 @@
     { id: 'alliance', label: 'Alliance', color: '#3a8a4a' },
     { id: 'reports', label: 'Reports', color: '#7a3a8a' },
     { id: 'mail', label: 'Mail', color: '#2a6a9a' },
-    { id: 'rank', label: 'Rank', color: '#a83a2a' },
     { id: 'shop', label: 'Shop', color: '#c89a1a' },
-    { id: 'tech', label: 'Tech', color: '#2f4f8a' },
-    { id: 'market', label: 'Market', color: '#6a8a2a' },
-    { id: 'events', label: 'Events', color: '#9a3a5a' },
-    { id: 'settings', label: 'Settings', color: '#5a5a6a' },
+    { id: 'leaderboard', label: 'Leaderboard', color: '#a83a2a' },
   ];
 </script>
 
@@ -77,7 +73,7 @@
   }
   .label {
     font: 800 9px var(--font-display);
-    letter-spacing: 0.5px;
+    letter-spacing: 0;
     text-transform: uppercase;
     color: #c9b483;
   }

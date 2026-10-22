@@ -1,0 +1,429 @@
+import { BitmapFont, BitmapText, Container, Graphics, Rectangle, Sprite, type Texture } from 'pixi.js';
+import { tileAt, type World, type WorldTile } from '@age3/core';
+import type { Engine } from '../../engine';
+
+// Isometric tile size in world pixels.
+export const TILE_W = 128;
+export const TILE_H = 64;
+
+const MIN_SCALE = 0.3;
+const MAX_SCALE = 1.6;
+const LABEL_SCALE = 0.85;
+const DRAG_THRESHOLD = 5;
+
+// Placeholder colours until real tile art exists.
+const COLOR = {
+  valley: 0x6f9e48,
+  flat: 0xcdb889,
+  npc: 0x8a8a8a,
+  city: 0x3a78c8,
+  mine: 0xf5b82e,
+} as const;
+
+export interface WorldSceneEvents {
+  /** Pointer is over a tile; `sx`/`sy` are screen pixels of the tile's centre. `null` when it leaves. */
+  hover(tile: WorldTile | null, sx: number, sy: number): void;
+  select(tile: WorldTile): void;
+}
+
+const toWorld = (x: number, y: number) => ({ wx: ((x - y) * TILE_W) / 2, wy: ((x + y) * TILE_H) / 2 });
+function toTile(wx: number, wy: number) {
+  const a = wx / (TILE_W / 2);
+  const b = wy / (TILE_H / 2);
+  return { x: Math.round((a + b) / 2), y: Math.round((b - a) / 2) };
+}
+
+/**
+ * The world map. Only tiles inside the screen are drawn, using pooled sprites, so the cost does
+ * not grow with the size of the world. Coordinates here are "unwrapped" (they can go past the
+ * edges); data lookups wrap them back onto the map.
+ */
+export class WorldScene {
+  readonly root = new Container();
+  private ground = new Container();
+  private markers = new Container();
+  private buildings = new Container();
+  private labels = new Container();
+  private hoverMark = new Graphics();
+  private selectMark = new Graphics();
+
+  private groundTex = {} as Record<'valley' | 'flat', Texture>;
+  private buildingTex = {} as Record<'npc' | 'city' | 'mine', Texture>;
+  private groundPool: Sprite[] = [];
+  private buildingPool: Sprite[] = [];
+  private labelPool: BitmapText[] = [];
+  private used = { ground: 0, buildings: 0, labels: 0 };
+
+  private camX = 0;
+  private camY = 0;
+  private scale = 0.6;
+  private dirty = true;
+  private active = false;
+  private hovered: { x: number; y: number } | null = null;
+  private selected: { x: number; y: number } | null = null;
+  private drag: { x: number; y: number; camX: number; camY: number; moved: boolean } | null = null;
+  private pointers = new Map<number, { x: number; y: number }>();
+  private pinch: { dist: number; scale: number } | null = null;
+  private cleanup: (() => void)[] = [];
+
+  constructor(
+    private engine: Engine,
+    private world: World,
+    private events: WorldSceneEvents,
+  ) {
+    this.root.addChild(this.ground, this.markers, this.buildings, this.labels);
+    this.markers.addChild(this.selectMark, this.hoverMark);
+    this.root.visible = false;
+    engine.layers.world.addChild(this.root);
+
+    this.buildTextures();
+    BitmapFont.install({
+      name: 'WorldLabel',
+      style: {
+        fontFamily: 'Arial',
+        fontSize: 28,
+        fontWeight: 'bold',
+        fill: '#ffffff',
+        stroke: { color: '#000000', width: 6 },
+      },
+      chars: [['a', 'z'], ['A', 'Z'], ['0', '9'], " .,()-'"],
+      resolution: 2,
+    });
+
+    this.bindInput();
+    const tick = () => {
+      if (this.active && this.dirty) {
+        this.dirty = false;
+        this.redraw();
+      }
+    };
+    const onResize = () => (this.dirty = true);
+    engine.app.ticker.add(tick);
+    engine.app.renderer.on('resize', onResize);
+    this.cleanup.push(
+      () => engine.app.ticker.remove(tick),
+      () => engine.app.renderer.off('resize', onResize),
+    );
+  }
+
+  /** Shows or hides the map (it only receives input while shown). */
+  setActive(active: boolean) {
+    this.active = active;
+    this.root.visible = active;
+    this.dirty = true;
+    if (!active) this.setHover(null);
+  }
+
+  /** Centres the camera on a tile. */
+  goTo(x: number, y: number) {
+    const { wx, wy } = toWorld(x, y);
+    this.camX = wx;
+    this.camY = wy;
+    this.dirty = true;
+    this.setHover(null);
+  }
+
+  /** Marks a tile as selected, or clears the marker. */
+  setSelected(tile: { x: number; y: number } | null) {
+    this.selected = tile ? this.nearestCopy(tile) : null;
+    this.drawMarker(this.selectMark, this.selected, 0xffd84a, 3);
+  }
+
+  destroy() {
+    for (const fn of this.cleanup) fn();
+    this.root.destroy({ children: true });
+    for (const t of [...Object.values(this.groundTex), ...Object.values(this.buildingTex)]) t.destroy(true);
+  }
+
+  // ---------- textures ----------
+
+  private buildTextures() {
+    const renderer = this.engine.app.renderer;
+    const frame = new Rectangle(-TILE_W / 2 - 1, -TILE_H / 2 - 1, TILE_W + 2, TILE_H + 2);
+    for (const kind of ['valley', 'flat'] as const) {
+      const g = new Graphics();
+      g.poly([0, -TILE_H / 2, TILE_W / 2, 0, 0, TILE_H / 2, -TILE_W / 2, 0]).fill(COLOR[kind]);
+      if (kind === 'valley') {
+        // a few tufts so valleys read as land, not flat colour
+        for (const [x, y] of [
+          [-24, -4],
+          [10, -10],
+          [26, 6],
+          [-6, 10],
+          [-34, 6],
+        ] as const) {
+          g.moveTo(x - 4, y)
+            .lineTo(x, y - 7)
+            .lineTo(x + 4, y)
+            .stroke({ width: 2, color: 0x4f7a2c });
+        }
+      }
+      g.poly([0, -TILE_H / 2, TILE_W / 2, 0, 0, TILE_H / 2, -TILE_W / 2, 0]).stroke({
+        width: 1,
+        color: 0x000000,
+        alpha: 0.15,
+      });
+      this.groundTex[kind] = renderer.generateTexture({ target: g, frame, resolution: 2 });
+      g.destroy();
+    }
+    const bframe = new Rectangle(-44, -70, 88, 90);
+    for (const kind of ['npc', 'city', 'mine'] as const) {
+      const g = new Graphics();
+      this.drawCastle(g, COLOR[kind]);
+      this.buildingTex[kind] = renderer.generateTexture({ target: g, frame: bframe, resolution: 2 });
+      g.destroy();
+    }
+  }
+
+  private drawCastle(g: Graphics, color: number) {
+    const dark = 0x2a2018;
+    g.ellipse(0, 8, 36, 13).fill({ color: 0x000000, alpha: 0.25 });
+    // walls
+    g.poly([-26, 6, 0, 18, 26, 6, 26, -8, 0, 4, -26, -8]).fill(color).stroke({ width: 1.5, color: dark });
+    g.poly([0, 4, 26, -8, 26, 6, 0, 18]).fill({ color: 0x000000, alpha: 0.2 });
+    // keep
+    g.rect(-11, -36, 22, 32).fill(color).stroke({ width: 1.5, color: dark });
+    g.rect(0, -36, 11, 32).fill({ color: 0x000000, alpha: 0.18 });
+    g.poly([-14, -36, 0, -54, 14, -36]).fill(0x8a3a24).stroke({ width: 1.5, color: dark });
+    // towers
+    for (const tx of [-26, 26]) {
+      g.rect(tx - 6, -22, 12, 28)
+        .fill(color)
+        .stroke({ width: 1.5, color: dark });
+      g.poly([tx - 8, -22, tx, -34, tx + 8, -22])
+        .fill(0x8a3a24)
+        .stroke({ width: 1.5, color: dark });
+    }
+    g.rect(-4, 6, 8, 9).fill(dark);
+    // flag
+    g.moveTo(0, -54).lineTo(0, -68).stroke({ width: 1.5, color: dark });
+    g.poly([0, -68, 14, -64, 0, -60]).fill(0xffffff).stroke({ width: 1, color: dark });
+  }
+
+  // ---------- input ----------
+
+  private bindInput() {
+    const canvas = this.engine.app.canvas;
+    canvas.style.touchAction = 'none';
+    const local = (e: PointerEvent | WheelEvent) => {
+      const r = canvas.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+
+    const down = (e: PointerEvent) => {
+      if (!this.active) return;
+      canvas.setPointerCapture(e.pointerId);
+      const p = local(e);
+      this.pointers.set(e.pointerId, p);
+      if (this.pointers.size === 1) this.drag = { ...p, camX: this.camX, camY: this.camY, moved: false };
+      if (this.pointers.size === 2) {
+        const [a, b] = [...this.pointers.values()] as [{ x: number; y: number }, { x: number; y: number }];
+        this.pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), scale: this.scale };
+        this.drag = null;
+      }
+    };
+    const move = (e: PointerEvent) => {
+      if (!this.active) return;
+      const p = local(e);
+      if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, p);
+      if (this.pinch && this.pointers.size === 2) {
+        const [a, b] = [...this.pointers.values()] as [{ x: number; y: number }, { x: number; y: number }];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        this.zoomAt(
+          (this.pinch.scale * dist) / this.pinch.dist / this.scale,
+          (a.x + b.x) / 2,
+          (a.y + b.y) / 2,
+        );
+        return;
+      }
+      if (this.drag) {
+        const dx = p.x - this.drag.x;
+        const dy = p.y - this.drag.y;
+        if (Math.abs(dx) + Math.abs(dy) > DRAG_THRESHOLD) {
+          this.drag.moved = true;
+          this.setHover(null);
+        }
+        if (this.drag.moved) {
+          this.camX = this.drag.camX - dx / this.scale;
+          this.camY = this.drag.camY - dy / this.scale;
+          this.dirty = true;
+          canvas.style.cursor = 'grabbing';
+          return;
+        }
+      }
+      this.setHover(this.tileAtScreen(p.x, p.y));
+    };
+    const up = (e: PointerEvent) => {
+      if (!this.active) return;
+      const p = local(e);
+      const click = this.drag && !this.drag.moved && this.pointers.size === 1;
+      this.pointers.delete(e.pointerId);
+      if (this.pointers.size < 2) this.pinch = null;
+      if (this.pointers.size === 0) this.drag = null;
+      canvas.style.cursor = 'grab';
+      if (click) {
+        const t = this.tileAtScreen(p.x, p.y);
+        this.setSelected(t);
+        this.events.select(tileAt(this.world, t.x, t.y));
+      }
+    };
+    const leave = () => {
+      if (this.pointers.size === 0) this.setHover(null);
+    };
+    const wheel = (e: WheelEvent) => {
+      if (!this.active) return;
+      e.preventDefault();
+      const p = local(e);
+      this.zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, p.x, p.y);
+    };
+
+    canvas.addEventListener('pointerdown', down);
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', up);
+    canvas.addEventListener('pointerleave', leave);
+    canvas.addEventListener('wheel', wheel, { passive: false });
+    this.cleanup.push(() => {
+      canvas.removeEventListener('pointerdown', down);
+      canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerup', up);
+      canvas.removeEventListener('pointercancel', up);
+      canvas.removeEventListener('pointerleave', leave);
+      canvas.removeEventListener('wheel', wheel);
+    });
+  }
+
+  private zoomAt(factor: number, sx: number, sy: number) {
+    const before = this.screenToWorld(sx, sy);
+    this.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, this.scale * factor));
+    const after = this.screenToWorld(sx, sy);
+    this.camX += before.wx - after.wx;
+    this.camY += before.wy - after.wy;
+    this.dirty = true;
+    this.setHover(null);
+  }
+
+  private screenToWorld(sx: number, sy: number) {
+    const { width, height } = this.engine.app.screen;
+    return { wx: this.camX + (sx - width / 2) / this.scale, wy: this.camY + (sy - height / 2) / this.scale };
+  }
+
+  private worldToScreen(wx: number, wy: number) {
+    const { width, height } = this.engine.app.screen;
+    return { sx: (wx - this.camX) * this.scale + width / 2, sy: (wy - this.camY) * this.scale + height / 2 };
+  }
+
+  private tileAtScreen(sx: number, sy: number) {
+    const { wx, wy } = this.screenToWorld(sx, sy);
+    return toTile(wx, wy);
+  }
+
+  /** The copy of a wrapped tile nearest the camera, so markers appear where the player is looking. */
+  private nearestCopy(t: { x: number; y: number }) {
+    const size = this.world.size;
+    const c = toTile(this.camX, this.camY);
+    return { x: t.x + size * Math.round((c.x - t.x) / size), y: t.y + size * Math.round((c.y - t.y) / size) };
+  }
+
+  private setHover(t: { x: number; y: number } | null) {
+    if (t && this.hovered && t.x === this.hovered.x && t.y === this.hovered.y) return;
+    this.hovered = t;
+    this.drawMarker(this.hoverMark, t, 0xffffff, 2);
+    if (!t) {
+      this.events.hover(null, 0, 0);
+      return;
+    }
+    const { wx, wy } = toWorld(t.x, t.y);
+    const { sx, sy } = this.worldToScreen(wx, wy);
+    this.events.hover(tileAt(this.world, t.x, t.y), sx, sy);
+    this.engine.app.canvas.style.cursor = 'pointer';
+  }
+
+  private drawMarker(g: Graphics, t: { x: number; y: number } | null, color: number, width: number) {
+    g.clear();
+    if (!t) return;
+    const { wx, wy } = toWorld(t.x, t.y);
+    g.poly([wx, wy - TILE_H / 2, wx + TILE_W / 2, wy, wx, wy + TILE_H / 2, wx - TILE_W / 2, wy])
+      .fill({ color, alpha: 0.15 })
+      .stroke({ width, color });
+  }
+
+  // ---------- drawing ----------
+
+  private redraw() {
+    const { width, height } = this.engine.app.screen;
+    const s = this.scale;
+    this.root.scale.set(s);
+    this.root.position.set(width / 2 - this.camX * s, height / 2 - this.camY * s);
+
+    // Visible area in world pixels, padded so tall buildings at the bottom edge still draw.
+    const left = this.camX - width / 2 / s - TILE_W;
+    const right = this.camX + width / 2 / s + TILE_W;
+    const top = this.camY - height / 2 / s - TILE_H;
+    const bottom = this.camY + height / 2 / s + TILE_H * 2;
+    // In isometric space, x - y follows screen x and x + y follows screen y.
+    const dMin = Math.floor((2 * left) / TILE_W);
+    const dMax = Math.ceil((2 * right) / TILE_W);
+    const sMin = Math.floor((2 * top) / TILE_H);
+    const sMax = Math.ceil((2 * bottom) / TILE_H);
+    const showLabels = s >= LABEL_SCALE;
+    let g = 0;
+    let b = 0;
+    let l = 0;
+
+    for (let sum = sMin; sum <= sMax; sum++) {
+      for (let d = dMin; d <= dMax; d++) {
+        if ((sum + d) & 1) continue;
+        const x = (sum + d) / 2;
+        const y = (sum - d) / 2;
+        const wx = (d * TILE_W) / 2;
+        const wy = (sum * TILE_H) / 2;
+        const tile = tileAt(this.world, x, y);
+        const look = tile.mine ? 'mine' : tile.kind;
+
+        const ground = this.groundPool[g] ?? this.addSprite(this.groundPool, this.ground, 0.5, 0.5);
+        g++;
+        ground.texture = this.groundTex[tile.kind === 'npc' || tile.kind === 'city' ? 'flat' : tile.kind];
+        ground.position.set(wx, wy);
+        ground.visible = true;
+
+        if (look === 'valley' || look === 'flat') continue;
+        const building =
+          this.buildingPool[b] ?? this.addSprite(this.buildingPool, this.buildings, 0.5, 70 / 90);
+        b++;
+        building.texture = this.buildingTex[look];
+        building.position.set(wx, wy);
+        building.scale.set(0.8 + tile.level * 0.03);
+        building.visible = true;
+
+        if (!showLabels) continue;
+        let label = this.labelPool[l];
+        if (!label) {
+          label = new BitmapText({ text: '', style: { fontFamily: 'WorldLabel', fontSize: 13 } });
+          label.anchor.set(0.5, 1);
+          this.labelPool.push(label);
+          this.labels.addChild(label);
+        }
+        l++;
+        const text = tile.kind === 'npc' ? `NPC Lv ${tile.level}` : `${tile.name} (${tile.level})`;
+        if (label.text !== text) label.text = text;
+        label.tint = tile.mine ? COLOR.mine : 0xffffff;
+        label.scale.set(1 / s);
+        label.position.set(wx, wy - 58);
+        label.visible = true;
+      }
+    }
+    for (let i = g; i < this.used.ground; i++) this.groundPool[i]!.visible = false;
+    for (let i = b; i < this.used.buildings; i++) this.buildingPool[i]!.visible = false;
+    for (let i = l; i < this.used.labels; i++) this.labelPool[i]!.visible = false;
+    this.used = { ground: g, buildings: b, labels: l };
+  }
+
+  private addSprite(pool: Sprite[], parent: Container, ax: number, ay: number) {
+    const sprite = new Sprite();
+    sprite.anchor.set(ax, ay);
+    pool.push(sprite);
+    parent.addChild(sprite);
+    return sprite;
+  }
+}

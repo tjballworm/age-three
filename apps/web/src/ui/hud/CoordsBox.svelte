@@ -4,14 +4,21 @@
   let x = $state(currentCity().x);
   let y = $state(currentCity().y);
 
+  // Follow camera jumps (city list clicks, Go) so the fields show where the map is centred.
+  $effect(() => {
+    const t = game.mapTarget;
+    if (t) {
+      x = t.x;
+      y = t.y;
+    }
+  });
+
   function go(e: SubmitEvent) {
     e.preventDefault();
     const nx = Number(x);
     const ny = Number(y);
     if (!Number.isFinite(nx) || !Number.isFinite(ny)) return;
     goToCoord(nx, ny);
-    x = game.mapTarget!.x;
-    y = game.mapTarget!.y;
   }
 </script>
 

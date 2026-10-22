@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>phractsmack.lol · Coming Soonish</title>
+<meta name="description" content="phractsmack.lol. Coming soonish.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Noto+Sans:wght@400;600&display=swap">
+<style>
+:root { --bg: #0d1410; --gold: #f5b82e; --gold-soft: #e9cf8a; --bronze: #8a6a34; --text: #e8e0cc; --muted: #a8997a; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: radial-gradient(ellipse at 50% 35%, #24331f 0%, transparent 60%), radial-gradient(ellipse at 50% 120%, #3a2a12 0%, transparent 55%), var(--bg); color: var(--text); font-family: 'Noto Sans', system-ui, sans-serif; display: grid; place-items: center; padding: 16px; overflow: hidden; }
+/* faint isometric grid, a nod to the world map */
+body::before { content: ''; position: fixed; inset: -50%; background-image: repeating-linear-gradient(26.565deg, transparent 0 46px, #f5b82e0d 46px 47px), repeating-linear-gradient(-26.565deg, transparent 0 46px, #f5b82e0d 46px 47px); pointer-events: none; }
+.frame { position: relative; width: min(560px, 100%); padding: 48px 32px 40px; text-align: center; background: linear-gradient(180deg, #141e18f2, #0f1712f2); border: 2px solid var(--bronze); border-radius: 10px; box-shadow: 0 0 0 1px #000, inset 0 0 0 1px #f5b82e33, 0 20px 60px #000c; }
+.frame::before, .frame::after { content: ''; position: absolute; left: 50%; width: 120px; height: 2px; transform: translateX(-50%); background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+.frame::before { top: -2px; }
+.frame::after { bottom: -2px; }
+.crest { width: 72px; height: 72px; margin: 0 auto 20px; }
+h1 { margin: 0; font: 800 clamp(28px, 7.5vw, 48px)/1 'Cinzel', Georgia, serif; letter-spacing: 3px; color: var(--gold); text-shadow: 0 2px 0 #5a3c10, 0 0 24px #f5b82e40; }
+.rule { width: 60%; height: 1px; margin: 20px auto; background: linear-gradient(90deg, transparent, var(--bronze), transparent); }
+.soon { margin: 0; font: 600 clamp(16px, 4vw, 20px) 'Cinzel', Georgia, serif; letter-spacing: 6px; text-transform: uppercase; color: var(--gold-soft); }
+</style>
+</head>
+<body>
+<main class="frame">
+<svg class="crest" viewBox="0 0 72 72" aria-hidden="true">
+<path d="M36 4 64 14v20c0 17-12 28-28 34C20 62 8 51 8 34V14Z" fill="#1c2a1f" stroke="#f5b82e" stroke-width="2.5"/>
+<path d="M22 44V30l4 3 4-7 6 6 6-6 4 7 4-3v14Z" fill="#f5b82e"/>
+<rect x="22" y="46" width="28" height="4" fill="#f5b82e"/>
+</svg>
+<h1>phractsmack.lol</h1>
+<div class="rule"></div>
+<p class="soon">Coming Soonish</p>
+</main>
+</body>
+</html>

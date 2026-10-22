@@ -1,7 +1,7 @@
 // Client-side game state (Svelte 5 runes). The Pixi scenes and the Svelte UI both read from here.
 // For now it is seeded with sample data; later it mirrors what the server sends.
 
-import { isFinished, wrapCoord, type ChatChannel, type City, type Coord } from '@age3/core';
+import { isFinished, wrapCoord, type ChatChannel, type City, type Coord, type WorldTile } from '@age3/core';
 import { sampleChat, sampleCities, samplePlayer, sampleQueue } from './sample';
 
 export type View = 'town' | 'outskirts' | 'world';
@@ -13,7 +13,7 @@ export type WindowId =
   | 'alliance'
   | 'reports'
   | 'mail'
-  | 'rank'
+  | 'leaderboard'
   | 'shop'
   | 'tech'
   | 'market'
@@ -36,6 +36,10 @@ export const game = $state({
   badges: { quests: 3, reports: 5, mail: 1 } as Partial<Record<WindowId, number>>,
   openWindow: null as WindowId | null,
   mapTarget: null as Coord | null,
+  /** World-map tile under the pointer, with its centre in screen pixels. */
+  hoverTile: null as { tile: WorldTile; sx: number; sy: number } | null,
+  /** World-map tile whose window is open. */
+  selectedTile: null as WorldTile | null,
 });
 
 export function currentCity(): City {
@@ -44,6 +48,8 @@ export function currentCity(): City {
 
 export function selectCity(id: string) {
   game.cityId = id;
+  const city = game.cities.find((c) => c.id === id);
+  if (city) game.mapTarget = { x: city.x, y: city.y };
 }
 
 export function openWindow(id: WindowId) {
@@ -52,6 +58,11 @@ export function openWindow(id: WindowId) {
 
 export function closeWindow() {
   game.openWindow = null;
+}
+
+export function selectTile(tile: WorldTile | null) {
+  game.selectedTile = tile;
+  if (tile) game.openWindow = null;
 }
 
 export function goToCoord(x: number, y: number) {

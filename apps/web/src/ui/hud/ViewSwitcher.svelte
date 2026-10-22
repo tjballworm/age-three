@@ -30,11 +30,13 @@
     display: flex;
   }
   button {
-    width: 82px;
+    min-width: 76px;
+    padding: 0 10px;
+    white-space: nowrap;
     height: 28px;
     cursor: pointer;
     font: 800 11px var(--font-display);
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
     color: #c9b483;
     border: 1px solid #6d5a2a;

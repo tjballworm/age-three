@@ -1,6 +1,5 @@
 <script lang="ts">
   import { currentCity, game, openWindow, selectCity } from '$state/game.svelte';
-  import Icon from '$ui/components/Icon.svelte';
   import { formatNumber } from '$ui/format';
 
   const city = $derived(currentCity());
@@ -36,10 +35,6 @@
         <span class="muted">({c.x},{c.y})</span>
       </button>
     {/each}
-    <button type="button" class="slot add" disabled title="Found a new city (needs a free flat tile)">
-      <span class="crest"><Icon name="plus" size={14} stroke={2.5} /></span>
-      <span class="cname muted">Found city</span>
-    </button>
   </div>
 </section>
 
@@ -143,10 +138,6 @@
     background: linear-gradient(180deg, #2f4f8a, #1a2e52);
     font: 800 12px var(--font-display);
     color: var(--title);
-  }
-  .add .crest {
-    background: #0006;
-    color: #c9b483;
   }
   .cname {
     flex: 1;
