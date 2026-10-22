@@ -9,7 +9,8 @@ const HOUR = 3_600_000;
 export function stockAt(stock: ResourceStock, since: number, now: number): number {
   const elapsed = Math.max(0, now - since);
   const projected = stock.amount + (stock.perHour * elapsed) / HOUR;
-  if (stock.perHour > 0) return Math.max(stock.amount, Math.min(projected, Math.max(stock.cap, stock.amount)));
+  if (stock.perHour > 0)
+    return Math.max(stock.amount, Math.min(projected, Math.max(stock.cap, stock.amount)));
   return Math.max(0, projected);
 }
 
