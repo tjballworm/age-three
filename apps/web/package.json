@@ -12,6 +12,8 @@
   "dependencies": {
     "@age3/core": "*",
     "@age3/protocol": "*",
+    "@fontsource/cinzel": "^5.1.1",
+    "@fontsource/noto-sans": "^5.1.1",
     "pixi.js": "8.6.6"
   },
   "devDependencies": {

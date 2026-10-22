@@ -1,3 +1,7 @@
+@import '@fontsource/cinzel/latin-600.css';
+@import '@fontsource/cinzel/latin-800.css';
+@import '@fontsource/noto-sans/latin-400.css';
+@import '@fontsource/noto-sans/latin-700.css';
 @import './tokens.css';
 
 * {
@@ -19,4 +23,46 @@ body {
   color: var(--hud-text);
   user-select: none;
   -webkit-user-select: none;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+/* Shared HUD building blocks */
+
+.hud-panel {
+  background: var(--hud-panel);
+  border: 1px solid var(--hud-border);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px #0008;
+}
+
+.caption {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--title);
+  text-shadow: 0 1px 2px #000;
+  letter-spacing: 0.5px;
+}
+
+.field {
+  height: 24px;
+  border: 1px solid #5a4a2a;
+  border-radius: 4px;
+  background: #080a0eb3;
+  color: #f2e6c4;
+  padding: 0 8px;
+  outline: none;
+}
+
+.field:focus {
+  border-color: var(--bronze);
+  box-shadow: 0 0 0 1px #b9760f66;
+}
+
+.muted {
+  color: #c9b483;
 }

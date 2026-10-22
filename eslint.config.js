@@ -18,4 +18,9 @@ export default ts.config(
     files: ['**/*.svelte', '**/*.svelte.ts'],
     languageOptions: { parserOptions: { parser: ts.parser } },
   },
+  {
+    // TypeScript already checks for undefined names (including Svelte generics).
+    files: ['**/*.ts', '**/*.svelte'],
+    rules: { 'no-undef': 'off' },
+  },
 );
