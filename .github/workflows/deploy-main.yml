@@ -1,0 +1,22 @@
+# Publishes the coming-soon page to phractsmack.lol. Run by hand from the Actions tab.
+name: Deploy phractsmack.lol
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - name: Deploy
+        run: >-
+          npx --yes netlify-cli@21.6.0 deploy --prod --no-build --dir sites/coming-soon
+          --site ac81c648-d8fc-44e1-b443-8517d719c314 --filter @age3/web
+          --message "${{ github.sha }}"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}

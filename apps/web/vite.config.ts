@@ -31,9 +31,13 @@ function refArt(copyIntoBuild: boolean): Plugin {
     },
     closeBundle() {
       if (!copyIntoBuild) return;
-      for (const p of REF_COPY) cpSync(join(REF_DIR, p), join(outDir, 'ref', p), { recursive: true });
       // keep the preview out of search engines
       writeFileSync(join(outDir, '_headers'), '/*\n  X-Robots-Tag: noindex, nofollow\n');
+      if (!existsSync(REF_DIR)) {
+        this.warn(`Reference art not found at ${REF_DIR}; the test build uses drawn placeholders.`);
+        return;
+      }
+      for (const p of REF_COPY) cpSync(join(REF_DIR, p), join(outDir, 'ref', p), { recursive: true });
     },
   };
 }

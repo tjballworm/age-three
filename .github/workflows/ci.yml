@@ -1,0 +1,76 @@
+# Checks every push and pull request, then deploys main to test.phractsmack.lol.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web (typecheck + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  server:
+    name: Server (vet + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - run: go vet ./...
+      - run: go test ./...
+
+  deploy-test:
+    name: Deploy to test.phractsmack.lol
+    needs: [web, server]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: test
+    env:
+      HAS_DEVART: ${{ secrets.DEVART_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      # The private reference art, when the DEVART_TOKEN secret is set. Without it the build uses drawn placeholders.
+      - name: Check out reference art
+        if: env.HAS_DEVART == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: tjballworm/age-three-devart
+          token: ${{ secrets.DEVART_TOKEN }}
+          path: age-three-devart
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build:test -w @age3/web
+        env:
+          AGE3_REF: ${{ github.workspace }}/age-three-devart/dominionofages
+      - name: Deploy
+        run: >-
+          npx --yes netlify-cli@21.6.0 deploy --prod --no-build --dir apps/web/dist
+          --site 9024495a-24bc-47b8-baeb-724285920c9c --filter @age3/web
+          --message "${{ github.sha }}"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
