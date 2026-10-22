@@ -1,10 +1,16 @@
-import { BitmapFont, BitmapText, Container, Graphics, Rectangle, Sprite, type Texture } from 'pixi.js';
+import { Assets, BitmapFont, BitmapText, Container, Graphics, Rectangle, Sprite, TilingSprite, type Texture } from 'pixi.js';
 import { tileAt, type World, type WorldTile } from '@age3/core';
 import type { Engine } from '../../engine';
+import { REF_ART_NAMES, REF_GROUND_URL, refArtFor, refArtUrl } from './tileArt';
 
-// Isometric tile size in world pixels.
-export const TILE_W = 128;
-export const TILE_H = 64;
+// Isometric tile size in world pixels. Wide enough that the original-size tile art (about 100-150 px
+// across) sits inside its own diamond with ground showing between neighbours.
+export const TILE_W = 192;
+export const TILE_H = 96;
+/** Reference art is drawn on its bottom edge this far below the tile centre, so its base sits mid-tile. */
+const REF_BASE = 30;
+/** Reference art wider than this share of a tile is scaled down to fit. */
+const REF_FIT = 0.85;
 
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 1.6;
@@ -52,6 +58,9 @@ export class WorldScene {
   private groundPool: Sprite[] = [];
   private buildingPool: Sprite[] = [];
   private labelPool: BitmapText[] = [];
+  /** Reference tile art (dev and the test preview only); null until loaded, or when unavailable. */
+  private refTex: Record<string, Texture> | null = null;
+  private refGround: TilingSprite | null = null;
   private used = { ground: 0, buildings: 0, labels: 0 };
 
   private camX = 0;
@@ -77,6 +86,7 @@ export class WorldScene {
     engine.layers.world.addChild(this.root);
 
     this.buildTextures();
+    if (import.meta.env.VITE_REF_ART) void this.loadRefArt();
     BitmapFont.install({
       name: 'WorldLabel',
       style: {
@@ -136,6 +146,20 @@ export class WorldScene {
   }
 
   // ---------- textures ----------
+
+  /** Swaps the drawn placeholders for the reference tiles once they load; keeps the drawn ones if they can't. */
+  private async loadRefArt() {
+    try {
+      const urls = REF_ART_NAMES.map(refArtUrl);
+      const [loaded, ground] = await Promise.all([Assets.load<Texture>(urls), Assets.load<Texture>(REF_GROUND_URL)]);
+      this.refTex = Object.fromEntries(REF_ART_NAMES.map((n, i) => [n, loaded[urls[i]!]!]));
+      this.refGround = new TilingSprite({ texture: ground });
+      this.ground.addChildAt(this.refGround, 0);
+      this.dirty = true;
+    } catch (e) {
+      console.warn('Reference art not available, using drawn tiles.', e);
+    }
+  }
 
   private buildTextures() {
     const renderer = this.engine.app.renderer;
@@ -367,6 +391,13 @@ export class WorldScene {
     const sMin = Math.floor((2 * top) / TILE_H);
     const sMax = Math.ceil((2 * bottom) / TILE_H);
     const showLabels = s >= LABEL_SCALE;
+    const ref = this.refTex;
+    if (this.refGround) {
+      // one repeating ground texture under everything, pinned to world space so it doesn't slide
+      this.refGround.position.set(left, top);
+      this.refGround.setSize(right - left, bottom - top);
+      this.refGround.tilePosition.set(-left, -top);
+    }
     let g = 0;
     let b = 0;
     let l = 0;
@@ -381,6 +412,20 @@ export class WorldScene {
         const tile = tileAt(this.world, x, y);
         const look = tile.mine ? 'mine' : tile.kind;
 
+        if (ref) {
+          // reference tiles are whole pictures (ground and all), standing on the tile's bottom corner
+          const sprite = this.buildingPool[b] ?? this.addSprite(this.buildingPool, this.buildings, 0.5, 1);
+          b++;
+          sprite.texture = ref[refArtFor(tile)]!;
+          sprite.anchor.set(0.5, 1);
+          sprite.position.set(wx, wy + REF_BASE);
+          sprite.scale.set(Math.min(1, (TILE_W * REF_FIT) / sprite.texture.width));
+          sprite.visible = true;
+          if (look === 'valley' || look === 'flat' || !showLabels) continue;
+          l = this.placeLabel(l, tile, wx, wy + REF_BASE - sprite.height - 4, s);
+          continue;
+        }
+
         const ground = this.groundPool[g] ?? this.addSprite(this.groundPool, this.ground, 0.5, 0.5);
         g++;
         ground.texture = this.groundTex[tile.kind === 'npc' || tile.kind === 'city' ? 'flat' : tile.kind];
@@ -392,31 +437,37 @@ export class WorldScene {
           this.buildingPool[b] ?? this.addSprite(this.buildingPool, this.buildings, 0.5, 70 / 90);
         b++;
         building.texture = this.buildingTex[look];
+        building.anchor.set(0.5, 70 / 90);
         building.position.set(wx, wy);
         building.scale.set(0.8 + tile.level * 0.03);
         building.visible = true;
 
         if (!showLabels) continue;
-        let label = this.labelPool[l];
-        if (!label) {
-          label = new BitmapText({ text: '', style: { fontFamily: 'WorldLabel', fontSize: 13 } });
-          label.anchor.set(0.5, 1);
-          this.labelPool.push(label);
-          this.labels.addChild(label);
-        }
-        l++;
-        const text = tile.kind === 'npc' ? `NPC Lv ${tile.level}` : `${tile.name} (${tile.level})`;
-        if (label.text !== text) label.text = text;
-        label.tint = tile.mine ? COLOR.mine : 0xffffff;
-        label.scale.set(1 / s);
-        label.position.set(wx, wy - 58);
-        label.visible = true;
+        l = this.placeLabel(l, tile, wx, wy - 58, s);
       }
     }
     for (let i = g; i < this.used.ground; i++) this.groundPool[i]!.visible = false;
     for (let i = b; i < this.used.buildings; i++) this.buildingPool[i]!.visible = false;
     for (let i = l; i < this.used.labels; i++) this.labelPool[i]!.visible = false;
     this.used = { ground: g, buildings: b, labels: l };
+  }
+
+  /** Shows the name label for tile `l` in the pool, bottom-centred on (x, y), and returns the next free index. */
+  private placeLabel(l: number, tile: WorldTile, x: number, y: number, s: number) {
+    let label = this.labelPool[l];
+    if (!label) {
+      label = new BitmapText({ text: '', style: { fontFamily: 'WorldLabel', fontSize: 13 } });
+      label.anchor.set(0.5, 1);
+      this.labelPool.push(label);
+      this.labels.addChild(label);
+    }
+    const text = tile.kind === 'npc' ? `NPC Lv ${tile.level}` : `${tile.name} (${tile.level})`;
+    if (label.text !== text) label.text = text;
+    label.tint = tile.mine ? COLOR.mine : 0xffffff;
+    label.scale.set(1 / s);
+    label.position.set(x, y);
+    label.visible = true;
+    return l + 1;
   }
 
   private addSprite(pool: Sprite[], parent: Container, ax: number, ay: number) {

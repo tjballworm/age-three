@@ -19,7 +19,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "deploy:test": "npm run build && netlify deploy --prod --no-build --dir apps/web/dist --site 9024495a-24bc-47b8-baeb-724285920c9c --filter @age3/web",
+    "deploy:test": "npm run build:test -w @age3/web && netlify deploy --prod --no-build --dir apps/web/dist --site 9024495a-24bc-47b8-baeb-724285920c9c --filter @age3/web",
     "deploy:main": "netlify deploy --prod --no-build --dir sites/coming-soon --site ac81c648-d8fc-44e1-b443-8517d719c314 --filter @age3/web"
   },
   "devDependencies": {

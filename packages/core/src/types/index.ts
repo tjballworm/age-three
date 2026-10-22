@@ -36,6 +36,37 @@ export interface City extends Coord {
   loyalty: number;
   /** Percent, 0–100 */
   taxRate: number;
+  /** Buildings inside the walls: the Town Hall, the walls and up to TOWN_SLOTS others. */
+  buildings: TownBuilding[];
+}
+
+/** Buildings that stand inside the walls (Evony age 2 names). */
+export type TownBuildingType =
+  | 'townhall'
+  | 'walls'
+  | 'cottage'
+  | 'warehouse'
+  | 'barracks'
+  | 'inn'
+  | 'marketplace'
+  | 'beacontower'
+  | 'reliefstation'
+  | 'forge'
+  | 'rallyspot'
+  | 'feastinghall'
+  | 'embassy'
+  | 'stable'
+  | 'academy'
+  | 'workshop';
+
+export interface TownBuilding {
+  type: TownBuildingType;
+  /** 1–10 */
+  level: number;
+  /** 0 to TOWN_SLOTS - 1 for ordinary buildings; the Town Hall and walls have fixed spots of their own. */
+  slot: number | 'townhall' | 'walls';
+  /** Being built or upgraded. */
+  upgrading?: boolean;
 }
 
 export interface Player {

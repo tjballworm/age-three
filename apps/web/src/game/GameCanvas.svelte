@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { createEngine, type Engine } from './engine';
+  import { TownScene } from './scenes/town/TownScene';
   import { WorldScene } from './scenes/world/WorldScene';
   import { currentCity, game, selectTile } from '$state/game.svelte';
   import { world } from '$state/world';
 
   let host: HTMLDivElement;
   let worldScene = $state.raw<WorldScene | null>(null);
+  let townScene = $state.raw<TownScene | null>(null);
 
   onMount(() => {
     let engine: Engine | undefined;
@@ -21,28 +23,36 @@
       const home = currentCity();
       scene.goTo(home.x, home.y);
       worldScene = scene;
+      townScene = new TownScene(e);
       game.engineReady = true;
     });
     return () => {
       alive = false;
       game.engineReady = false;
       worldScene?.destroy();
+      townScene?.destroy();
       engine?.destroy();
     };
   });
 
-  // Show the map only in World view.
   $effect(() => {
     worldScene?.setActive(game.view === 'world');
   });
 
-  // "Go" box: centre the camera on the requested tile.
+  $effect(() => {
+    townScene?.setActive(game.view === 'town');
+  });
+
+  // The town shows the current city's buildings.
+  $effect(() => {
+    townScene?.setBuildings(currentCity().buildings);
+  });
+
   $effect(() => {
     const target = game.mapTarget;
     if (target) worldScene?.goTo(target.x, target.y);
   });
 
-  // Keep the selection marker in step with the tile window.
   $effect(() => {
     worldScene?.setSelected(game.selectedTile);
   });

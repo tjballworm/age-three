@@ -1,6 +1,16 @@
 // Sample data for building the UI before the server exists. Replace with server state later.
 
-import type { ChatMessage, City, Player, ResourceStock, ResourceType, TimedTask } from '@age3/core';
+import {
+  TOWN_SLOTS,
+  type ChatMessage,
+  type City,
+  type Player,
+  type ResourceStock,
+  type ResourceType,
+  type TimedTask,
+  type TownBuilding,
+  type TownBuildingType,
+} from '@age3/core';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -17,6 +27,35 @@ export function samplePlayer(): Player {
     honor: 3_020,
     rank: 1_204,
   };
+}
+
+/** One of each special building, then barracks and cottages, filling every plot. Levels vary but never pass the Town Hall. */
+function sampleTown(hall: number): TownBuilding[] {
+  const order: TownBuildingType[] = [
+    'rallyspot',
+    'warehouse',
+    'inn',
+    'marketplace',
+    'beacontower',
+    'reliefstation',
+    'forge',
+    'feastinghall',
+    'embassy',
+    'stable',
+    'academy',
+    'workshop',
+  ];
+  while (order.length < TOWN_SLOTS) order.push(order.length % 3 === 0 ? 'barracks' : 'cottage');
+  return [
+    { type: 'townhall', level: hall, slot: 'townhall' },
+    { type: 'walls', level: hall, slot: 'walls' },
+    ...order.map((type, slot) => ({
+      type,
+      slot,
+      level: Math.max(1, hall - ((slot * 7) % 5)),
+      upgrading: slot === 5,
+    })),
+  ];
 }
 
 export function sampleCities(): City[] {
@@ -45,6 +84,7 @@ export function sampleCities(): City[] {
       population: { current: 8_400, max: 9_800, idle: 1_400 },
       loyalty: 100,
       taxRate: 20,
+      buildings: sampleTown(9),
     },
     {
       id: 'c2',
@@ -56,6 +96,7 @@ export function sampleCities(): City[] {
       population: { current: 4_100, max: 5_200, idle: 600 },
       loyalty: 92,
       taxRate: 15,
+      buildings: sampleTown(6),
     },
     {
       id: 'c3',
@@ -67,6 +108,7 @@ export function sampleCities(): City[] {
       population: { current: 2_300, max: 3_000, idle: 900 },
       loyalty: 85,
       taxRate: 10,
+      buildings: sampleTown(4),
     },
   ];
 }

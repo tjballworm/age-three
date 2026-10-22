@@ -25,7 +25,7 @@ const startedAt = Date.now();
 
 export const game = $state({
   engineReady: false,
-  view: 'town' as View,
+  view: 'world' as View,
   player: samplePlayer(),
   cities: sampleCities(),
   cityId: 'c1',
