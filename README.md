@@ -1,6 +1,6 @@
 # Age Three
 
-A browser strategy game inspired by Evony Age II. It's planned for web, Steam and mobile, all on one shared server.
+A browser strategy game. It's planned for web, Steam and mobile, all on one shared server.
 
 ## Getting started
 
