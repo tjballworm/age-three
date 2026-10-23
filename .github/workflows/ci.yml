@@ -94,6 +94,6 @@ jobs:
           version: 0.4.113
       - name: Deploy
         if: env.HAS_FLY == 'true'
-        run: flyctl deploy --remote-only --config apps/server/fly.toml apps/server
+        run: flyctl deploy --remote-only apps/server
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
