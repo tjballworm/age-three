@@ -1,4 +1,4 @@
-# Checks every push and pull request, then deploys main to test.phractsmack.lol.
+# Checks every push and pull request, then deploys main: the server to Fly.io and the site to test.phractsmack.lol.
 name: CI
 
 on:
@@ -67,6 +67,8 @@ jobs:
         run: npm run build:test -w @age3/web
         env:
           AGE3_REF: ${{ github.workspace }}/age-three-devart/dominionofages
+          # the game server the test site connects to (repo variable SERVER_URL); empty means sample data
+          VITE_SERVER_URL: ${{ vars.SERVER_URL }}
       - name: Deploy
         run: >-
           npx --yes netlify-cli@21.6.0 deploy --prod --no-build --dir apps/web/dist
@@ -74,3 +76,24 @@ jobs:
           --message "${{ github.sha }}"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+
+  deploy-server:
+    name: Deploy server to Fly.io
+    needs: [web, server]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: test
+    env:
+      HAS_FLY: ${{ secrets.FLY_API_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v7
+        if: env.HAS_FLY == 'true'
+      - uses: superfly/flyctl-actions/setup-flyctl@1.5
+        if: env.HAS_FLY == 'true'
+        with:
+          version: 0.4.113
+      - name: Deploy
+        if: env.HAS_FLY == 'true'
+        run: flyctl deploy --remote-only --config apps/server/fly.toml apps/server
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

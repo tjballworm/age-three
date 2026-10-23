@@ -1,0 +1,29 @@
+# Fly.io app for the game server (test). Deployed by the CI workflow on pushes to main.
+# DATABASE_URL is a Fly secret (Neon Postgres); PORT is set here.
+app = "age-three-server"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Game timers run on the server, so it must never sleep.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
