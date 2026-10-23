@@ -19,6 +19,9 @@
   <div class="who">
     <div class="caption name">{p.name}</div>
     <div class="muted">{p.title}{p.alliance ? ` · ${p.alliance}` : ''}</div>
+    <div class="net {game.connection}" title={game.fromServer ? 'Playing on the game server' : 'Showing sample data'}>
+      {game.connection === 'online' ? 'Online' : game.connection === 'connecting' ? 'Connecting…' : game.fromServer ? 'Offline · reconnecting' : 'Offline · sample data'}
+    </div>
     <div class="clock" title="Server time">{formatClock(clock.now)}</div>
   </div>
   <dl class="stats">
@@ -84,6 +87,25 @@
   }
   .who .muted {
     font-size: 11px;
+  }
+  .net {
+    font-size: 10px;
+    color: #c9b483;
+  }
+  .net::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 5px;
+    border-radius: 50%;
+    background: #8a8a8a;
+  }
+  .net.online::before {
+    background: #5fd35f;
+  }
+  .net.connecting::before {
+    background: #f5b82e;
   }
   .clock {
     margin-top: auto;

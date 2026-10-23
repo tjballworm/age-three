@@ -56,6 +56,11 @@
   $effect(() => {
     worldScene?.setSelected(game.selectedTile);
   });
+
+  // Redraw when the server changes the map (our cities moved or were added).
+  $effect(() => {
+    if (game.worldVersion) worldScene?.refresh();
+  });
 </script>
 
 <div class="canvas" bind:this={host}></div>

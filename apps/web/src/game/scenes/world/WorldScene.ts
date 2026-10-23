@@ -116,6 +116,11 @@ export class WorldScene {
     );
   }
 
+  /** Redraws after the world's tiles changed. */
+  refresh() {
+    this.dirty = true;
+  }
+
   /** Shows or hides the map (it only receives input while shown). */
   setActive(active: boolean) {
     this.active = active;

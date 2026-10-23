@@ -1,8 +1,10 @@
 // Client-side game state (Svelte 5 runes). The Pixi scenes and the Svelte UI both read from here.
 // For now it is seeded with sample data; later it mirrors what the server sends.
 
-import { isFinished, wrapCoord, type ChatChannel, type City, type Coord, type WorldTile } from '@age3/core';
+import { isFinished, wrapCoord, type ChatChannel, type City, type Coord, type Player, type WorldTile } from '@age3/core';
+import type { ConnectionStatus } from '$net/client';
 import { sampleChat, sampleCities, samplePlayer, sampleQueue } from './sample';
+import { placeMyCities } from './world';
 
 export type View = 'town' | 'outskirts' | 'world';
 
@@ -40,7 +42,30 @@ export const game = $state({
   hoverTile: null as { tile: WorldTile; sx: number; sy: number } | null,
   /** World-map tile whose window is open. */
   selectedTile: null as WorldTile | null,
+  /** Game server connection. While not online the game shows sample data. */
+  connection: 'offline' as ConnectionStatus,
+  /** True once the player and cities came from the server rather than sample data. */
+  fromServer: false,
+  /** Bumped when the world map's tiles change, so the map redraws. */
+  worldVersion: 0,
 });
+
+/** Replaces the sample player and cities with what the server sent. */
+export function applyServerState(s: { player: Player; cities: City[]; serverTime: number }) {
+  game.player = s.player;
+  game.cities = s.cities;
+  game.syncedAt = s.serverTime;
+  if (!s.cities.some((c) => c.id === game.cityId)) game.cityId = s.cities[0]?.id ?? '';
+  if (!game.fromServer) {
+    // the sample build queue belongs to the sample cities
+    game.queue = [];
+    const home = s.cities[0];
+    if (home) game.mapTarget = { x: home.x, y: home.y };
+  }
+  game.fromServer = true;
+  placeMyCities(s.cities, s.player);
+  game.worldVersion++;
+}
 
 export function currentCity(): City {
   return game.cities.find((c) => c.id === game.cityId) ?? game.cities[0]!;
