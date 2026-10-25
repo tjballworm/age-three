@@ -5,7 +5,7 @@ import { PROTOCOL_VERSION } from '@age3/protocol';
 import { connect } from '$net/client';
 import { applyServerState, game } from './game.svelte';
 
-/** VITE_SERVER_URL in an .env file or the build environment; in dev, the local Go server. */
+/** VITE_SERVER_URL in an .env file or the build environment; in dev, the local game server. */
 const SERVER_URL: string = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ? 'ws://localhost:8080/ws' : '');
 
 /** Dev-only login: `?name=` in the address, or Lord TJ. Real accounts replace this later. */
