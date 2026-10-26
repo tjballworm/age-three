@@ -50,6 +50,8 @@ export class TownScene {
   private scale = 1;
   private placed = false;
   private active = false;
+  /** False while the reference art is loading, so the placeholder plots never flash first. */
+  private ready = !import.meta.env.VITE_REF_ART;
   private drag: { x: number; y: number; camX: number; camY: number; moved: boolean } | null = null;
   private cleanup: (() => void)[] = [];
 
@@ -77,7 +79,7 @@ export class TownScene {
   /** Shows or hides the town (it only receives input while shown). */
   setActive(active: boolean) {
     this.active = active;
-    this.root.visible = active;
+    this.root.visible = active && this.ready;
     if (active) this.layout();
     else this.setHover(null);
   }
@@ -106,6 +108,8 @@ export class TownScene {
     } catch (e) {
       console.warn('Town reference art not available, using plain plots.', e);
     }
+    this.ready = true;
+    this.root.visible = this.active;
   }
 
   /** Placeholder ground: a green field with an outline for every plot. */

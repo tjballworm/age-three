@@ -4,12 +4,13 @@ import type { Engine } from '../../engine';
 import { REF_ART_NAMES, REF_GROUND_URL, refArtFor, refArtUrl } from './tileArt';
 
 // Square (top-down) tile size in world pixels. The tile art keeps its isometric look; it just stands
-// on a square grid. Wide enough that the original-size art (about 100-150 px across) fits a tile.
-export const TILE = 160;
+// on a square grid. 96 px squares cover the same area as the old 192x96 diamonds, so the same number
+// of tiles fit on screen; the art (about 100-150 px across) is scaled down to fit.
+export const TILE = 96;
 /** Reference art is drawn on its bottom edge this far below the tile centre, so its base sits mid-tile. */
-const REF_BASE = 40;
+const REF_BASE = 24;
 /** Reference art wider than this share of a tile is scaled down to fit. */
-const REF_FIT = 0.85;
+const REF_FIT = 1;
 
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 1.6;
@@ -63,6 +64,8 @@ export class WorldScene {
   private scale = 0.6;
   private dirty = true;
   private active = false;
+  /** False while the reference art is loading, so the drawn placeholders never flash first. */
+  private ready = !import.meta.env.VITE_REF_ART;
   private hovered: { x: number; y: number } | null = null;
   private selected: { x: number; y: number } | null = null;
   private drag: { x: number; y: number; camX: number; camY: number; moved: boolean } | null = null;
@@ -97,7 +100,7 @@ export class WorldScene {
 
     this.bindInput();
     const tick = () => {
-      if (this.active && this.dirty) {
+      if (this.active && this.ready && this.dirty) {
         this.dirty = false;
         this.redraw();
       }
@@ -119,7 +122,7 @@ export class WorldScene {
   /** Shows or hides the map (it only receives input while shown). */
   setActive(active: boolean) {
     this.active = active;
-    this.root.visible = active;
+    this.root.visible = active && this.ready;
     this.dirty = true;
     if (!active) this.setHover(null);
   }
@@ -159,6 +162,8 @@ export class WorldScene {
     } catch (e) {
       console.warn('Reference art not available, using drawn tiles.', e);
     }
+    this.ready = true;
+    this.root.visible = this.active;
   }
 
   private buildTextures() {
