@@ -1,0 +1,6 @@
+# Build output and downloaded dependencies (like node_modules).
+/_build/
+/deps/
+/cover/
+erl_crash.dump
+.env

@@ -26,19 +26,30 @@ jobs:
       - run: npm test
 
   server:
-    name: Server (vet + tests)
+    name: Server (format + compile + tests)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/server
+    env:
+      MIX_ENV: test
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: erlef/setup-beam@v1
         with:
-          go-version-file: apps/server/go.mod
-          cache-dependency-path: apps/server/go.sum
-      - run: go vet ./...
-      - run: go test ./...
+          elixir-version: "1.18.4"
+          otp-version: "27.3.4"
+      # downloaded dependencies and compiled code, reused while mix.lock is unchanged
+      - uses: actions/cache@v4
+        with:
+          path: |
+            apps/server/deps
+            apps/server/_build
+          key: mix-${{ runner.os }}-${{ hashFiles('apps/server/mix.lock') }}
+      - run: mix deps.get
+      - run: mix format --check-formatted
+      - run: mix compile --warnings-as-errors
+      - run: mix test
 
   deploy-test:
     name: Deploy to test.phractsmack.lol
