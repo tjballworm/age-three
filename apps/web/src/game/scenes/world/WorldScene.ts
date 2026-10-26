@@ -3,12 +3,11 @@ import { tileAt, type World, type WorldTile } from '@age3/core';
 import type { Engine } from '../../engine';
 import { REF_ART_NAMES, REF_GROUND_URL, refArtFor, refArtUrl } from './tileArt';
 
-// Isometric tile size in world pixels. Wide enough that the original-size tile art (about 100-150 px
-// across) sits inside its own diamond with ground showing between neighbours.
-export const TILE_W = 192;
-export const TILE_H = 96;
+// Square (top-down) tile size in world pixels. The tile art keeps its isometric look; it just stands
+// on a square grid. Wide enough that the original-size art (about 100-150 px across) fits a tile.
+export const TILE = 160;
 /** Reference art is drawn on its bottom edge this far below the tile centre, so its base sits mid-tile. */
-const REF_BASE = 30;
+const REF_BASE = 40;
 /** Reference art wider than this share of a tile is scaled down to fit. */
 const REF_FIT = 0.85;
 
@@ -32,12 +31,8 @@ export interface WorldSceneEvents {
   select(tile: WorldTile): void;
 }
 
-const toWorld = (x: number, y: number) => ({ wx: ((x - y) * TILE_W) / 2, wy: ((x + y) * TILE_H) / 2 });
-function toTile(wx: number, wy: number) {
-  const a = wx / (TILE_W / 2);
-  const b = wy / (TILE_H / 2);
-  return { x: Math.round((a + b) / 2), y: Math.round((b - a) / 2) };
-}
+const toWorld = (x: number, y: number) => ({ wx: x * TILE, wy: y * TILE });
+const toTile = (wx: number, wy: number) => ({ x: Math.round(wx / TILE), y: Math.round(wy / TILE) });
 
 /**
  * The world map. Only tiles inside the screen are drawn, using pooled sprites, so the cost does
@@ -168,10 +163,10 @@ export class WorldScene {
 
   private buildTextures() {
     const renderer = this.engine.app.renderer;
-    const frame = new Rectangle(-TILE_W / 2 - 1, -TILE_H / 2 - 1, TILE_W + 2, TILE_H + 2);
+    const frame = new Rectangle(-TILE / 2 - 1, -TILE / 2 - 1, TILE + 2, TILE + 2);
     for (const kind of ['valley', 'flat'] as const) {
       const g = new Graphics();
-      g.poly([0, -TILE_H / 2, TILE_W / 2, 0, 0, TILE_H / 2, -TILE_W / 2, 0]).fill(COLOR[kind]);
+      g.rect(-TILE / 2, -TILE / 2, TILE, TILE).fill(COLOR[kind]);
       if (kind === 'valley') {
         // a few tufts so valleys read as land, not flat colour
         for (const [x, y] of [
@@ -187,7 +182,7 @@ export class WorldScene {
             .stroke({ width: 2, color: 0x4f7a2c });
         }
       }
-      g.poly([0, -TILE_H / 2, TILE_W / 2, 0, 0, TILE_H / 2, -TILE_W / 2, 0]).stroke({
+      g.rect(-TILE / 2, -TILE / 2, TILE, TILE).stroke({
         width: 1,
         color: 0x000000,
         alpha: 0.15,
@@ -372,7 +367,7 @@ export class WorldScene {
     g.clear();
     if (!t) return;
     const { wx, wy } = toWorld(t.x, t.y);
-    g.poly([wx, wy - TILE_H / 2, wx + TILE_W / 2, wy, wx, wy + TILE_H / 2, wx - TILE_W / 2, wy])
+    g.rect(wx - TILE / 2, wy - TILE / 2, TILE, TILE)
       .fill({ color, alpha: 0.15 })
       .stroke({ width, color });
   }
@@ -386,15 +381,14 @@ export class WorldScene {
     this.root.position.set(width / 2 - this.camX * s, height / 2 - this.camY * s);
 
     // Visible area in world pixels, padded so tall buildings at the bottom edge still draw.
-    const left = this.camX - width / 2 / s - TILE_W;
-    const right = this.camX + width / 2 / s + TILE_W;
-    const top = this.camY - height / 2 / s - TILE_H;
-    const bottom = this.camY + height / 2 / s + TILE_H * 2;
-    // In isometric space, x - y follows screen x and x + y follows screen y.
-    const dMin = Math.floor((2 * left) / TILE_W);
-    const dMax = Math.ceil((2 * right) / TILE_W);
-    const sMin = Math.floor((2 * top) / TILE_H);
-    const sMax = Math.ceil((2 * bottom) / TILE_H);
+    const left = this.camX - width / 2 / s - TILE;
+    const right = this.camX + width / 2 / s + TILE;
+    const top = this.camY - height / 2 / s - TILE;
+    const bottom = this.camY + height / 2 / s + TILE * 2;
+    const xMin = Math.floor(left / TILE);
+    const xMax = Math.ceil(right / TILE);
+    const yMin = Math.floor(top / TILE);
+    const yMax = Math.ceil(bottom / TILE);
     const showLabels = s >= LABEL_SCALE;
     const ref = this.refTex;
     if (this.refGround) {
@@ -407,13 +401,10 @@ export class WorldScene {
     let b = 0;
     let l = 0;
 
-    for (let sum = sMin; sum <= sMax; sum++) {
-      for (let d = dMin; d <= dMax; d++) {
-        if ((sum + d) & 1) continue;
-        const x = (sum + d) / 2;
-        const y = (sum - d) / 2;
-        const wx = (d * TILE_W) / 2;
-        const wy = (sum * TILE_H) / 2;
+    // Rows top to bottom, so art in lower rows overlaps the row behind it.
+    for (let y = yMin; y <= yMax; y++) {
+      for (let x = xMin; x <= xMax; x++) {
+        const { wx, wy } = toWorld(x, y);
         const tile = tileAt(this.world, x, y);
         const look = tile.mine ? 'mine' : tile.kind;
 
@@ -424,7 +415,7 @@ export class WorldScene {
           sprite.texture = ref[refArtFor(tile)]!;
           sprite.anchor.set(0.5, 1);
           sprite.position.set(wx, wy + REF_BASE);
-          sprite.scale.set(Math.min(1, (TILE_W * REF_FIT) / sprite.texture.width));
+          sprite.scale.set(Math.min(1, (TILE * REF_FIT) / sprite.texture.width));
           sprite.visible = true;
           if (look === 'valley' || look === 'flat' || !showLabels) continue;
           l = this.placeLabel(l, tile, wx, wy + REF_BASE - sprite.height - 4, s);
