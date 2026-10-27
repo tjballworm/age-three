@@ -1,9 +1,12 @@
 // Sample data for building the UI before the server exists. Replace with server state later.
 
 import {
+  FIELD_SLOTS,
   TOWN_SLOTS,
   type ChatMessage,
   type City,
+  type Field,
+  type FieldType,
   type Player,
   type ResourceStock,
   type ResourceType,
@@ -58,6 +61,18 @@ function sampleTown(hall: number): TownBuilding[] {
   ];
 }
 
+/** Every field plot filled, mostly farms, levels a little under the Town Hall. The first farm is being upgraded. */
+function sampleFields(hall: number): Field[] {
+  const order: FieldType[] = ['farm', 'sawmill', 'quarry', 'ironmine', 'farm', 'sawmill', 'farm'];
+  while (order.length < FIELD_SLOTS) order.push(order[order.length % 4]!);
+  return order.map((type, slot) => ({
+    type,
+    slot,
+    level: Math.max(1, hall - 3 - (slot % 3)),
+    upgrading: slot === 0,
+  }));
+}
+
 export function sampleCities(): City[] {
   const res = (r: Partial<Record<ResourceType, ResourceStock>>): Record<ResourceType, ResourceStock> => ({
     gold: stock(10_000, 500),
@@ -85,6 +100,7 @@ export function sampleCities(): City[] {
       loyalty: 100,
       taxRate: 20,
       buildings: sampleTown(9),
+      fields: sampleFields(9),
     },
     {
       id: 'c2',
@@ -97,6 +113,7 @@ export function sampleCities(): City[] {
       loyalty: 92,
       taxRate: 15,
       buildings: sampleTown(6),
+      fields: sampleFields(6),
     },
     {
       id: 'c3',
@@ -109,6 +126,7 @@ export function sampleCities(): City[] {
       loyalty: 85,
       taxRate: 10,
       buildings: sampleTown(4),
+      fields: sampleFields(4),
     },
   ];
 }

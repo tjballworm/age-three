@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { createEngine, type Engine } from './engine';
+  import { OutskirtsScene } from './scenes/outskirts/OutskirtsScene';
   import { TownScene } from './scenes/town/TownScene';
   import { WorldScene } from './scenes/world/WorldScene';
   import { currentCity, game, selectTile } from '$state/game.svelte';
@@ -9,6 +10,7 @@
   let host: HTMLDivElement;
   let worldScene = $state.raw<WorldScene | null>(null);
   let townScene = $state.raw<TownScene | null>(null);
+  let outskirtsScene = $state.raw<OutskirtsScene | null>(null);
 
   onMount(() => {
     let engine: Engine | undefined;
@@ -24,6 +26,12 @@
       scene.goTo(home.x, home.y);
       worldScene = scene;
       townScene = new TownScene(e);
+      outskirtsScene = new OutskirtsScene(e, {
+        // the town in the middle of the outskirts leads inside the walls
+        select: (t) => {
+          if (t.kind === 'town') game.view = 'town';
+        },
+      });
       game.engineReady = true;
     });
     return () => {
@@ -31,6 +39,7 @@
       game.engineReady = false;
       worldScene?.destroy();
       townScene?.destroy();
+      outskirtsScene?.destroy();
       engine?.destroy();
     };
   });
@@ -43,9 +52,20 @@
     townScene?.setActive(game.view === 'town');
   });
 
+  $effect(() => {
+    outskirtsScene?.setActive(game.view === 'outskirts');
+  });
+
   // The town shows the current city's buildings.
   $effect(() => {
     townScene?.setBuildings(currentCity().buildings);
+  });
+
+  // The outskirts show the current city's fields, round a town drawn at its Town Hall's level.
+  $effect(() => {
+    const city = currentCity();
+    const hall = city.buildings.find((b) => b.slot === 'townhall')?.level ?? city.level;
+    outskirtsScene?.setCity(city.fields ?? [], hall);
   });
 
   $effect(() => {

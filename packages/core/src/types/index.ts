@@ -38,6 +38,8 @@ export interface City extends Coord {
   taxRate: number;
   /** Buildings inside the walls: the Town Hall, the walls and up to TOWN_SLOTS others. */
   buildings: TownBuilding[];
+  /** Resource fields in the outskirts, up to FIELD_SLOTS. Missing until the server sends them. */
+  fields?: Field[];
 }
 
 /** Buildings that stand inside the walls (Evony age 2 names). */
@@ -65,6 +67,19 @@ export interface TownBuilding {
   level: number;
   /** 0 to TOWN_SLOTS - 1 for ordinary buildings; the Town Hall and walls have fixed spots of their own. */
   slot: number | 'townhall' | 'walls';
+  /** Being built or upgraded. */
+  upgrading?: boolean;
+}
+
+/** Resource fields outside the walls. */
+export type FieldType = 'farm' | 'sawmill' | 'quarry' | 'ironmine';
+
+export interface Field {
+  type: FieldType;
+  /** 1–10 */
+  level: number;
+  /** 0 to FIELD_SLOTS - 1 */
+  slot: number;
   /** Being built or upgraded. */
   upgrading?: boolean;
 }

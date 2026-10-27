@@ -8,12 +8,12 @@ const src = (p: string) => fileURLToPath(new URL(`./src/${p}`, import.meta.url))
 
 // Reference art (the original's tiles) used as placeholders while we develop. It lives in the private
 // age-three-devart repo, cloned next to this one, and is never copied into this repo: `vite dev` serves it
-// at /ref/, and only `--mode test` (the test.phractsmack.lol preview) copies the map and town art into the
-// build. Normal builds never include it. AGE3_REF overrides the folder.
+// at /ref/, and only `--mode test` (the test.phractsmack.lol preview) copies the map, town and outskirts art
+// into the build. Normal builds never include it. AGE3_REF overrides the folder.
 const REF_DIR = resolve(
   process.env.AGE3_REF ?? fileURLToPath(new URL('../../../age-three-devart/dominionofages', import.meta.url)),
 );
-const REF_COPY = ['tiles', 'mapTile.jpg', 'flash/ui/town'];
+const REF_COPY = ['tiles', 'mapTile.jpg', 'flash/ui/town', 'flash/ui/city'];
 
 function refArt(copyIntoBuild: boolean): Plugin {
   let outDir = 'dist';
