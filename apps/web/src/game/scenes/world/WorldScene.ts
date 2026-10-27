@@ -1,13 +1,13 @@
-import { Assets, BitmapFont, BitmapText, Container, Graphics, Rectangle, Sprite, type Texture } from 'pixi.js';
+import { Assets, BitmapFont, BitmapText, Container, Graphics, Rectangle, Sprite, TilingSprite, type Texture } from 'pixi.js';
 import { tileAt, type World, type WorldTile } from '@age3/core';
 import type { Engine } from '../../engine';
 import { REF_ART_NAMES, REF_GROUND_URL, refArtFor, refArtUrl } from './tileArt';
 
-// Tiles sit on a square (top-down) grid, 96 px apart, and each is drawn as a round disc. The tile art
-// keeps its isometric look and is scaled to fit its disc.
+// Tiles sit on a square (top-down) grid, 96 px apart, over one continuous ground. The tile art keeps
+// its isometric look and is scaled to fit its tile; a ring marks the hovered and selected tile.
 export const TILE = 96;
-/** Radius of a tile's disc; the gap to the next disc shows the dark map background. */
-const DISC_R = TILE / 2 - 3;
+/** Radius of the hover and select rings. */
+const RING_R = TILE / 2 - 3;
 /** Every reference picture is scaled so its longer side is this share of a tile, whatever its own size. */
 const REF_FIT = 0.9;
 
@@ -55,8 +55,7 @@ export class WorldScene {
   private labelPool: BitmapText[] = [];
   /** Reference tile art (dev and the test preview only); null until loaded, or when unavailable. */
   private refTex: Record<string, Texture> | null = null;
-  /** Disc filled with the reference ground texture, used under every reference tile. */
-  private refDisc: Texture | null = null;
+  private refGround: TilingSprite | null = null;
   private used = { ground: 0, buildings: 0, labels: 0 };
 
   private camX = 0;
@@ -146,7 +145,6 @@ export class WorldScene {
     for (const fn of this.cleanup) fn();
     this.root.destroy({ children: true });
     for (const t of [...Object.values(this.groundTex), ...Object.values(this.buildingTex)]) t.destroy(true);
-    this.refDisc?.destroy(true);
   }
 
   // ---------- textures ----------
@@ -157,7 +155,8 @@ export class WorldScene {
       const urls = REF_ART_NAMES.map(refArtUrl);
       const [loaded, ground] = await Promise.all([Assets.load<Texture>(urls), Assets.load<Texture>(REF_GROUND_URL)]);
       this.refTex = Object.fromEntries(REF_ART_NAMES.map((n, i) => [n, loaded[urls[i]!]!]));
-      this.refDisc = this.refDiscTexture(ground);
+      this.refGround = new TilingSprite({ texture: ground });
+      this.ground.addChildAt(this.refGround, 0);
       this.dirty = true;
     } catch (e) {
       console.warn('Reference art not available, using drawn tiles.', e);
@@ -166,37 +165,20 @@ export class WorldScene {
     this.root.visible = this.active;
   }
 
-  /** A tile-sized disc texture; `fill` paints the circle path it is given. */
-  private discTexture(fill: (g: Graphics) => void, extra?: (g: Graphics) => void) {
-    const g = new Graphics();
-    fill(g.circle(0, 0, DISC_R));
+  /** A tile-sized square of ground with no outline, so neighbouring tiles read as one landscape. */
+  private groundTexture(color: number, extra?: (g: Graphics) => void) {
+    const g = new Graphics().rect(-TILE / 2, -TILE / 2, TILE, TILE).fill(color);
     extra?.(g);
-    g.circle(0, 0, DISC_R).stroke({ width: 1.5, color: 0x000000, alpha: 0.35 });
     const frame = new Rectangle(-TILE / 2, -TILE / 2, TILE, TILE);
     const tex = this.engine.app.renderer.generateTexture({ target: g, frame, resolution: 2 });
     g.destroy();
     return tex;
   }
 
-  /** A disc cut from the middle of the reference ground picture, at its own scale. */
-  private refDiscTexture(ground: Texture) {
-    const c = new Container();
-    const pic = new Sprite({ texture: ground, anchor: 0.5 });
-    const mask = new Graphics().circle(0, 0, DISC_R).fill(0xffffff);
-    pic.mask = mask;
-    c.addChild(pic, mask, new Graphics().circle(0, 0, DISC_R).stroke({ width: 1.5, color: 0x000000, alpha: 0.35 }));
-    const frame = new Rectangle(-TILE / 2, -TILE / 2, TILE, TILE);
-    const tex = this.engine.app.renderer.generateTexture({ target: c, frame, resolution: 2 });
-    c.destroy({ children: true });
-    return tex;
-  }
-
   private buildTextures() {
     const renderer = this.engine.app.renderer;
     for (const kind of ['valley', 'flat'] as const) {
-      this.groundTex[kind] = this.discTexture(
-        (g) => g.fill(COLOR[kind]),
-        (g) => {
+      this.groundTex[kind] = this.groundTexture(COLOR[kind], (g) => {
           if (kind !== 'valley') return;
           // a few tufts so valleys read as land, not flat colour
           for (const [x, y] of [
@@ -211,8 +193,7 @@ export class WorldScene {
               .lineTo(x + 4, y)
               .stroke({ width: 2, color: 0x4f7a2c });
           }
-        },
-      );
+        });
     }
     const bframe = new Rectangle(-44, -70, 88, 90);
     for (const kind of ['npc', 'city', 'mine'] as const) {
@@ -376,7 +357,7 @@ export class WorldScene {
   private setHover(t: { x: number; y: number } | null) {
     if (t && this.hovered && t.x === this.hovered.x && t.y === this.hovered.y) return;
     this.hovered = t;
-    this.drawMarker(this.hoverMark, t, 0xffffff, 2);
+    this.drawMarker(this.hoverMark, t, 0xd4ec5c, 3);
     if (!t) {
       this.events.hover(null, 0, 0);
       return;
@@ -391,9 +372,9 @@ export class WorldScene {
     g.clear();
     if (!t) return;
     const { wx, wy } = toWorld(t.x, t.y);
-    g.circle(wx, wy, DISC_R)
-      .fill({ color, alpha: 0.15 })
-      .stroke({ width, color });
+    // a soft glow under a solid ring, with the ground left uncovered inside
+    g.circle(wx, wy, RING_R).stroke({ width: width * 3, color, alpha: 0.3 });
+    g.circle(wx, wy, RING_R).stroke({ width, color });
   }
 
   // ---------- drawing ----------
@@ -415,6 +396,12 @@ export class WorldScene {
     const yMax = Math.ceil(bottom / TILE);
     const showLabels = s >= LABEL_SCALE;
     const ref = this.refTex;
+    if (this.refGround) {
+      // one repeating ground texture under everything, pinned to world space so it doesn't slide
+      this.refGround.position.set(left, top);
+      this.refGround.setSize(right - left, bottom - top);
+      this.refGround.tilePosition.set(-left, -top);
+    }
     let g = 0;
     let b = 0;
     let l = 0;
@@ -426,17 +413,8 @@ export class WorldScene {
         const tile = tileAt(this.world, x, y);
         const look = tile.mine ? 'mine' : tile.kind;
 
-        const ground = this.groundPool[g] ?? this.addSprite(this.groundPool, this.ground, 0.5, 0.5);
-        g++;
-        ground.texture =
-          ref && this.refDisc
-            ? this.refDisc
-            : this.groundTex[tile.kind === 'npc' || tile.kind === 'city' ? 'flat' : tile.kind];
-        ground.position.set(wx, wy);
-        ground.visible = true;
-
         if (ref) {
-          // reference tiles are whole pictures, all scaled to the same size and centred on their disc
+          // reference tiles are whole pictures, all scaled to the same size and centred on their tile
           const sprite = this.buildingPool[b] ?? this.addSprite(this.buildingPool, this.buildings, 0.5, 0.5);
           b++;
           sprite.texture = ref[refArtFor(tile)]!;
@@ -449,12 +427,18 @@ export class WorldScene {
           continue;
         }
 
+        const ground = this.groundPool[g] ?? this.addSprite(this.groundPool, this.ground, 0.5, 0.5);
+        g++;
+        ground.texture = this.groundTex[tile.kind === 'npc' || tile.kind === 'city' ? 'flat' : tile.kind];
+        ground.position.set(wx, wy);
+        ground.visible = true;
+
         if (look === 'valley' || look === 'flat') continue;
         const building =
           this.buildingPool[b] ?? this.addSprite(this.buildingPool, this.buildings, 0.5, 0.5);
         b++;
         building.texture = this.buildingTex[look];
-        // centred on the disc and sized to stay inside it (higher levels are a little bigger)
+        // centred on the tile and sized to stay inside it (higher levels are a little bigger)
         building.anchor.set(0.5, 0.5);
         building.position.set(wx, wy);
         building.scale.set(0.7 + tile.level * 0.02);
