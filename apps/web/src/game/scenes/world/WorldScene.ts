@@ -22,6 +22,7 @@ const COLOR = {
   flat: 0xcdb889,
   npc: 0x8a8a8a,
   city: 0x3a78c8,
+  historic: 0x7a5aa8,
   mine: 0xf5b82e,
 } as const;
 
@@ -49,7 +50,7 @@ export class WorldScene {
   private selectMark = new Graphics();
 
   private groundTex = {} as Record<'valley' | 'flat', Texture>;
-  private buildingTex = {} as Record<'npc' | 'city' | 'mine', Texture>;
+  private buildingTex = {} as Record<'npc' | 'city' | 'historic' | 'mine', Texture>;
   private groundPool: Sprite[] = [];
   private buildingPool: Sprite[] = [];
   private labelPool: BitmapText[] = [];
@@ -196,7 +197,7 @@ export class WorldScene {
         });
     }
     const bframe = new Rectangle(-44, -70, 88, 90);
-    for (const kind of ['npc', 'city', 'mine'] as const) {
+    for (const kind of ['npc', 'city', 'historic', 'mine'] as const) {
       const g = new Graphics();
       this.drawCastle(g, COLOR[kind]);
       this.buildingTex[kind] = renderer.generateTexture({ target: g, frame: bframe, resolution: 2 });
@@ -429,7 +430,7 @@ export class WorldScene {
 
         const ground = this.groundPool[g] ?? this.addSprite(this.groundPool, this.ground, 0.5, 0.5);
         g++;
-        ground.texture = this.groundTex[tile.kind === 'npc' || tile.kind === 'city' ? 'flat' : tile.kind];
+        ground.texture = this.groundTex[tile.kind === 'valley' ? 'valley' : 'flat'];
         ground.position.set(wx, wy);
         ground.visible = true;
 
@@ -463,7 +464,12 @@ export class WorldScene {
       this.labelPool.push(label);
       this.labels.addChild(label);
     }
-    const text = tile.kind === 'npc' ? `NPC Lv ${tile.level}` : `${tile.name} (${tile.level})`;
+    const text =
+      tile.kind === 'npc'
+        ? `NPC Lv ${tile.level}`
+        : tile.kind === 'historic' && tile.level < 16
+          ? `HC Lv ${tile.level}`
+          : `${tile.name} (${tile.level})`;
     if (label.text !== text) label.text = text;
     label.tint = tile.mine ? COLOR.mine : 0xffffff;
     label.scale.set(1 / s);

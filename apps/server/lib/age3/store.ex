@@ -56,19 +56,26 @@ defmodule Age3.Store.Pg do
   defp place_city(_player_id, _name, 0), do: :error
 
   defp place_city(player_id, name, tries) do
-    city = %City{
-      player_id: player_id,
-      name: name <> "'s Town",
-      x: :rand.uniform(Game.world_size()) - 1,
-      y: :rand.uniform(Game.world_size()) - 1,
-      resources: Game.starter_resources(),
-      population: Game.starter_population()
-    }
+    x = :rand.uniform(Game.world_size()) - 1
+    y = :rand.uniform(Game.world_size()) - 1
 
-    # on a clash nothing is inserted, and Ecto hands back the struct with no id
-    case Repo.insert!(city, on_conflict: :nothing, conflict_target: [:x, :y]) do
-      %City{id: nil} -> place_city(player_id, name, tries - 1)
-      %City{} = city -> {:ok, city}
+    if Game.historic_city?(x, y) do
+      place_city(player_id, name, tries - 1)
+    else
+      city = %City{
+        player_id: player_id,
+        name: name <> "'s Town",
+        x: x,
+        y: y,
+        resources: Game.starter_resources(),
+        population: Game.starter_population()
+      }
+
+      # on a clash nothing is inserted, and Ecto hands back the struct with no id
+      case Repo.insert!(city, on_conflict: :nothing, conflict_target: [:x, :y]) do
+        %City{id: nil} -> place_city(player_id, name, tries - 1)
+        %City{} = city -> {:ok, city}
+      end
     end
   end
 
