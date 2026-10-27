@@ -1,6 +1,6 @@
 // Static game data: buildings, troops, technologies, map constants.
 
-import type { TownBuildingType } from '../types';
+import type { FieldType, TownBuildingType } from '../types';
 
 /** Building plots inside the walls, not counting the Town Hall and the walls themselves. */
 export const TOWN_SLOTS = 32;
@@ -22,6 +22,16 @@ export const TOWN_BUILDING_NAME: Record<TownBuildingType, string> = {
   stable: 'Stable',
   academy: 'Academy',
   workshop: 'Workshop',
+};
+
+/** Resource field plots in the outskirts. */
+export const FIELD_SLOTS = 13;
+
+export const FIELD_NAME: Record<FieldType, string> = {
+  farm: 'Farm',
+  sawmill: 'Sawmill',
+  quarry: 'Quarry',
+  ironmine: 'Iron Mine',
 };
 
 /** The world is a square grid that wraps at the edges. */
