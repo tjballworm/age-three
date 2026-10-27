@@ -26,7 +26,8 @@ export function refArtFor(t: WorldTile): string {
     case 'city':
       return `castle${tier(t.level, 4)}`;
     case 'npc':
-      return `hc${tier(t.level, 4)}`;
+      // 1–4 castle1, 5–6 castle2, 7–9 castle3, 10 castle4
+      return t.level <= 4 ? 'castle1' : t.level <= 6 ? 'castle2' : t.level <= 9 ? 'castle3' : 'castle4';
     case 'historic':
       return HISTORIC_ART[t.level] ?? 'hc3';
     default:
