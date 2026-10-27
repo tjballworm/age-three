@@ -18,10 +18,11 @@ describe('generateWorld', () => {
 
   it('roughly follows the tile mix', () => {
     const w = generateWorld({ seed: 3, size: 100 });
-    const counts: Record<TileKind, number> = { valley: 0, flat: 0, npc: 0, city: 0 };
+    const counts: Record<TileKind, number> = { valley: 0, flat: 0, npc: 0, city: 0, historic: 0 };
     for (const t of w.tiles) counts[t.kind]++;
+    const random = w.tiles.length - counts.historic;
     for (const [kind, share] of TILE_MIX) {
-      expect(counts[kind] / w.tiles.length).toBeCloseTo(share, 1);
+      expect(counts[kind] / random).toBeCloseTo(share, 1);
     }
   });
 
@@ -30,6 +31,7 @@ describe('generateWorld', () => {
     for (const t of w.tiles) {
       if (t.kind === 'city') expect(t.name && t.owner).toBeTruthy();
       if (t.kind === 'flat') expect(t.level).toBe(0);
+      else if (t.kind === 'historic') expect(t.level).toBeGreaterThanOrEqual(12);
       else expect(t.level).toBeGreaterThanOrEqual(1);
     }
   });

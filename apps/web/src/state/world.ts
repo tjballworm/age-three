@@ -1,5 +1,5 @@
 // The world map. Generated from a fixed seed, so it is the same on every reload.
-// Kept outside $state on purpose: 10,000 tiles don't need to be reactive.
+// Kept outside $state on purpose: 640,000 tiles don't need to be reactive.
 
 import { generateWorld, type City, type Player, type WorldTile } from '@age3/core';
 import { sampleCities, samplePlayer } from './sample';

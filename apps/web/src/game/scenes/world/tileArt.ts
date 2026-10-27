@@ -9,6 +9,9 @@ const TERRAIN = ['grass', 'forest', 'desert', 'lake', 'mountain', 'swamp'] as co
 /** Level 1–10 spread over `n` art tiers. */
 const tier = (level: number, n: number) => Math.min(n, 1 + Math.floor(((Math.max(1, level) - 1) * n) / 10));
 
+/** Historic city art by level: Lv 12, 14, 16 (state capitals) and 18 (Atlantis). */
+const HISTORIC_ART: Record<number, string> = { 12: 'hc3', 14: 'hc2', 16: 'hc1', 18: 'hc4' };
+
 /** Stable terrain for a valley, so the same tile always looks the same. */
 function terrainAt(x: number, y: number) {
   let h = Math.imul(x, 73856093) ^ Math.imul(y, 19349663);
@@ -24,6 +27,8 @@ export function refArtFor(t: WorldTile): string {
       return `castle${tier(t.level, 4)}`;
     case 'npc':
       return `hc${tier(t.level, 4)}`;
+    case 'historic':
+      return HISTORIC_ART[t.level] ?? 'hc3';
     default:
       return `${terrainAt(t.x, t.y)}${tier(t.level, 3)}`;
   }

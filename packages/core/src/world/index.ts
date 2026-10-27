@@ -1,16 +1,20 @@
 // The world map: a square grid of tiles that wraps at the edges.
 // Generated from a seed so every client (and later the server) builds the identical map.
+// Historic cities are not random: they sit at fixed spots in each state (see ./states).
 
 import { WORLD_SIZE } from '../data';
 import type { Coord } from '../types';
+import { historicCityAt } from './states';
 
-export type TileKind = 'valley' | 'flat' | 'npc' | 'city';
+export * from './states';
+
+export type TileKind = 'valley' | 'flat' | 'npc' | 'city' | 'historic';
 
 export interface WorldTile extends Coord {
   kind: TileKind;
-  /** 1–10 for valleys, NPC and player cities; 0 for flat land. */
+  /** 1–10 for valleys, NPC and player cities; 0 for flat land; 12, 14, 16 or 18 for historic cities. */
   level: number;
-  /** City name (player cities only). */
+  /** City name (player and historic cities). */
   name?: string;
   /** Lord's name (player cities only). */
   owner?: string;
@@ -25,8 +29,8 @@ export interface World {
   tiles: WorldTile[];
 }
 
-/** Share of the map for each tile kind, in order. Must add up to 1. */
-export const TILE_MIX: readonly [TileKind, number][] = [
+/** Share of the randomly generated tiles for each kind, in order. Must add up to 1. */
+export const TILE_MIX: readonly [Exclude<TileKind, 'historic'>, number][] = [
   ['valley', 0.7],
   ['flat', 0.15],
   ['npc', 0.07],
@@ -84,6 +88,11 @@ export function generateWorld({ seed, size = WORLD_SIZE, reserved = [] }: Genera
   const tiles: WorldTile[] = new Array(size * size);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
+      const historic = historicCityAt(x, y);
+      if (historic) {
+        tiles[y * size + x] = { x, y, kind: 'historic', level: historic.level, name: historic.name };
+        continue;
+      }
       const r = hash(x, y, seed, 1);
       let acc = 0;
       let kind: TileKind = 'valley';

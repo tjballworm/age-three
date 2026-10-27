@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { distance, type WorldTile } from '@age3/core';
+  import { distance, stateAt, type WorldTile } from '@age3/core';
   import { currentCity, game, selectTile } from '$state/game.svelte';
   import Button from '$ui/components/Button.svelte';
   import Tabs from '$ui/components/Tabs.svelte';
@@ -32,6 +32,7 @@
       case 'flat':
         return [{ label: 'Found City', hint: 'Build a new city here' }];
       case 'npc':
+      case 'historic':
         return [
           { label: 'Scout', hint: 'See the NPC garrison' },
           { label: 'Attack', hint: 'Send troops to plunder the NPC city' },
@@ -68,6 +69,7 @@
           <tr><th>Lord</th><td>{tile.owner}{tile.mine ? ' (you)' : ''}</td></tr>
           <tr><th>Alliance</th><td>{tile.alliance ?? '—'}</td></tr>
         {/if}
+        <tr><th>State</th><td>{stateAt(tile.x, tile.y).name}</td></tr>
         <tr><th>Coordinates</th><td>({tile.x}, {tile.y})</td></tr>
         <tr><th>Distance</th><td>{distanceText}</td></tr>
       </tbody>

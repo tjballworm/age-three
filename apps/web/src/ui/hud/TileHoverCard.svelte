@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { distance } from '@age3/core';
+  import { distance, stateAt } from '@age3/core';
   import { currentCity, game } from '$state/game.svelte';
   import { KIND_LABEL, tileTitle } from '$ui/tile';
 
@@ -25,7 +25,11 @@
   {@const t = hover.tile}
   <div class="card" style:left="{left}px" style:top="{top}px" style:width="{CARD_W}px" role="tooltip">
     <div class="title" class:mine={t.mine}>{tileTitle(t)}</div>
-    <div class="kind">{t.kind === 'city' ? `${KIND_LABEL.city} · Lv ${t.level}` : KIND_LABEL[t.kind]}</div>
+    <div class="kind">
+      {t.kind === 'city' || (t.kind === 'historic' && t.level >= 16)
+        ? `${KIND_LABEL[t.kind]} · Lv ${t.level}`
+        : KIND_LABEL[t.kind]}
+    </div>
     <dl>
       {#if t.kind === 'city'}
         <dt>Lord</dt>
@@ -33,6 +37,8 @@
         <dt>Alliance</dt>
         <dd>{t.alliance ?? '—'}</dd>
       {/if}
+      <dt>State</dt>
+      <dd>{stateAt(t.x, t.y).name}</dd>
       <dt>Coords</dt>
       <dd>({t.x},{t.y})</dd>
       <dt>Distance</dt>
