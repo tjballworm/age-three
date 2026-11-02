@@ -7,9 +7,16 @@ defmodule Age3.SessionTest do
   # Feeds each message to the session in turn and returns the replies, round-tripped through JSON like the
   # client sees them.
   defp run(messages) do
-    # wake tells the test process when the task runner would be woken
+    # wake and notify tell the test process when the task runner or another player's sockets would be told
     test = self()
-    session = Session.new(store: Age3.FakeStore, now: fn -> 1_000 end, wake: &send(test, {:wake, &1}))
+
+    session =
+      Session.new(
+        store: Age3.FakeStore,
+        now: fn -> 1_000 end,
+        wake: &send(test, {:wake, &1}),
+        notify: &send(test, {:notify, &1})
+      )
 
     {replies, _session} =
       Enum.map_reduce(messages, session, fn raw, session ->
@@ -176,6 +183,40 @@ defmodule Age3.SessionTest do
                ~s({"type":"setTax","id":3,"payload":{"cityId":"c1","taxRate":101}}),
                ~s({"type":"setTax","id":4,"payload":{"cityId":"c1","taxRate":12.5}})
              ])
+  end
+
+  test "cheats work on your own city or any player by name, with no permission check" do
+    cheat = fn payload -> Jason.encode!(%{type: "cheat", id: 2, payload: payload}) end
+
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"type" => "state"},
+             %{"payload" => %{"code" => "player_not_found"}},
+             %{"payload" => %{"code" => "bad_message"}},
+             %{"payload" => %{"code" => "bad_message"}},
+             %{"payload" => %{"code" => "bad_message"}}
+           ] =
+             run([
+               login("secret123"),
+               cheat.(%{action: "addResources", cityId: "c1", amounts: %{gold: 1_000_000}}),
+               cheat.(%{action: "addTroops", player: "Other", troops: %{warrior: 500}}),
+               cheat.(%{action: "finishAll", player: "Nobody"}),
+               # unknown resource, unknown action, and no city or player
+               cheat.(%{action: "addResources", cityId: "c1", amounts: %{diamonds: 5}}),
+               cheat.(%{action: "launchNukes", cityId: "c1"}),
+               cheat.(%{action: "fillResources"})
+             ])
+
+    # only the other player's game is pushed a new state
+    assert_received {:notify, "p2"}
+    refute_received {:notify, "p1"}
+  end
+
+  test "refresh pushes the whole state with no id" do
+    session = Session.new(store: Age3.FakeStore, player_id: "p1", now: fn -> 7 end)
+    assert %{type: "state", payload: %{serverTime: 7}} = push = Session.refresh(session)
+    refute Map.has_key?(push, :id)
   end
 
   test "commands need a login first" do

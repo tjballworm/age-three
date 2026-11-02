@@ -26,7 +26,8 @@ export type WindowId =
   | 'events'
   | 'settings'
   | 'city'
-  | 'train';
+  | 'train'
+  | 'cheats';
 
 const startedAt = Date.now();
 

@@ -8,7 +8,8 @@ import { auth, forgetToken, savedToken, saveToken } from './auth.svelte';
 import { applyServerState, game, postChat } from './game.svelte';
 
 /** VITE_SERVER_URL in an .env file or the build environment; in dev, the local game server. */
-const SERVER_URL: string = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ? 'ws://localhost:8080/ws' : '');
+const SERVER_URL: string =
+  import.meta.env.VITE_SERVER_URL ?? (import.meta.env.DEV ? 'ws://localhost:8080/ws' : '');
 
 /** The open connection, for logging in and for commands from the UI. */
 let current: GameClient | null = null;
@@ -72,8 +73,13 @@ export function startServerSync(): () => void {
       }
     },
   }));
-  // a build (or later training, research...) finished on the server
+  // a build, research or training finished on the server, or someone cheated on this account
   const offPush = client.onMessage((m) => {
+    if (m.type === 'state' && m.id === undefined) {
+      applyServerState(m.payload);
+      postChat('system', null, 'Your city was changed by a tester (cheat).', m.payload.serverTime);
+      return;
+    }
     if (m.type !== 'taskDone') return;
     applyServerState(m.payload);
     const city = m.payload.cities.find((c) => c.id === m.payload.task.cityId);

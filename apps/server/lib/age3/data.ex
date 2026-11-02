@@ -50,6 +50,9 @@ defmodule Age3.Data do
   @doc ~s(One technology's spec: "name", "group", "effect", "levels" and so on, or nil for an unknown id.)
   def tech(id), do: @research["techs"][id]
 
+  @doc "The highest research level."
+  def max_tech_level, do: @research["maxLevel"]
+
   @doc ~s(Cost, time and needs to research level: %{"cost", "seconds", "requires" => buildings, "research" => techs}.)
   def tech_level(id, level) when is_integer(level) and level >= 1 do
     case tech(id) do

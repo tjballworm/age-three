@@ -31,7 +31,7 @@ defmodule Age3Web.GameSocket do
   @impl true
   def handle_control(_frame, session), do: {:ok, session}
 
-  # Messages sent to this process: the ping timer, and finished tasks.
+  # Messages sent to this process: the ping timer, finished tasks, and changes made by someone else.
   @impl true
   def handle_info(:ping, session) do
     schedule_ping()
@@ -41,6 +41,14 @@ defmodule Age3Web.GameSocket do
   # One of this player's tasks finished (from Age3.TaskRunner): push it with the new state.
   def handle_info({:task_done, task}, session) do
     case Age3.Session.task_done(session, task) do
+      nil -> {:ok, session}
+      push -> {:push, {:text, Jason.encode!(push)}, session}
+    end
+  end
+
+  # Someone else changed this player's game (a cheat on their account): push the new state.
+  def handle_info(:refresh, session) do
+    case Age3.Session.refresh(session) do
       nil -> {:ok, session}
       push -> {:push, {:text, Jason.encode!(push)}, session}
     end

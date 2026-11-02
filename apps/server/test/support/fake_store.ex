@@ -53,4 +53,11 @@ defmodule Age3.FakeStore do
   def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok
   def speed_up(_player_id, _city_id, "t2", _now_ms), do: {:error, "too_early"}
   def speed_up(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
+
+  # cheats work on city "c1" and on the player "Other" (id "p2"); anyone else isn't found
+  @impl true
+  def cheat("p1", {:city, "c1"}, _action, _args, _now_ms), do: {:ok, "p1"}
+  def cheat(_player_id, {:player, "Other"}, _action, _args, _now_ms), do: {:ok, "p2"}
+  def cheat(_player_id, {:player, _name}, _action, _args, _now_ms), do: {:error, "player_not_found"}
+  def cheat(_player_id, _target, _action, _args, _now_ms), do: {:error, "bad_message"}
 end

@@ -48,15 +48,15 @@ defmodule Age3.Build do
 
   defp target(_current, _slot, _type), do: {:error, "bad_slot"}
 
-  # The Town Hall and walls have their own spots, fields go in the outskirts, everything else on a town plot.
-  defp fits?("townhall", type), do: type == "townhall"
-  defp fits?("walls", type), do: type == "walls"
-  defp fits?(slot, type) when slot in @field_plots, do: Data.building(type)["area"] == "field"
+  @doc "Whether type can stand on slot: the Town Hall and walls have their own spots, fields go in the outskirts, everything else on a town plot."
+  def fits?("townhall", type), do: type == "townhall"
+  def fits?("walls", type), do: type == "walls"
+  def fits?(slot, type) when slot in @field_plots, do: Data.building(type)["area"] == "field"
 
-  defp fits?(slot, type) when slot in @town_plots,
+  def fits?(slot, type) when slot in @town_plots,
     do: Data.building(type)["area"] == "town" and type not in ["townhall", "walls"]
 
-  defp fits?(_slot, _type), do: false
+  def fits?(_slot, _type), do: false
 
   # Nothing goes above the Town Hall's level, except the Town Hall itself.
   defp below_town_hall(_buildings, "townhall", _level), do: :ok
