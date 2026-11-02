@@ -36,3 +36,5 @@ export const FIELD_NAME: Record<FieldType, string> = {
 
 /** The world is a square grid that wraps at the edges: 4 x 4 states of 200 x 200 tiles. */
 export const WORLD_SIZE = 800;
+
+export * from './buildings';

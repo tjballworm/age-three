@@ -4,7 +4,7 @@
   import { OutskirtsScene } from './scenes/outskirts/OutskirtsScene';
   import { TownScene } from './scenes/town/TownScene';
   import { WorldScene } from './scenes/world/WorldScene';
-  import { currentCity, game, selectTile } from '$state/game.svelte';
+  import { currentCity, game, openBuild, selectTile } from '$state/game.svelte';
   import { world } from '$state/world';
 
   let host: HTMLDivElement;
@@ -25,11 +25,15 @@
       const home = currentCity();
       scene.goTo(home.x, home.y);
       worldScene = scene;
-      townScene = new TownScene(e);
+      townScene = new TownScene(e, {
+        select: (b) => openBuild(b.slot),
+        selectPlot: (slot) => openBuild(slot),
+      });
       outskirtsScene = new OutskirtsScene(e, {
         // the town in the middle of the outskirts leads inside the walls
         select: (t) => {
           if (t.kind === 'town') game.view = 'town';
+          else openBuild(`f${t.kind === 'plot' ? t.slot : t.field.slot}`);
         },
       });
       game.engineReady = true;

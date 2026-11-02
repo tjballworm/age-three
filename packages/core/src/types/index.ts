@@ -106,6 +106,11 @@ export interface TimedTask {
   startedAt: number;
   /** Epoch milliseconds */
   endsAt: number;
+  /** Construction only: where, as the server names slots ("0".."31", "townhall", "walls", "f0".."f12"). */
+  slot?: string;
+  /** Construction only: the building and the level it will reach. */
+  targetType?: TownBuildingType | FieldType;
+  targetLevel?: number;
 }
 
 export type ChatChannel = 'world' | 'alliance' | 'system';
