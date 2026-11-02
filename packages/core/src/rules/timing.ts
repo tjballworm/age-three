@@ -1,4 +1,4 @@
-import type { ResourceStock, TimedTask } from '../types';
+import type { Population, ResourceStock, TimedTask } from '../types';
 
 const HOUR = 3_600_000;
 
@@ -12,6 +12,19 @@ export function stockAt(stock: ResourceStock, since: number, now: number): numbe
   if (stock.perHour > 0)
     return Math.max(stock.amount, Math.min(projected, Math.max(stock.cap, stock.amount)));
   return Math.max(0, projected);
+}
+
+/**
+ * Population at `now`, given the one reported at `since`. People move back in until the city is full: each hour
+ * (100 - tax rate)% / 2 of the population limit, e.g. 45% at the starting 10% tax (the wiki's 4.5% every
+ * 6-minute tick). Idle population is everyone, as nobody works the fields yet. Matches
+ * Economy.settle_population on the server.
+ */
+export function populationAt(pop: Population, taxRate: number, since: number, now: number): Population {
+  const elapsed = Math.max(0, now - since);
+  const grown = pop.current + (((pop.max * (100 - taxRate)) / 200) * elapsed) / HOUR;
+  const current = Math.max(pop.current, Math.min(grown, pop.max));
+  return { current, max: pop.max, idle: current };
 }
 
 /** Milliseconds left on a task, never negative. */

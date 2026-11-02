@@ -23,10 +23,13 @@
     march: 'march',
   };
 
-  /** Server builds and research with 5 minutes or less left get a free Speedup button. */
+  /**
+   * Server builds, research and training with 5 minutes or less left get a free Speedup button. A training batch
+   * still waiting for its Barracks doesn't, however soon it will be done.
+   */
   const canSpeedUp = (t: TimedTask) =>
     game.fromServer &&
-    (t.kind === 'build' || t.kind === 'research') &&
+    (t.kind === 'build' || t.kind === 'research' || (t.kind === 'train' && t.startedAt <= clock.now)) &&
     remaining(t, clock.now) <= FREE_SPEEDUP_MS;
 
   let filter = $state<Filter>('all');

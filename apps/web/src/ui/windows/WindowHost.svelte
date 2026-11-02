@@ -5,6 +5,8 @@
   import Window from '$ui/components/Window.svelte';
   import CityOverview from './CityOverview.svelte';
   import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
+  import TrainWindow from './TrainWindow.svelte';
+  import TroopsOverview from './TroopsOverview.svelte';
 
   // Title and tabs for every window. Content is filled in as each feature is built.
   const WINDOWS: Record<WindowId, { title: string; tabs: string[] }> = {
@@ -20,6 +22,7 @@
     events: { title: 'Events', tabs: ['Current', 'Upcoming'] },
     settings: { title: 'Settings', tabs: ['Game', 'Sound', 'Account'] },
     city: { title: 'City Overview', tabs: ['Resources', 'Buildings', 'Troops'] },
+    train: { title: 'Barracks', tabs: [] },
   };
 
   let tab = $state('');
@@ -32,7 +35,10 @@
   });
 </script>
 
-{#if game.openWindow && def}
+{#if game.openWindow === 'train'}
+  <!-- the Barracks has its own layout (queue left, troops right), so it brings its own window -->
+  <TrainWindow />
+{:else if game.openWindow && def}
   <Window title={def.title} onclose={closeWindow}>
     {#snippet tabs()}
       <Tabs tabs={tabList} bind:active={tab} />
@@ -40,6 +46,8 @@
 
     {#if game.openWindow === 'city' && tab === 'Resources'}
       <CityOverview />
+    {:else if game.openWindow === 'city' && tab === 'Troops'}
+      <TroopsOverview />
     {:else if game.openWindow === 'leaderboard'}
       <LeaderboardPlaceholder board={tab} />
     {:else}

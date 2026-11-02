@@ -1,6 +1,6 @@
 // Client <-> server messages. Every message has a `type` discriminator.
 
-import type { BuildingType, City, Player, TechId, TimedTask } from '@age3/core';
+import type { BuildingType, City, Player, TechId, TimedTask, TroopType } from '@age3/core';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -40,7 +40,21 @@ export type CancelBuildMessage = Envelope<'cancelBuild', { cityId: string; taskI
 export type ResearchMessage = Envelope<'research', { cityId: string; tech: TechId }>;
 /** Stop a research and get its whole cost back. The reply is a `state` message. */
 export type CancelResearchMessage = Envelope<'cancelResearch', { cityId: string; taskId: string }>;
-/** Finishes a build or research for free when it has FREE_SPEEDUP_MS (5 minutes) or less left. Replies with state. */
+/**
+ * Train `count` troops in the Barracks on town plot `slot`, paying and taking the idle population now. The batch
+ * joins the end of that Barracks' queue (as many batches as its level). The reply is a `state` message; the
+ * troops arrive in the city's `troops` with taskDone.
+ */
+export type TrainMessage = Envelope<
+  'train',
+  { cityId: string; slot: number; troop: TroopType; count: number }
+>;
+/** Stop a training batch (running or waiting) and get its cost and people back. The reply is a `state` message. */
+export type CancelTrainMessage = Envelope<'cancelTrain', { cityId: string; taskId: string }>;
+/**
+ * Finishes a build, research or the batch a Barracks is training now for free when it has FREE_SPEEDUP_MS
+ * (5 minutes) or less left. Replies with state.
+ */
 export type SpeedUpMessage = Envelope<'speedUp', { cityId: string; taskId: string }>;
 /** Sets a city's tax rate, a whole number from 0 to 100. Gold per hour changes from now on. Replies with state. */
 export type SetTaxMessage = Envelope<'setTax', { cityId: string; taxRate: number }>;
@@ -55,7 +69,9 @@ export type ClientMessage =
   | SpeedUpMessage
   | SetTaxMessage
   | ResearchMessage
-  | CancelResearchMessage;
+  | CancelResearchMessage
+  | TrainMessage
+  | CancelTrainMessage;
 
 // ---------- server -> client ----------
 
@@ -102,4 +118,10 @@ export type ErrorCode =
   /** this city's Academy is already researching something */
   | 'research_busy'
   /** the same tech is already being researched in another city */
-  | 'already_researching';
+  | 'already_researching'
+  /** the Barracks is being upgraded (no training), or is training (no upgrade) */
+  | 'barracks_busy'
+  /** the Barracks already has as many batches queued as its level */
+  | 'train_queue_full'
+  /** not enough idle population for the batch */
+  | 'not_enough_population';

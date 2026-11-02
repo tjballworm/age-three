@@ -105,7 +105,7 @@ defmodule Age3.Store.PgTest do
     assert :ok = Pg.set_tax(id, city.id, 50, now)
     {:ok, _, [city], []} = Pg.state(id, now)
     assert city.taxRate == 50
-    assert city.resources["gold"]["perHour"] == 100 + div(city.population["current"] * 50, 100)
+    assert city.resources["gold"]["perHour"] == 100 + div(city.population["max"] * 50, 100)
   end
 
   test "a city with old rates gets the new ones on its next state" do
@@ -196,6 +196,134 @@ defmodule Age3.Store.PgTest do
     assert :ok = Pg.speed_up(id, city_id, task.id, ends_at - 300_000)
     {:ok, player, _, []} = Pg.state(id, ends_at - 300_000)
     assert player.research == %{"agriculture" => 1}
+  end
+
+  # A new player whose city has a Barracks Lv2 on plot 4 (and a Rally Spot, Town Hall Lv3, cottages for a
+  # population of 1000), as if they had built them, and plenty of resources.
+  defp general(name) do
+    {:ok, id} = Pg.find_or_create_player(name)
+    now = System.system_time(:millisecond)
+    {:ok, _, [city], []} = Pg.state(id, now)
+
+    Age3.Repo.insert_all(
+      Age3.Building,
+      [
+        %{city_id: city.id, slot: "4", type: "barracks", level: 2},
+        %{city_id: city.id, slot: "5", type: "rallyspot", level: 1},
+        %{city_id: city.id, slot: "6", type: "cottage", level: 3},
+        %{city_id: city.id, slot: "7", type: "cottage", level: 2},
+        %{city_id: city.id, slot: "townhall", type: "townhall", level: 3}
+      ],
+      on_conflict: {:replace, [:level]},
+      conflict_target: [:city_id, :slot]
+    )
+
+    rich = Map.new(city.resources, fn {k, v} -> {k, %{v | "amount" => 1_000_000}} end)
+
+    Age3.Repo.query!("UPDATE cities SET resources = $1, population = $2 WHERE id = $3", [
+      rich,
+      %{"current" => 1000, "max" => 1000, "idle" => 1000},
+      Ecto.UUID.dump!(city.id)
+    ])
+
+    {id, city.id, now}
+  end
+
+  test "train pays and takes people now, queues batches one after another, and adds troops when done" do
+    {id, city_id, now} = general("General")
+    {:ok, _, [city], []} = Pg.state(id, now)
+    food = city.resources["food"]["amount"]
+
+    # 10 warriors take 240 s, the next 20 start when they end
+    assert {:ok, first} = Pg.train(id, city_id, "4", "warrior", 10, now)
+    assert first == now + 240_000
+    assert {:ok, second} = Pg.train(id, city_id, "4", "warrior", 20, now)
+    assert second == first + 480_000
+    # a Barracks Lv2 queues two batches
+    assert {:error, "train_queue_full"} = Pg.train(id, city_id, "4", "worker", 1, now)
+    # and can't be upgraded while it trains
+    assert {:error, "barracks_busy"} = Pg.build(id, city_id, "4", nil, now)
+
+    {:ok, _, [city], [a, b]} = Pg.state(id, now)
+    assert %{kind: "train", label: "10 × Warrior", slot: "4", targetType: "warrior", targetLevel: 10} = a
+    assert %{startedAt: ^first, endsAt: ^second} = b
+    assert_in_delta city.resources["food"]["amount"], food - 30 * 80, 1
+    assert_in_delta city.population["idle"], 1000 - 30, 1
+    # the Barracks isn't shown as under construction
+    assert %{type: "barracks", level: 2, slot: 4} in city.buildings
+    assert city.troops == %{}
+
+    {:ok, _, [city], [_]} = Pg.state(id, first)
+    assert city.troops == %{"warrior" => 10}
+    # warriors eat 1 food an hour each
+    assert city.resources["food"]["perHour"] == 100 - 10
+
+    {:ok, _, [city], []} = Pg.state(id, second)
+    assert city.troops == %{"warrior" => 30}
+    assert city.resources["food"]["perHour"] == 100 - 30
+  end
+
+  test "people move back in over time" do
+    {id, city_id, now} = general("Recruiter")
+    {:ok, _} = Pg.train(id, city_id, "4", "warrior", 100, now)
+    {:ok, _, [city], _} = Pg.state(id, now)
+    assert_in_delta city.population["current"], 900, 1
+
+    # at 10% tax: 45% of the limit an hour, so full again within the hour
+    {:ok, _, [city], _} = Pg.state(id, now + 600_000)
+    assert_in_delta city.population["current"], 900 + 1000 * 0.45 / 6, 1
+    {:ok, _, [city], _} = Pg.state(id, now + 3_600_000)
+    assert city.population["current"] == 1000
+  end
+
+  test "not enough people" do
+    {id, city_id, now} = general("Lonely")
+    assert {:error, "not_enough_population"} = Pg.train(id, city_id, "4", "warrior", 1001, now)
+    assert {:error, "bad_slot"} = Pg.train(id, city_id, "5", "warrior", 1, now)
+  end
+
+  test "cancel_train refunds cost and people, and the batches behind move up" do
+    {id, city_id, now} = general("Deserter")
+    {:ok, _, [city], []} = Pg.state(id, now)
+    food = city.resources["food"]["amount"]
+
+    {:ok, first} = Pg.train(id, city_id, "4", "warrior", 10, now)
+    {:ok, _} = Pg.train(id, city_id, "4", "warrior", 20, now)
+    {:ok, _, _, [a, _b]} = Pg.state(id, now)
+
+    # cancelling the running batch halfway: the next one starts now
+    half = now + 120_000
+    assert {:error, "bad_message"} = Pg.cancel_build(id, city_id, a.id, half)
+    assert :ok = Pg.cancel_train(id, city_id, a.id, half)
+    {:ok, _, [city], [b]} = Pg.state(id, half)
+    assert %{startedAt: ^half, targetLevel: 20} = b
+    assert b.endsAt == half + 480_000
+    assert_in_delta city.resources["food"]["amount"], food - 20 * 80, 2
+    # 30 went in, 10 came back, and people moved back in for 120 s at 45% of 1000 an hour
+    assert_in_delta city.population["current"], 980 + 1000 * 0.45 * 120 / 3600, 1
+    assert first > half
+  end
+
+  test "speed_up finishes the batch in its last 5 minutes, not one still waiting" do
+    {id, city_id, now} = general("Hurrier")
+    {:ok, first} = Pg.train(id, city_id, "4", "warrior", 10, now)
+    {:ok, _} = Pg.train(id, city_id, "4", "warrior", 1, now)
+    {:ok, _, _, [a, b]} = Pg.state(id, now)
+
+    # the second batch ends within 5 minutes, but hasn't started
+    assert {:error, "too_early"} = Pg.speed_up(id, city_id, b.id, now)
+    assert :ok = Pg.speed_up(id, city_id, a.id, now)
+    {:ok, _, [city], [b]} = Pg.state(id, now)
+    assert city.troops == %{"warrior" => 10}
+    assert %{startedAt: ^now} = b
+    assert b.endsAt == now + 24_000
+    assert first > now
+  end
+
+  test "a Barracks being upgraded can't train" do
+    {id, city_id, now} = general("Builder General")
+    {:ok, _} = Pg.build(id, city_id, "4", nil, now)
+    assert {:error, "barracks_busy"} = Pg.train(id, city_id, "4", "warrior", 1, now)
   end
 
   test "state for an unknown player" do

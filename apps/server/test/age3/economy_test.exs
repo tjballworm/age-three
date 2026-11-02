@@ -100,9 +100,35 @@ defmodule Age3.EconomyTest do
       assert Economy.cap([], %{"stockpile" => 3}) == 100_000
     end
 
+    test "troops eat food every hour, and taxes come from the population limit" do
+      rates = Economy.rates([b("cottage", 1)], 10, %{}, %{"warrior" => 100, "cavalry" => 10})
+      assert rates["food"] == 100 - 100 - 90
+      assert rates["gold"] == 100 + div(Economy.max_population([b("cottage", 1)]) * 10, 100)
+    end
+
     test "recalc changes perHour and cap, and keeps amounts" do
       out = Economy.recalc(%{"food" => stock(5, 1, 9)}, [b("farm", 1)], 10)
       assert out == %{"food" => stock(5, 100 + Age3.Data.level("farm", 1)["perHour"], 100_000)}
+    end
+  end
+
+  describe "population" do
+    test "people move back in at (100 - tax)% / 2 of the limit per hour, up to the limit" do
+      pop = %{"current" => 100, "max" => 1000, "idle" => 100}
+      # 10% tax: 45% of 1000 an hour
+      assert %{"current" => 550.0, "idle" => 550.0, "max" => 1000} =
+               Economy.settle_population(pop, 10, 0, 3_600_000)
+
+      assert %{"current" => 1000} = Economy.settle_population(pop, 10, 0, 10 * 3_600_000)
+      # nobody comes back at 100% tax, and time going backwards changes nothing
+      assert %{"current" => 100} = Economy.settle_population(pop, 100, 0, 3_600_000)
+      assert %{"current" => 100} = Economy.settle_population(pop, 10, 1000, 0)
+    end
+
+    test "take_population takes people out, and gives them back" do
+      pop = %{"current" => 500, "max" => 1000, "idle" => 500}
+      assert %{"current" => 400, "idle" => 400} = Economy.take_population(pop, 100)
+      assert %{"current" => 600, "idle" => 600} = Economy.take_population(pop, -100)
     end
   end
 end

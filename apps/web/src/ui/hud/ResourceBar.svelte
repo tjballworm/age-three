@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { RESOURCE_TYPES, stockAt, type ResourceType } from '@age3/core';
+  import { RESOURCE_TYPES, populationAt, stockAt, type ResourceType } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game, openWindow } from '$state/game.svelte';
   import Button from '$ui/components/Button.svelte';
@@ -15,6 +15,7 @@
   };
 
   const city = $derived(currentCity());
+  const pop = $derived(populationAt(city.population, city.taxRate, game.syncedAt, clock.now));
 </script>
 
 <div class="resbar">
@@ -31,9 +32,9 @@
       <small class:neg={s.perHour < 0}>{formatRate(s.perHour)}</small>
     </div>
   {/each}
-  <div class="res" title="Population: {city.population.idle} idle">
+  <div class="res" title="Population: {formatNumber(pop.idle)} idle">
     <ResourceIcon type="population" />
-    <b>{formatNumber(city.population.current)} / {formatNumber(city.population.max)}</b>
+    <b>{formatNumber(pop.current)} / {formatNumber(pop.max)}</b>
   </div>
   <div class="spacer"></div>
   <Button variant="dark" small onclick={() => openWindow('settings')}>Settings</Button>
