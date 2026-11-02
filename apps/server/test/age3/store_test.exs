@@ -128,6 +128,76 @@ defmodule Age3.Store.PgTest do
     assert city.population["max"] == 100
   end
 
+  # A new player whose city also has an Academy and a Farm at Lv1, as if they had built them
+  defp scholar(name) do
+    {:ok, id} = Pg.find_or_create_player(name)
+    now = System.system_time(:millisecond)
+    {:ok, _, [city], []} = Pg.state(id, now)
+
+    Age3.Repo.insert_all(
+      Age3.Building,
+      [
+        %{city_id: city.id, slot: "0", type: "academy", level: 1},
+        %{city_id: city.id, slot: "f0", type: "farm", level: 1},
+        %{city_id: city.id, slot: "townhall", type: "townhall", level: 2}
+      ],
+      on_conflict: {:replace, [:level]},
+      conflict_target: [:city_id, :slot]
+    )
+
+    {id, city.id, now}
+  end
+
+  test "research pays now, one at a time per Academy, and raises production when done" do
+    {id, city_id, now} = scholar("Scholar")
+    {:ok, player, [city], []} = Pg.state(id, now)
+    assert player.research == %{}
+    food = city.resources["food"]["amount"]
+
+    assert {:ok, ends_at} = Pg.research(id, city_id, "agriculture", now)
+    assert ends_at == now + 400_000
+    assert {:error, "research_busy"} = Pg.research(id, city_id, "lumbering", now)
+    # the Academy can't be upgraded while it researches
+    assert {:error, "academy_busy"} = Pg.build(id, city_id, "0", nil, now)
+
+    {:ok, _, [city], [task]} = Pg.state(id, now)
+    assert %{kind: "research", targetType: "agriculture", targetLevel: 1, label: "Agriculture → Lv 1"} = task
+    assert_in_delta city.resources["food"]["amount"], food - 500, 1
+
+    {:ok, player, [city], []} = Pg.state(id, ends_at)
+    assert player.research == %{"agriculture" => 1}
+    farm = Age3.Data.level("farm", 1)["perHour"]
+    assert city.resources["food"]["perHour"] == 100 + div(farm * 110, 100)
+
+    # Lv2 needs Academy Lv2
+    assert {:error, "requirement_not_met"} = Pg.research(id, city_id, "agriculture", ends_at)
+  end
+
+  test "an Academy being upgraded can't start a research" do
+    {id, city_id, now} = scholar("Upgrader")
+    {:ok, _} = Pg.build(id, city_id, "0", nil, now)
+    assert {:error, "academy_busy"} = Pg.research(id, city_id, "agriculture", now)
+  end
+
+  test "cancel_research refunds the cost, and speed_up finishes a research in its last 5 minutes" do
+    {id, city_id, now} = scholar("Refunder")
+    {:ok, _, [city], []} = Pg.state(id, now)
+    gold = city.resources["gold"]["amount"]
+
+    {:ok, _} = Pg.research(id, city_id, "agriculture", now)
+    {:ok, _, _, [task]} = Pg.state(id, now)
+    assert {:error, "bad_message"} = Pg.cancel_build(id, city_id, task.id, now)
+    assert :ok = Pg.cancel_research(id, city_id, task.id, now)
+    {:ok, _, [city], []} = Pg.state(id, now)
+    assert_in_delta city.resources["gold"]["amount"], gold, 1
+
+    {:ok, ends_at} = Pg.research(id, city_id, "agriculture", now)
+    {:ok, _, _, [task]} = Pg.state(id, now)
+    assert :ok = Pg.speed_up(id, city_id, task.id, ends_at - 300_000)
+    {:ok, player, _, []} = Pg.state(id, ends_at - 300_000)
+    assert player.research == %{"agriculture" => 1}
+  end
+
   test "state for an unknown player" do
     assert {:error, :not_found} = Pg.state(Ecto.UUID.generate(), 0)
     assert {:error, :not_found} = Pg.state("not-a-uuid", 0)

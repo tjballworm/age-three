@@ -1,6 +1,6 @@
 // Client <-> server messages. Every message has a `type` discriminator.
 
-import type { BuildingType, City, Player, TimedTask } from '@age3/core';
+import type { BuildingType, City, Player, TechId, TimedTask } from '@age3/core';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -32,7 +32,15 @@ export type BuildMessage = Envelope<
 >;
 /** Stop a construction and get its whole cost back. The reply is a `state` message. */
 export type CancelBuildMessage = Envelope<'cancelBuild', { cityId: string; taskId: string }>;
-/** Finishes a build for free when it has FREE_SPEEDUP_MS (5 minutes) or less left. Replies with state. */
+/**
+ * Research the next level of a tech in the city's Academy, paying now. One research at a time per Academy, and
+ * the Academy can't be upgraded meanwhile. The reply is a `state` message; the player's new level arrives with
+ * taskDone.
+ */
+export type ResearchMessage = Envelope<'research', { cityId: string; tech: TechId }>;
+/** Stop a research and get its whole cost back. The reply is a `state` message. */
+export type CancelResearchMessage = Envelope<'cancelResearch', { cityId: string; taskId: string }>;
+/** Finishes a build or research for free when it has FREE_SPEEDUP_MS (5 minutes) or less left. Replies with state. */
 export type SpeedUpMessage = Envelope<'speedUp', { cityId: string; taskId: string }>;
 /** Sets a city's tax rate, a whole number from 0 to 100. Gold per hour changes from now on. Replies with state. */
 export type SetTaxMessage = Envelope<'setTax', { cityId: string; taxRate: number }>;
@@ -45,7 +53,9 @@ export type ClientMessage =
   | BuildMessage
   | CancelBuildMessage
   | SpeedUpMessage
-  | SetTaxMessage;
+  | SetTaxMessage
+  | ResearchMessage
+  | CancelResearchMessage;
 
 // ---------- server -> client ----------
 
@@ -84,4 +94,12 @@ export type ErrorCode =
   | 'bad_slot'
   | 'max_level'
   /** speedUp with more than 5 minutes left */
-  | 'too_early';
+  | 'too_early'
+  /** research in a city without an Academy */
+  | 'no_academy'
+  /** the Academy is being upgraded (no research), or is researching (no upgrade) */
+  | 'academy_busy'
+  /** this city's Academy is already researching something */
+  | 'research_busy'
+  /** the same tech is already being researched in another city */
+  | 'already_researching';

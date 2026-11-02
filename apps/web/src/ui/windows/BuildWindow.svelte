@@ -4,13 +4,18 @@
     FREE_SPEEDUP_MS,
     MAX_BUILDING_LEVEL,
     RESOURCE_TYPES,
+    TECHS,
+    buildSeconds,
     buildingLevel,
+    researchInCity,
     remaining,
     stockAt,
+    techLevel,
     type BuildingType,
+    type TechId,
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
-  import { currentCity, game, openBuild, type BuildSlot } from '$state/game.svelte';
+  import { currentCity, game, openBuild, openWindow, type BuildSlot } from '$state/game.svelte';
   import { command, speedUp } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
@@ -35,6 +40,7 @@
     game.queue.find((t) => t.cityId === city.id && t.kind === 'build' && t.slot === key),
   );
   const queueBusy = $derived(game.queue.some((t) => t.cityId === city.id && t.kind === 'build'));
+  const researching = $derived(game.queue.some((t) => t.cityId === city.id && t.kind === 'research'));
 
   const allTypes = Object.keys(BUILDINGS) as BuildingType[];
   const levelOf = (type: BuildingType) =>
@@ -42,6 +48,8 @@
       0,
       ...[...city.buildings, ...(city.fields ?? [])].filter((b) => b.type === type).map((b) => b.level),
     );
+  /** Research counts here only up to this city's Academy level. */
+  const research = $derived(researchInCity(game.player.research, levelOf('academy')));
 
   /** What can go here: the next level of what stands here, or every building that fits an empty slot. */
   const options = $derived.by((): { type: BuildingType; level: number }[] => {
@@ -58,10 +66,14 @@
     const spec = BUILDINGS[type];
     if (level > MAX_BUILDING_LEVEL) return 'Already at the highest level';
     if (type !== 'townhall' && level > levelOf('townhall')) return `Needs Town Hall Lv ${level}`;
-    const { cost, requires } = buildingLevel(type, level)!;
+    const { cost, requires, research } = buildingLevel(type, level)!;
     for (const [need, lv] of Object.entries(requires ?? {}))
       if (levelOf(need as BuildingType) < lv!)
         return `Needs ${BUILDINGS[need as BuildingType].name} Lv ${lv}`;
+    for (const [tech, lv] of Object.entries(research ?? {}))
+      if (techLevel(research, tech as TechId) < lv!)
+        return `Needs ${TECHS[tech as TechId].name} Lv ${lv} research`;
+    if (type === 'academy' && researching) return 'The Academy is researching';
     if (level === 1 && !spec.multiple && levelOf(type) > 0) return 'Only one per city';
     for (const r of RESOURCE_TYPES)
       if (stockAt(city.resources[r], game.syncedAt, clock.now) < cost[r]) return 'Not enough resources';
@@ -105,7 +117,7 @@
     standing
       ? `${BUILDINGS[standing.type].name} · Lv ${standing.level}`
       : building?.targetType
-        ? BUILDINGS[building.targetType].name
+        ? BUILDINGS[building.targetType as BuildingType].name
         : isField
           ? 'Empty field'
           : 'Empty plot',
@@ -148,7 +160,7 @@
                 {#each RESOURCE_TYPES.filter((r) => lv.cost[r] > 0) as r (r)}
                   <span><ResourceIcon type={r} size={14} /> {formatNumber(lv.cost[r])}</span>
                 {/each}
-                <span>⏱ {formatDuration(lv.seconds * 1000)}</span>
+                <span>⏱ {formatDuration(buildSeconds(lv.seconds, research) * 1000)}</span>
               </span>
             {/if}
             {#if adds}<span class="gain">{adds}</span>{/if}
@@ -159,6 +171,16 @@
           </Button>
         </div>
       {/each}
+    {/if}
+
+    {#if standing?.type === 'academy'}
+      <div class="row">
+        <div class="what">
+          <b>Research</b>
+          <span>Improve production, storage, building speed and your army.</span>
+        </div>
+        <Button onclick={() => openWindow('tech')}>Open</Button>
+      </div>
     {/if}
 
     {#if error}<p class="error" role="alert">{error}</p>{/if}

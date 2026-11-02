@@ -23,7 +23,7 @@ export async function command(message: Request): Promise<void> {
   if (reply.type === 'state') applyServerState(reply.payload);
 }
 
-/** Finishes a build for free (it must have 5 minutes or less left) and says so in chat. */
+/** Finishes a build or research for free (it must have 5 minutes or less left) and says so in chat. */
 export async function speedUp(task: TimedTask): Promise<void> {
   await command({ type: 'speedUp', payload: { cityId: task.cityId, taskId: task.id } });
   postChat('system', null, `${task.label} complete.`);

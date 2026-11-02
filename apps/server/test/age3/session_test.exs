@@ -119,6 +119,26 @@ defmodule Age3.SessionTest do
     assert msg =~ "5 minutes"
   end
 
+  test "research replies with the new state and wakes the task runner" do
+    research = fn tech -> Jason.encode!(%{type: "research", id: 2, payload: %{cityId: "c1", tech: tech}}) end
+
+    assert [_, %{"type" => "state", "id" => 2}, %{"type" => "error", "payload" => %{"code" => code}}, bad] =
+             run([login("secret123"), research.("agriculture"), research.("archery"), research.(7)])
+
+    assert code == "requirement_not_met"
+    assert %{"type" => "error", "payload" => %{"code" => "bad_message"}} = bad
+    assert_received {:wake, 401_000}
+  end
+
+  test "cancelResearch" do
+    cancel = fn task ->
+      Jason.encode!(%{type: "cancelResearch", id: 2, payload: %{cityId: "c1", taskId: task}})
+    end
+
+    assert [_, %{"type" => "state"}, %{"type" => "error", "payload" => %{"code" => "bad_message"}}] =
+             run([login("secret123"), cancel.("t1"), cancel.("t9")])
+  end
+
   test "setTax takes a whole number from 0 to 100" do
     assert [
              _,

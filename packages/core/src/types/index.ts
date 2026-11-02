@@ -84,6 +84,28 @@ export interface Field {
   upgrading?: boolean;
 }
 
+/** Academy research (Evony Age II names). */
+export type TechId =
+  | 'agriculture'
+  | 'lumbering'
+  | 'masonry'
+  | 'mining'
+  | 'stockpile'
+  | 'construction'
+  | 'militaryScience'
+  | 'militaryTradition'
+  | 'ironWorking'
+  | 'medicine'
+  | 'archery'
+  | 'horsebackRiding'
+  | 'compass'
+  | 'logistics'
+  | 'metalCasting'
+  | 'engineering'
+  | 'machinery'
+  | 'informatics'
+  | 'privateering';
+
 export interface Player {
   id: string;
   name: string;
@@ -92,6 +114,8 @@ export interface Player {
   prestige: number;
   honor: number;
   rank: number;
+  /** Research levels, shared by all the player's cities. Techs never researched are missing. */
+  research?: Partial<Record<TechId, number>>;
 }
 
 export type TaskKind = 'build' | 'train' | 'research' | 'march';
@@ -108,8 +132,8 @@ export interface TimedTask {
   endsAt: number;
   /** Construction only: where, as the server names slots ("0".."31", "townhall", "walls", "f0".."f12"). */
   slot?: string;
-  /** Construction only: the building and the level it will reach. */
-  targetType?: TownBuildingType | FieldType;
+  /** Construction: the building and the level it will reach. Research: the tech and its new level. */
+  targetType?: TownBuildingType | FieldType | TechId;
   targetLevel?: number;
 }
 

@@ -78,6 +78,28 @@ defmodule Age3.EconomyTest do
                  Age3.Data.level("warehouse", 2)["capacity"]
     end
 
+    test "Agriculture, Lumbering, Masonry and Mining add 10% per level to their fields, not to the base" do
+      farm = Age3.Data.level("farm", 3)["perHour"]
+      rates = Economy.rates([b("farm", 3), b("academy", 5)], 0, %{"agriculture" => 2, "masonry" => 5})
+      assert rates["food"] == 100 + div(farm * 120, 100)
+      assert rates["stone"] == 100
+    end
+
+    test "research only counts up to the city's Academy level, and not at all without one" do
+      farm = Age3.Data.level("farm", 3)["perHour"]
+      research = %{"agriculture" => 5}
+      assert Economy.rates([b("farm", 3), b("academy", 2)], 0, research)["food"] == 100 + div(farm * 120, 100)
+      assert Economy.rates([b("farm", 3)], 0, research)["food"] == 100 + farm
+    end
+
+    test "Stockpile adds 10% per level to what warehouses hold" do
+      held = Age3.Data.level("warehouse", 2)["capacity"]
+      town = [b("warehouse", 2), b("academy", 6)]
+      assert Economy.cap(town, %{"stockpile" => 3}) == 100_000 + div(held * 130, 100)
+      assert Economy.cap([b("warehouse", 2)], %{"stockpile" => 3}) == 100_000 + held
+      assert Economy.cap([], %{"stockpile" => 3}) == 100_000
+    end
+
     test "recalc changes perHour and cap, and keeps amounts" do
       out = Economy.recalc(%{"food" => stock(5, 1, 9)}, [b("farm", 1)], 10)
       assert out == %{"food" => stock(5, 100 + Age3.Data.level("farm", 1)["perHour"], 100_000)}

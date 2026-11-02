@@ -38,3 +38,4 @@ export const FIELD_NAME: Record<FieldType, string> = {
 export const WORLD_SIZE = 800;
 
 export * from './buildings';
+export * from './research';
