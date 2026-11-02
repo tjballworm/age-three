@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isFinished, progress, remaining, stockAt } from './timing';
+import { isFinished, populationAt, progress, remaining, stockAt } from './timing';
 
 const HOUR = 3_600_000;
 
@@ -23,6 +23,20 @@ describe('stockAt', () => {
 
   it('ignores times before the snapshot', () => {
     expect(stockAt({ amount: 100, perHour: 3600, cap: 1000 }, 1000, 0)).toBe(100);
+  });
+});
+
+describe('populationAt', () => {
+  const pop = { current: 100, max: 1000, idle: 100 };
+
+  it('people move back in at (100 - tax)% / 2 of the limit per hour', () => {
+    expect(populationAt(pop, 10, 0, HOUR)).toEqual({ current: 550, max: 1000, idle: 550 });
+    expect(populationAt(pop, 100, 0, HOUR).current).toBe(100);
+  });
+
+  it('stops at the limit and ignores times before the snapshot', () => {
+    expect(populationAt(pop, 0, 0, 10 * HOUR).current).toBe(1000);
+    expect(populationAt(pop, 10, 1000, 0).current).toBe(100);
   });
 });
 

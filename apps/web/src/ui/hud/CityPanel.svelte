@@ -1,8 +1,11 @@
 <script lang="ts">
+  import { populationAt } from '@age3/core';
+  import { clock } from '$state/clock.svelte';
   import { currentCity, game, openWindow, selectCity } from '$state/game.svelte';
   import { formatNumber } from '$ui/format';
 
   const city = $derived(currentCity());
+  const idle = $derived(populationAt(city.population, city.taxRate, game.syncedAt, clock.now).idle);
 </script>
 
 <section class="city hud-panel" aria-label="City">
@@ -22,7 +25,7 @@
     </div>
     <div>
       <dt>Idle pop.</dt>
-      <dd>{formatNumber(city.population.idle)}</dd>
+      <dd>{formatNumber(idle)}</dd>
     </div>
   </dl>
 

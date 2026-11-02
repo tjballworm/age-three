@@ -72,7 +72,17 @@ defmodule Age3.Session do
     do: {error(id, "bad_message", "Not a valid ping."), session}
 
   defp handle(type, _payload, id, %{player_id: nil} = session)
-       when type in ["getState", "build", "cancelBuild", "speedUp", "setTax", "research", "cancelResearch"],
+       when type in [
+              "getState",
+              "build",
+              "cancelBuild",
+              "speedUp",
+              "setTax",
+              "research",
+              "cancelResearch",
+              "train",
+              "cancelTrain"
+            ],
        do: {error(id, "not_logged_in", "Log in first."), session}
 
   defp handle("getState", _payload, id, session), do: state_reply(id, session, session.now.())
@@ -142,14 +152,63 @@ defmodule Age3.Session do
   defp handle("cancelResearch", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid cancel."), session}
 
-  # Finish a build or research for free when it has 5 minutes or less left: {cityId, taskId}.
+  # Train troops in a Barracks: {cityId, slot, troop, count}, slot being the Barracks' town plot (0-31). The
+  # batch joins the end of that Barracks' queue. Replies with the new state; the troops arrive with taskDone.
+  defp handle(
+         "train",
+         %{"cityId" => city_id, "slot" => slot, "troop" => troop, "count" => count},
+         id,
+         session
+       )
+       when is_binary(city_id) and is_binary(troop) and is_integer(count) do
+    now = session.now.()
+
+    case session.store.train(session.player_id, city_id, slot_key(slot), troop, count, now) do
+      {:ok, ends_at} ->
+        session.wake.(ends_at)
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("train", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid train."), session}
+
+  # Stop a training batch and get its cost and people back: {cityId, taskId}. The batches behind it move up.
+  defp handle("cancelTrain", %{"cityId" => city_id, "taskId" => task_id}, id, session)
+       when is_binary(city_id) and is_binary(task_id) do
+    now = session.now.()
+
+    case session.store.cancel_train(session.player_id, city_id, task_id, now) do
+      :ok ->
+        # the next batch may now end sooner than the task runner planned for
+        session.wake.(now)
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("cancelTrain", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid cancel."), session}
+
+  # Finish a build, research or the batch a Barracks is training for free when it has 5 minutes or less left:
+  # {cityId, taskId}.
   defp handle("speedUp", %{"cityId" => city_id, "taskId" => task_id}, id, session)
        when is_binary(city_id) and is_binary(task_id) do
     now = session.now.()
 
     case session.store.speed_up(session.player_id, city_id, task_id, now) do
-      :ok -> state_reply(id, session, now)
-      {:error, code} -> {error(id, code, message(code)), session}
+      :ok ->
+        # a sped-up batch lets the next one in its Barracks start (and end) sooner
+        session.wake.(now)
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
     end
   end
 
@@ -215,9 +274,15 @@ defmodule Age3.Session do
   defp message("academy_busy"), do: "The Academy can't research and be upgraded at the same time."
   defp message("already_researching"), do: "That is already being researched in another city."
   defp message("requirement_not_met"), do: "Requirements not met."
+  defp message("barracks_busy"), do: "A Barracks can't train and be upgraded at the same time."
+  defp message("train_queue_full"), do: "This Barracks' queue is full. A higher level queues more."
+  defp message("not_enough_population"), do: "Not enough idle population."
   defp message("bad_slot"), do: "That can't be built there."
   defp message("max_level"), do: "Already at the highest level."
-  defp message("too_early"), do: "Speedup is only free in the last 5 minutes."
+
+  defp message("too_early"),
+    do: "Speedup is only free in the last 5 minutes of a build, research or training."
+
   defp message(_code), do: "Not a valid request."
 
   defp welcome(id, player_id, token, session) do

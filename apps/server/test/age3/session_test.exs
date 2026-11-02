@@ -130,6 +130,30 @@ defmodule Age3.SessionTest do
     assert_received {:wake, 401_000}
   end
 
+  test "train replies with the new state and wakes the task runner" do
+    train = fn troop, count ->
+      Jason.encode!(%{type: "train", id: 2, payload: %{cityId: "c1", slot: 4, troop: troop, count: count}})
+    end
+
+    assert [_, %{"type" => "state", "id" => 2}, %{"type" => "error", "payload" => %{"code" => code}}, bad] =
+             run([login("secret123"), train.("warrior", 10), train.("archer", 10), train.("warrior", "ten")])
+
+    assert code == "requirement_not_met"
+    assert %{"type" => "error", "payload" => %{"code" => "bad_message"}} = bad
+    assert_received {:wake, 251_000}
+  end
+
+  test "cancelTrain wakes the task runner, as the next batch may end sooner" do
+    cancel = fn task ->
+      Jason.encode!(%{type: "cancelTrain", id: 2, payload: %{cityId: "c1", taskId: task}})
+    end
+
+    assert [_, %{"type" => "state"}, %{"type" => "error", "payload" => %{"code" => "bad_message"}}] =
+             run([login("secret123"), cancel.("t1"), cancel.("t9")])
+
+    assert_received {:wake, 1_000}
+  end
+
   test "cancelResearch" do
     cancel = fn task ->
       Jason.encode!(%{type: "cancelResearch", id: 2, payload: %{cityId: "c1", taskId: task}})
