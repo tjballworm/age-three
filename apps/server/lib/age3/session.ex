@@ -274,7 +274,6 @@ defmodule Age3.Session do
   defp message("academy_busy"), do: "The Academy can't research and be upgraded at the same time."
   defp message("already_researching"), do: "That is already being researched in another city."
   defp message("requirement_not_met"), do: "Requirements not met."
-  defp message("barracks_busy"), do: "A Barracks can't train and be upgraded at the same time."
   defp message("train_queue_full"), do: "This Barracks' queue is full. A higher level queues more."
   defp message("not_enough_population"), do: "Not enough idle population."
   defp message("bad_slot"), do: "That can't be built there."

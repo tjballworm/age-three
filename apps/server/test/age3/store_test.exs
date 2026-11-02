@@ -239,10 +239,6 @@ defmodule Age3.Store.PgTest do
     assert first == now + 240_000
     assert {:ok, second} = Pg.train(id, city_id, "4", "warrior", 20, now)
     assert second == first + 480_000
-    # a Barracks Lv2 queues two batches
-    assert {:error, "train_queue_full"} = Pg.train(id, city_id, "4", "worker", 1, now)
-    # and can't be upgraded while it trains
-    assert {:error, "barracks_busy"} = Pg.build(id, city_id, "4", nil, now)
 
     {:ok, _, [city], [a, b]} = Pg.state(id, now)
     assert %{kind: "train", label: "10 × Warrior", slot: "4", targetType: "warrior", targetLevel: 10} = a
@@ -320,10 +316,17 @@ defmodule Age3.Store.PgTest do
     assert first > now
   end
 
-  test "a Barracks being upgraded can't train" do
+  test "a Barracks upgrades while it trains, and trains while it is upgraded" do
     {id, city_id, now} = general("Builder General")
-    {:ok, _} = Pg.build(id, city_id, "4", nil, now)
-    assert {:error, "barracks_busy"} = Pg.train(id, city_id, "4", "warrior", 1, now)
+    # each batch of 100 warriors takes 40 minutes, longer than the 20-minute upgrade
+    {:ok, _} = Pg.train(id, city_id, "4", "warrior", 100, now)
+    assert {:ok, built} = Pg.build(id, city_id, "4", nil, now)
+    # a Lv2 Barracks: one training and two waiting
+    assert {:ok, _} = Pg.train(id, city_id, "4", "warrior", 100, now)
+    assert {:ok, _} = Pg.train(id, city_id, "4", "warrior", 100, now)
+    assert {:error, "train_queue_full"} = Pg.train(id, city_id, "4", "warrior", 100, now)
+    # at Lv3 a third can wait
+    assert {:ok, _} = Pg.train(id, city_id, "4", "warrior", 100, built)
   end
 
   test "state for an unknown player" do

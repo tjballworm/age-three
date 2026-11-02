@@ -19,6 +19,8 @@ export interface TroopSpec {
   population: number;
   /** Food one trained troop eats each hour (Age II). */
   upkeep: number;
+  /** Resources one troop carries home (for marches, later). */
+  load: number;
   /** The Barracks level that trains it, e.g. { barracks: 5 }. */
   requires: { barracks: number };
   /** Research, and its levels, needed first. */

@@ -1,8 +1,8 @@
 defmodule Age3.Train do
   # The Barracks' rules, as pure functions (no database), like Age3.Build and Age3.Research.
   # Troops train in one Barracks, in batches ("100 Warriors"). Each Barracks trains one batch at a time and can
-  # queue as many batches as its level (the wiki's "Troop Queue"); a city may have several Barracks, each with its
-  # own queue. A batch pays its resources and takes its idle population when it is queued, and the troops join the
+  # keep as many more waiting as its level (the wiki's "Troop Queue"; the original game shows "Waiting: 0/1" on a
+  # Lv1 Barracks); a city may have several Barracks, each with its own queue. A batch pays its resources and takes its idle population when it is queued, and the troops join the
   # city's troops (cities.troops) when it finishes.
   @moduledoc false
 
@@ -79,8 +79,9 @@ defmodule Age3.Train do
     if met?, do: :ok, else: {:error, "requirement_not_met"}
   end
 
+  # one batch training plus `level` waiting
   defp queue_room(barracks, queued) do
-    if queued < barracks.level, do: :ok, else: {:error, "train_queue_full"}
+    if queued <= barracks.level, do: :ok, else: {:error, "train_queue_full"}
   end
 
   defp enough_people(idle, needed) do

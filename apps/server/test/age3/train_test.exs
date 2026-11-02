@@ -90,9 +90,9 @@ defmodule Age3.TrainTest do
     assert {:ok, _} = check(town(5), %{"horsebackRiding" => 5}, 1, troop: "cavalry")
   end
 
-  test "a Barracks queues as many batches as its level" do
-    assert {:ok, _} = check(town(2), %{}, 1, queued: 1)
-    assert {:error, "train_queue_full"} = check(town(2), %{}, 1, queued: 2)
+  test "a Barracks trains one batch and keeps as many waiting as its level" do
+    assert {:ok, _} = check(town(2), %{}, 1, queued: 2)
+    assert {:error, "train_queue_full"} = check(town(2), %{}, 1, queued: 3)
   end
 
   test "needs resources and idle population" do
