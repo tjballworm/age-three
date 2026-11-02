@@ -41,4 +41,39 @@ defmodule Age3.EconomyTest do
     out = Economy.settle(%{"food" => stock(0, 100, 50), "gold" => stock(10, 0)}, 0, @hour)
     assert out == %{"food" => stock(50, 100, 50), "gold" => stock(10, 0)}
   end
+
+  describe "production from buildings" do
+    defp b(type, level), do: %{type: type, level: level}
+
+    test "an empty city makes the base rates, plus gold from taxes" do
+      assert Economy.rates([], 10) == %{
+               "food" => 100,
+               "lumber" => 100,
+               "stone" => 100,
+               "iron" => 100,
+               "gold" => 110
+             }
+    end
+
+    test "fields add to their resource, one rate per level" do
+      rates = Economy.rates([b("farm", 1), b("farm", 2), b("sawmill", 1), b("townhall", 3)], 0)
+      farm = fn level -> Age3.Data.level("farm", level)["perHour"] end
+      assert rates["food"] == 100 + farm.(1) + farm.(2)
+      assert rates["lumber"] == 100 + Age3.Data.level("sawmill", 1)["perHour"]
+      assert rates["gold"] == 100
+    end
+
+    test "cottages raise population, and with it taxes" do
+      cottage = Age3.Data.level("cottage", 2)["population"]
+      assert %{"current" => pop, "max" => pop, "idle" => pop} = Economy.population([b("cottage", 2)])
+      assert pop == 100 + cottage
+      assert Economy.rates([b("cottage", 2)], 20)["gold"] == 100 + div(pop * 20, 100)
+    end
+
+    test "with_rates changes perHour only" do
+      assert Economy.with_rates(%{"food" => stock(5, 1, 9)}, %{"food" => 300}) == %{
+               "food" => stock(5, 300, 9)
+             }
+    end
+  end
 end

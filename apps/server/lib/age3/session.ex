@@ -72,7 +72,7 @@ defmodule Age3.Session do
     do: {error(id, "bad_message", "Not a valid ping."), session}
 
   defp handle(type, _payload, id, %{player_id: nil} = session)
-       when type in ["getState", "build", "cancelBuild"],
+       when type in ["getState", "build", "cancelBuild", "speedUp"],
        do: {error(id, "not_logged_in", "Log in first."), session}
 
   defp handle("getState", _payload, id, session), do: state_reply(id, session, session.now.())
@@ -109,6 +109,20 @@ defmodule Age3.Session do
 
   defp handle("cancelBuild", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid cancel."), session}
+
+  # Finish a build for free when it has 5 minutes or less left: {cityId, taskId}.
+  defp handle("speedUp", %{"cityId" => city_id, "taskId" => task_id}, id, session)
+       when is_binary(city_id) and is_binary(task_id) do
+    now = session.now.()
+
+    case session.store.speed_up(session.player_id, city_id, task_id, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("speedUp", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid speedup."), session}
 
   defp handle(_type, _payload, id, session),
     do: {error(id, "bad_message", "Unknown message type."), session}
@@ -153,6 +167,7 @@ defmodule Age3.Session do
   defp message("requirement_not_met"), do: "Requirements not met."
   defp message("bad_slot"), do: "That can't be built there."
   defp message("max_level"), do: "Already at the highest level."
+  defp message("too_early"), do: "Speedup is only free in the last 5 minutes."
   defp message(_code), do: "Not a valid request."
 
   defp welcome(id, player_id, token, session) do

@@ -108,6 +108,17 @@ defmodule Age3.SessionTest do
              ])
   end
 
+  test "speedUp" do
+    assert [_, %{"type" => "state"}, %{"payload" => %{"code" => "too_early", "message" => msg}}] =
+             run([
+               login("secret123"),
+               ~s({"type":"speedUp","id":2,"payload":{"cityId":"c1","taskId":"t1"}}),
+               ~s({"type":"speedUp","id":3,"payload":{"cityId":"c1","taskId":"t2"}})
+             ])
+
+    assert msg =~ "5 minutes"
+  end
+
   test "commands need a login first" do
     assert [%{"payload" => %{"code" => "not_logged_in"}}] =
              run([~s({"type":"build","id":1,"payload":{"cityId":"c1","slot":0}})])

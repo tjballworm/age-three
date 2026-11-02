@@ -20,7 +20,7 @@ defmodule Age3.Store.PgTest do
     assert city.name == "Test Lord's Town"
     assert city.x in 0..799 and city.y in 0..799
     # settled to now, so a moment's production may have been added
-    assert %{"gold" => %{"amount" => gold, "perHour" => 100, "cap" => 100_000}} = city.resources
+    assert %{"gold" => %{"amount" => gold, "perHour" => 110, "cap" => 100_000}} = city.resources
     assert_in_delta gold, 5000, 1
 
     assert Enum.sort_by(city.buildings, & &1.slot) == [
@@ -61,6 +61,40 @@ defmodule Age3.Store.PgTest do
     {:ok, _, [city], []} = Pg.state(id, now)
     assert_in_delta city.resources["lumber"]["amount"], 10_000, 1
     assert city.fields == []
+  end
+
+  test "a finished farm raises food production from the moment it finished" do
+    {:ok, id} = Pg.find_or_create_player("Farmer")
+    now = System.system_time(:millisecond)
+    {:ok, _, [city], []} = Pg.state(id, now)
+    {:ok, ends_at} = Pg.build(id, city.id, "f0", "farm", now)
+    {:ok, _, [before], _} = Pg.state(id, ends_at)
+    food = before.resources["food"]["amount"]
+
+    # an hour later: food grew at the new rate, base 100 plus the farm's
+    {:ok, _, [city], []} = Pg.state(id, ends_at + 3_600_000)
+    rate = 100 + Age3.Data.level("farm", 1)["perHour"]
+    assert city.resources["food"]["perHour"] == rate
+    assert_in_delta city.resources["food"]["amount"], food + rate, 1
+  end
+
+  test "speed_up finishes a build with 5 minutes or less left" do
+    {:ok, id} = Pg.find_or_create_player("Speeder")
+    now = System.system_time(:millisecond)
+    {:ok, _, [city], []} = Pg.state(id, now)
+    {:ok, ends_at} = Pg.build(id, city.id, "3", "cottage", now)
+    {:ok, _, _, [task]} = Pg.state(id, now)
+
+    # a moment more than 5 minutes before the end is too early
+    early = ends_at - Age3.Data.free_speedup_ms() - 1_000
+    assert {:error, "too_early"} = Pg.speed_up(id, city.id, task.id, early)
+
+    late = max(now, ends_at - Age3.Data.free_speedup_ms())
+    assert :ok = Pg.speed_up(id, city.id, task.id, late)
+    {:ok, _, [city], []} = Pg.state(id, late)
+    assert %{type: "cottage", level: 1, slot: 3} in city.buildings
+    assert city.population["max"] == 100 + Age3.Data.level("cottage", 1)["population"]
+    assert {:error, "bad_message"} = Pg.speed_up(id, city.id, task.id, late)
   end
 
   test "state for an unknown player" do

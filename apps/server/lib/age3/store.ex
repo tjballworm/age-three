@@ -32,6 +32,10 @@ defmodule Age3.Store do
               now_ms :: integer
             ) :: {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
 
+  @doc "Finishes a construction now, for free, when it has Data.free_speedup_ms/0 or less left."
+  @callback speed_up(player_id :: String.t(), city_id :: String.t(), task_id :: String.t(), now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
   @doc "Stops a construction that hasn't finished and refunds its whole cost."
   @callback cancel_build(
               player_id :: String.t(),
@@ -151,7 +155,8 @@ defmodule Age3.Store.Pg do
 
     Repo.transaction(fn ->
       city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
-      complete_due(city.id, now)
+      # finishing a build changes the city's resources and rates, so read it again afterwards
+      city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
 
       if Repo.exists?(from t in Task, where: t.city_id == ^city.id and t.kind == "build"),
         do: Repo.rollback("queue_busy")
@@ -191,19 +196,10 @@ defmodule Age3.Store.Pg do
 
     Repo.transaction(fn ->
       city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
-      # a build that has already finished can't be cancelled
-      complete_due(city.id, now)
 
-      task =
-        case Ecto.UUID.cast(task_id) do
-          {:ok, id} ->
-            Repo.one(from t in Task, where: t.id == ^id and t.city_id == ^city.id and t.kind == "build")
-
-          :error ->
-            nil
-        end
-
-      task || Repo.rollback("bad_message")
+      # a build that has already finished can't be cancelled, and finishing one changes the city, so read it again
+      city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
+      task = build_task(city.id, task_id) || Repo.rollback("bad_message")
       resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
       save_resources(city.id, Build.spend(resources, task.cost, -1), now)
       Repo.delete!(task)
@@ -211,6 +207,37 @@ defmodule Age3.Store.Pg do
     |> case do
       {:ok, _task} -> :ok
       {:error, code} -> {:error, code}
+    end
+  end
+
+  @impl true
+  def speed_up(player_id, city_id, task_id, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      complete_due(city.id, now)
+      task = build_task(city.id, task_id) || Repo.rollback("bad_message")
+
+      if to_ms(task.ends_at) - now_ms > Data.free_speedup_ms(), do: Repo.rollback("too_early")
+
+      # finish it as if it had ended now
+      task |> Ecto.Changeset.change(ends_at: now) |> Repo.update!()
+      complete_due(city.id, now)
+    end)
+    |> case do
+      {:ok, _done} -> :ok
+      {:error, code} -> {:error, code}
+    end
+  end
+
+  defp build_task(city_id, task_id) do
+    case Ecto.UUID.cast(task_id) do
+      {:ok, id} ->
+        Repo.one(from t in Task, where: t.id == ^id and t.city_id == ^city_id and t.kind == "build")
+
+      :error ->
+        nil
     end
   end
 
@@ -258,16 +285,33 @@ defmodule Age3.Store.Pg do
   end
 
   # Inside a transaction holding the city's lock: applies each finished build to its building and drops the task.
+  # Production changes the moment a building finishes, so resources are settled up to that moment at the old
+  # rates and saved as a new snapshot with the new rates and population.
   defp complete_due(city_id, now) do
-    tasks = Repo.all(from t in Task, where: t.city_id == ^city_id and t.ends_at <= ^now)
+    tasks = Repo.all(from t in Task, where: t.city_id == ^city_id and t.ends_at <= ^now, order_by: t.ends_at)
 
     for t <- tasks do
+      city = Repo.get!(City, city_id)
+      # never move the snapshot back in time
+      synced_at = Enum.max([city.synced_at, t.ends_at], DateTime)
+      resources = Economy.settle(city.resources, to_ms(city.synced_at), to_ms(synced_at))
+
       Repo.insert!(%Building{city_id: city_id, slot: t.slot, type: t.target_type, level: t.target_level},
         on_conflict: [set: [type: t.target_type, level: t.target_level]],
         conflict_target: [:city_id, :slot]
       )
 
       Repo.delete!(t)
+
+      buildings = Repo.all(from b in Building, where: b.city_id == ^city_id)
+
+      Repo.update_all(from(c in City, where: c.id == ^city_id),
+        set: [
+          resources: Economy.with_rates(resources, Economy.rates(buildings, city.tax_rate)),
+          population: Economy.population(buildings),
+          synced_at: synced_at
+        ]
+      )
     end
 
     tasks

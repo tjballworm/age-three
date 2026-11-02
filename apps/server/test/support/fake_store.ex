@@ -25,4 +25,10 @@ defmodule Age3.FakeStore do
   @impl true
   def cancel_build(_player_id, _city_id, "t1", _now_ms), do: :ok
   def cancel_build(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
+
+  # task "t1" has under 5 minutes left; "t2" has more
+  @impl true
+  def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok
+  def speed_up(_player_id, _city_id, "t2", _now_ms), do: {:error, "too_early"}
+  def speed_up(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
 end

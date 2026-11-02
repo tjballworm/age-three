@@ -32,6 +32,8 @@ export type BuildMessage = Envelope<
 >;
 /** Stop a construction and get its whole cost back. The reply is a `state` message. */
 export type CancelBuildMessage = Envelope<'cancelBuild', { cityId: string; taskId: string }>;
+/** Finishes a build for free when it has FREE_SPEEDUP_MS (5 minutes) or less left. Replies with state. */
+export type SpeedUpMessage = Envelope<'speedUp', { cityId: string; taskId: string }>;
 
 export type ClientMessage =
   | LoginMessage
@@ -39,7 +41,8 @@ export type ClientMessage =
   | PingMessage
   | GetStateMessage
   | BuildMessage
-  | CancelBuildMessage;
+  | CancelBuildMessage
+  | SpeedUpMessage;
 
 // ---------- server -> client ----------
 
@@ -76,4 +79,6 @@ export type ErrorCode =
   | 'queue_busy'
   | 'requirement_not_met'
   | 'bad_slot'
-  | 'max_level';
+  | 'max_level'
+  /** speedUp with more than 5 minutes left */
+  | 'too_early';

@@ -12,6 +12,10 @@ export interface BuildingLevel {
   cost: Record<ResourceType, number>;
   /** Build time at normal speed. */
   seconds: number;
+  /** Fields only: how much of their resource this level makes each hour. */
+  perHour?: number;
+  /** Cottages only: how many people this level houses. */
+  population?: number;
 }
 
 export interface BuildingSpec {
@@ -19,6 +23,8 @@ export interface BuildingSpec {
   name: string;
   /** Inside the walls, or a resource field in the outskirts. */
   area: 'town' | 'field';
+  /** Fields only: the resource they make. */
+  resource?: ResourceType;
   /** False when a city may have only one. */
   multiple: boolean;
   /** Other buildings, and their levels, needed before building Lv1. */
@@ -30,6 +36,9 @@ export interface BuildingSpec {
 export const MAX_BUILDING_LEVEL: number = data.maxLevel;
 
 export const BUILDINGS = data.buildings as Record<BuildingType, BuildingSpec>;
+
+/** A build with this long or less left can be finished for free with the Speedup button. */
+export const FREE_SPEEDUP_MS: number = data.freeSpeedupSeconds * 1000;
 
 /** Cost and time to build or upgrade `type` to `level`, or undefined past the top level. */
 export function buildingLevel(type: BuildingType, level: number): BuildingLevel | undefined {

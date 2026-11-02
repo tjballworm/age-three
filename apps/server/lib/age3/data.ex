@@ -14,6 +14,12 @@ defmodule Age3.Data do
   @doc "The highest level any building can reach."
   def max_level, do: @data["maxLevel"]
 
+  @doc "Builds with this long or less left can be finished for free (the Speedup button)."
+  def free_speedup_ms, do: @data["freeSpeedupSeconds"] * 1000
+
+  @doc ~s(What a city has before any buildings: %{"perHour" => %{"food" => ...}, "population" => ...}.)
+  def base, do: @data["base"]
+
   @doc ~s(Every building type, e.g. "cottage" or "farm".)
   def building_types, do: Map.keys(@data["buildings"])
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     BUILDINGS,
+    FREE_SPEEDUP_MS,
     MAX_BUILDING_LEVEL,
     RESOURCE_TYPES,
     buildingLevel,
@@ -10,7 +11,7 @@
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game, openBuild, type BuildSlot } from '$state/game.svelte';
-  import { command } from '$state/sync';
+  import { command, speedUp } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
   import Window from '$ui/components/Window.svelte';
@@ -89,6 +90,17 @@
   const cancel = (taskId: string) =>
     send(() => command({ type: 'cancelBuild', payload: { cityId: city.id, taskId } }));
 
+  /** What the next level adds, e.g. "+100 food/h" or "+100 population". */
+  function gain(type: BuildingType, level: number): string | null {
+    const spec = BUILDINGS[type];
+    const next = buildingLevel(type, level);
+    const now = buildingLevel(type, level - 1);
+    if (spec.resource && next?.perHour)
+      return `+${formatNumber(next.perHour - (now?.perHour ?? 0))} ${spec.resource}/h`;
+    if (next?.population) return `+${formatNumber(next.population - (now?.population ?? 0))} population`;
+    return null;
+  }
+
   const title = $derived(
     standing
       ? `${BUILDINGS[standing.type].name} · Lv ${standing.level}`
@@ -113,13 +125,21 @@
           <b>{building.label}</b>
           <span>{formatDuration(remaining(building, clock.now))} left</span>
         </div>
-        <Button variant="red" disabled={sending} onclick={() => cancel(building.id)}>Cancel</Button>
+        <div class="actions">
+          {#if game.fromServer && remaining(building, clock.now) <= FREE_SPEEDUP_MS}
+            <Button disabled={sending} onclick={() => send(() => speedUp(building))}>Speedup</Button>
+          {/if}
+          <Button variant="red" disabled={sending} onclick={() => cancel(building.id)}>Cancel</Button>
+        </div>
       </div>
-      <p class="note">Cancelling gives back the whole cost.</p>
+      <p class="note">
+        Cancelling gives back the whole cost. Builds with 5 minutes or less left can be sped up for free.
+      </p>
     {:else}
       {#each options as { type, level } (type)}
         {@const lv = buildingLevel(type, level)}
         {@const why = blocker(type, level) ?? (queueBusy ? 'Already building in this city' : null)}
+        {@const adds = gain(type, level)}
         <div class="row">
           <div class="what">
             <b>{BUILDINGS[type].name} → Lv {level}</b>
@@ -131,6 +151,7 @@
                 <span>⏱ {formatDuration(lv.seconds * 1000)}</span>
               </span>
             {/if}
+            {#if adds}<span class="gain">{adds}</span>{/if}
             {#if why}<span class="why">{why}</span>{/if}
           </div>
           <Button disabled={!game.fromServer || sending || why !== null} onclick={() => build(type)}>
@@ -185,6 +206,16 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    font-weight: 700;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+  .gain {
+    display: block;
+    margin-top: 4px;
+    color: var(--ok);
     font-weight: 700;
   }
   .why {
