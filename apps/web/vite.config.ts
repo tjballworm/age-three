@@ -55,6 +55,15 @@ export default defineConfig(({ command, mode }) => {
         $net: src('net'),
       },
     },
+    // Two pages: the game (/) and the standalone battle calculator (/calc/).
+    build: {
+      rollupOptions: {
+        input: {
+          main: fileURLToPath(new URL('./index.html', import.meta.url)),
+          calc: fileURLToPath(new URL('./calc/index.html', import.meta.url)),
+        },
+      },
+    },
     server: { port: 5173 },
   };
 });
