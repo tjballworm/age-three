@@ -50,7 +50,8 @@
     z-index: 50;
     display: grid;
     place-items: center;
-    background: #000a;
+    /* solid, so nothing of the game shows until the player has logged in */
+    background: radial-gradient(circle at 50% 40%, var(--navy-mid), var(--navy) 70%);
   }
   .card {
     width: 320px;
