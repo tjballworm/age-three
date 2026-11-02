@@ -1,16 +1,16 @@
 {
   "troops": {
-    "worker": {"name": "Worker", "cost": {"food": 50, "lumber": 150, "stone": 0, "iron": 10, "gold": 0}, "seconds": 50, "population": 1, "upkeep": 1, "requires": {"barracks": 1}},
-    "warrior": {"name": "Warrior", "cost": {"food": 80, "lumber": 100, "stone": 0, "iron": 50, "gold": 0}, "seconds": 24, "population": 1, "upkeep": 1, "requires": {"barracks": 1}},
-    "scout": {"name": "Scout", "cost": {"food": 120, "lumber": 200, "stone": 0, "iron": 150, "gold": 0}, "seconds": 98, "population": 1, "upkeep": 2, "requires": {"barracks": 2}, "research": {"informatics": 1}},
-    "pike": {"name": "Pikeman", "cost": {"food": 150, "lumber": 500, "stone": 0, "iron": 100, "gold": 0}, "seconds": 150, "population": 1, "upkeep": 3, "requires": {"barracks": 2}, "research": {"militaryTradition": 1}},
-    "sword": {"name": "Swordsman", "cost": {"food": 200, "lumber": 150, "stone": 0, "iron": 400, "gold": 0}, "seconds": 224, "population": 1, "upkeep": 3, "requires": {"barracks": 3}, "research": {"ironWorking": 1}},
-    "archer": {"name": "Archer", "cost": {"food": 300, "lumber": 350, "stone": 0, "iron": 300, "gold": 0}, "seconds": 350, "population": 2, "upkeep": 4, "requires": {"barracks": 4}, "research": {"archery": 1}},
-    "cavalry": {"name": "Cavalry", "cost": {"food": 1000, "lumber": 600, "stone": 0, "iron": 500, "gold": 0}, "seconds": 500, "population": 3, "upkeep": 9, "requires": {"barracks": 5}, "research": {"horsebackRiding": 1}},
-    "cataphract": {"name": "Cataphract", "cost": {"food": 2000, "lumber": 500, "stone": 0, "iron": 2500, "gold": 0}, "seconds": 1500, "population": 6, "upkeep": 17, "requires": {"barracks": 7}, "research": {"ironWorking": 5, "horsebackRiding": 5}},
-    "transporter": {"name": "Transporter", "cost": {"food": 600, "lumber": 1500, "stone": 0, "iron": 350, "gold": 0}, "seconds": 1000, "population": 4, "upkeep": 5, "requires": {"barracks": 6}, "research": {"logistics": 1, "metalCasting": 3}},
-    "ballista": {"name": "Ballista", "cost": {"food": 2500, "lumber": 3000, "stone": 0, "iron": 1800, "gold": 0}, "seconds": 3000, "population": 5, "upkeep": 25, "requires": {"barracks": 9}, "research": {"metalCasting": 5, "archery": 6}, "siege": true},
-    "ram": {"name": "Battering Ram", "cost": {"food": 4000, "lumber": 6000, "stone": 0, "iron": 1500, "gold": 0}, "seconds": 4500, "population": 10, "upkeep": 50, "requires": {"barracks": 9}, "research": {"ironWorking": 8, "metalCasting": 7}, "siege": true},
-    "catapult": {"name": "Catapult", "cost": {"food": 5000, "lumber": 5000, "stone": 8000, "iron": 1200, "gold": 0}, "seconds": 6000, "population": 8, "upkeep": 125, "requires": {"barracks": 10}, "research": {"metalCasting": 10, "archery": 10}, "siege": true}
+    "worker": {"name": "Worker", "cost": {"food": 50, "lumber": 150, "stone": 0, "iron": 10, "gold": 0}, "seconds": 50, "population": 1, "upkeep": 1, "load": 200, "requires": {"barracks": 1}},
+    "warrior": {"name": "Warrior", "cost": {"food": 80, "lumber": 100, "stone": 0, "iron": 50, "gold": 0}, "seconds": 24, "population": 1, "upkeep": 1, "load": 20, "requires": {"barracks": 1}},
+    "scout": {"name": "Scout", "cost": {"food": 120, "lumber": 200, "stone": 0, "iron": 150, "gold": 0}, "seconds": 98, "population": 1, "upkeep": 2, "load": 5, "requires": {"barracks": 2}, "research": {"informatics": 1}},
+    "pike": {"name": "Pikeman", "cost": {"food": 150, "lumber": 500, "stone": 0, "iron": 100, "gold": 0}, "seconds": 150, "population": 1, "upkeep": 3, "load": 40, "requires": {"barracks": 2}, "research": {"militaryTradition": 1}},
+    "sword": {"name": "Swordsman", "cost": {"food": 200, "lumber": 150, "stone": 0, "iron": 400, "gold": 0}, "seconds": 224, "population": 1, "upkeep": 3, "load": 30, "requires": {"barracks": 3}, "research": {"ironWorking": 1}},
+    "archer": {"name": "Archer", "cost": {"food": 300, "lumber": 350, "stone": 0, "iron": 300, "gold": 0}, "seconds": 350, "population": 2, "upkeep": 4, "load": 25, "requires": {"barracks": 4}, "research": {"archery": 1}},
+    "cavalry": {"name": "Cavalry", "cost": {"food": 1000, "lumber": 600, "stone": 0, "iron": 500, "gold": 0}, "seconds": 500, "population": 3, "upkeep": 9, "load": 100, "requires": {"barracks": 5}, "research": {"horsebackRiding": 1}},
+    "cataphract": {"name": "Cataphract", "cost": {"food": 2000, "lumber": 500, "stone": 0, "iron": 2500, "gold": 0}, "seconds": 1500, "population": 6, "upkeep": 17, "load": 80, "requires": {"barracks": 7}, "research": {"ironWorking": 5, "horsebackRiding": 5}},
+    "transporter": {"name": "Transporter", "cost": {"food": 600, "lumber": 1500, "stone": 0, "iron": 350, "gold": 0}, "seconds": 1000, "population": 4, "upkeep": 5, "load": 5000, "requires": {"barracks": 6}, "research": {"logistics": 1, "metalCasting": 3}},
+    "ballista": {"name": "Ballista", "cost": {"food": 2500, "lumber": 3000, "stone": 0, "iron": 1800, "gold": 0}, "seconds": 3000, "population": 5, "upkeep": 25, "load": 35, "requires": {"barracks": 9}, "research": {"metalCasting": 5, "archery": 6}, "siege": true},
+    "ram": {"name": "Battering Ram", "cost": {"food": 4000, "lumber": 6000, "stone": 0, "iron": 1500, "gold": 0}, "seconds": 4500, "population": 10, "upkeep": 50, "load": 45, "requires": {"barracks": 9}, "research": {"ironWorking": 8, "metalCasting": 7}, "siege": true},
+    "catapult": {"name": "Catapult", "cost": {"food": 5000, "lumber": 5000, "stone": 8000, "iron": 1200, "gold": 0}, "seconds": 6000, "population": 8, "upkeep": 125, "load": 75, "requires": {"barracks": 10}, "research": {"metalCasting": 10, "archery": 10}, "siege": true}
   }
 }

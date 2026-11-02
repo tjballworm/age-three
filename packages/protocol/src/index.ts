@@ -155,8 +155,6 @@ export type ErrorCode =
   | 'research_busy'
   /** the same tech is already being researched in another city */
   | 'already_researching'
-  /** the Barracks is being upgraded (no training), or is training (no upgrade) */
-  | 'barracks_busy'
   /** the Barracks already has as many batches queued as its level */
   | 'train_queue_full'
   /** not enough idle population for the batch */

@@ -243,11 +243,8 @@ defmodule Age3.Store.Pg do
 
       case Build.check(buildings, resources, slot, type, research_of(player_id)) do
         {:ok, plan} ->
-          # the Academy can't be upgraded in the middle of a research, nor a Barracks while it trains
+          # the Academy can't be upgraded in the middle of a research (a Barracks can, while it trains)
           if plan.type == "academy" and researching?(city.id), do: Repo.rollback("academy_busy")
-
-          if plan.type == "barracks" and training_queue(city.id, slot) != [],
-            do: Repo.rollback("barracks_busy")
 
           save_resources(city, Build.spend(resources, plan.cost), now_ms)
 
@@ -352,10 +349,8 @@ defmodule Age3.Store.Pg do
       city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
       city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
 
-      # a Barracks being upgraded can't train
-      if Repo.exists?(from t in Task, where: t.city_id == ^city.id and t.kind == "build" and t.slot == ^slot),
-        do: Repo.rollback("barracks_busy")
-
+      # a Barracks keeps training while it is upgraded; its queue size and the troops it unlocks come from the
+      # level it has now
       queue = training_queue(city.id, slot)
       buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
       since_ms = to_ms(city.synced_at)

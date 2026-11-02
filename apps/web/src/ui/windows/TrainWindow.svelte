@@ -10,12 +10,14 @@
     TECHS,
     TROOPS,
     TROOP_DATA,
+    TROOP_STATS,
     populationAt,
     remaining,
     researchInCity,
     stockAt,
     techLevel,
     trainSeconds,
+    type ResourceType,
     type TechId,
     type TimedTask,
     type TownBuilding,
@@ -29,14 +31,27 @@
   import Window from '$ui/components/Window.svelte';
   import { formatDuration, formatNumber } from '$ui/format';
 
-  // A Barracks' training window, laid out like the original: the Barracks' queue on the left (with arrows to step
-  // through the city's Barracks), every troop on the right. Picking a troop opens its order form under the grid.
-  // "Split between all barracks" and "Only assign to idle barracks" decide which Barracks get the order; the
-  // client sends one train message per Barracks. As elsewhere, the checks here only grey out buttons and explain
-  // why; the server decides.
+  // The Barracks window, laid out like the original: description and Upgrade on top, this Barracks' queue on the
+  // left, every troop on the right, arrows at the bottom to step through the city's Barracks. Recruit opens the
+  // troop's own window (stats, requirements, how many, the two split options). As elsewhere, the checks here only
+  // grey out buttons and explain why; the server decides.
 
   /** One batch can't be bigger than this, whatever the resources (the server's limit too). */
   const MAX_COUNT = 1_000_000;
+
+  const DESCRIPTION =
+    'Soldier training and dismissal are conducted in the Barracks; the higher its level, the more advanced army branches can be trained.';
+
+  /** Troop descriptions for the Recruit window. None written yet. */
+  const TROOP_DESCRIPTION: Partial<Record<TroopType, string>> = {};
+
+  const RESOURCE_NAME: Record<ResourceType, string> = {
+    gold: 'Gold',
+    food: 'Food',
+    lumber: 'Lumber',
+    stone: 'Stone',
+    iron: 'Iron',
+  };
 
   type Barracks = TownBuilding & { slot: number };
 
@@ -56,14 +71,13 @@
   /** Research counts here only up to this city's Academy level. */
   const research = $derived(researchInCity(game.player.research, academy));
   const idle = $derived(populationAt(city.population, city.taxRate, game.syncedAt, clock.now).idle);
+  const own = (r: ResourceType) => stockAt(city.resources[r], game.syncedAt, clock.now);
 
   /** A Barracks' batches, in the order they run: the first is training, the rest wait. */
   const queueOf = (slot: number): TimedTask[] =>
     game.queue
       .filter((t) => t.cityId === city.id && t.kind === 'train' && t.slot === String(slot))
       .sort((a, b) => a.endsAt - b.endsAt);
-  const upgradingAt = (slot: number) =>
-    game.queue.some((t) => t.cityId === city.id && t.kind === 'build' && t.slot === String(slot));
 
   const queue = $derived(barracks ? queueOf(barracks.slot) : []);
   const current = $derived(queue[0]);
@@ -75,29 +89,22 @@
     if (n > 1) openTrain(allBarracks[(index + by + n) % n]!.slot);
   }
 
-  /** Why this troop can't be trained in this city at all (research), or null. */
-  function lockedByResearch(troop: TroopType): string | null {
+  /** Why this troop can't be trained in this Barracks, or null. Shown as the 🚫 on its card. */
+  function locked(troop: TroopType): string | null {
+    const need = TROOP_DATA[troop].requires.barracks;
+    if ((barracks?.level ?? 0) < need) return `Needs Barracks Lv ${need}`;
     for (const [tech, lv] of Object.entries(TROOP_DATA[troop].research ?? {}))
       if (techLevel(research, tech as TechId) < lv!)
         return `Needs ${TECHS[tech as TechId].name} Lv ${lv} research`;
     return null;
   }
 
-  /** Why this troop can't be trained in this Barracks, or null. Shown as the 🚫 on its card. */
-  function locked(troop: TroopType): string | null {
-    const need = TROOP_DATA[troop].requires.barracks;
-    if ((barracks?.level ?? 0) < need) return `Needs Barracks Lv ${need}`;
-    return lockedByResearch(troop);
-  }
-
-  /** Can this Barracks take another batch of this troop now? */
+  /** Can this Barracks take another batch of this troop now? One trains and `level` more can wait. */
   const canTake = (b: Barracks, troop: TroopType) =>
-    b.level >= TROOP_DATA[troop].requires.barracks &&
-    !upgradingAt(b.slot) &&
-    queueOf(b.slot).length < b.level;
+    b.level >= TROOP_DATA[troop].requires.barracks && queueOf(b.slot).length <= b.level;
 
   /**
-   * The Barracks an order goes to. Without the checkboxes, only this one. "Only idle" keeps Barracks with an empty
+   * The Barracks an order goes to. Without the checkboxes, only this one. "Idle only" keeps Barracks with an empty
    * queue (this one first, else the next idle one). "Split" uses every Barracks that can take it (only the idle
    * ones when both are ticked); otherwise just the first of them.
    */
@@ -121,28 +128,32 @@
   function most(troop: TroopType): number {
     const spec = TROOP_DATA[troop];
     let n = Math.min(MAX_COUNT * Math.max(1, targets(troop).length), Math.floor(idle / spec.population));
-    for (const r of RESOURCE_TYPES)
-      if (spec.cost[r] > 0)
-        n = Math.min(n, Math.floor(stockAt(city.resources[r], game.syncedAt, clock.now) / spec.cost[r]));
+    for (const r of RESOURCE_TYPES) if (spec.cost[r] > 0) n = Math.min(n, Math.floor(own(r) / spec.cost[r]));
     return Math.max(0, n);
   }
 
-  let selected = $state<TroopType | null>(null);
+  // ---------- the Recruit window ----------
+
+  let recruiting = $state<TroopType | null>(null);
   let count = $state(0);
   const n = $derived(Math.max(0, Math.floor(count || 0)));
-  const where = $derived(selected ? targets(selected) : []);
+  const where = $derived(recruiting ? targets(recruiting) : []);
   const split = $derived(shares(n, where.length));
+
+  function recruit(troop: TroopType) {
+    recruiting = troop;
+    count = 0;
+    error = '';
+  }
 
   /** Why the order can't go now, or null. */
   function blocker(troop: TroopType): string | null {
-    const res = lockedByResearch(troop);
-    if (res) return res;
+    const lock = locked(troop);
+    if (lock) return lock;
     if (where.length === 0) {
       if (options.idleOnly) return 'No idle Barracks can train it';
       if (options.split) return 'No Barracks can take it';
-      const lock = locked(troop);
-      if (lock) return lock;
-      return barracks && upgradingAt(barracks.slot) ? 'The Barracks is being upgraded' : 'The queue is full';
+      return 'The queue is full';
     }
     if (n === 0) return null;
     if (Math.max(...split) > MAX_COUNT) return `At most ${formatNumber(MAX_COUNT)} per Barracks`;
@@ -151,9 +162,42 @@
     return null;
   }
 
-  function pick(troop: TroopType) {
-    selected = troop;
-    count = 0;
+  /** Requirement | Needed | You own, for the Recruit window. Needed is for the count typed in (at least one). */
+  function requirements(troop: TroopType): { name: string; needed: string; own: string; short: boolean }[] {
+    const spec = TROOP_DATA[troop];
+    const k = Math.max(n, 1);
+    const rows = [];
+    const lv = barracks?.level ?? 0;
+    rows.push({
+      name: 'Barracks',
+      needed: `Lv ${spec.requires.barracks}`,
+      own: `Lv ${lv}`,
+      short: lv < spec.requires.barracks,
+    });
+    for (const [tech, need] of Object.entries(spec.research ?? {})) {
+      const have = techLevel(research, tech as TechId);
+      rows.push({
+        name: TECHS[tech as TechId].name,
+        needed: `Lv ${need}`,
+        own: `Lv ${have}`,
+        short: have < need!,
+      });
+    }
+    for (const r of RESOURCE_TYPES)
+      if (spec.cost[r] > 0)
+        rows.push({
+          name: RESOURCE_NAME[r],
+          needed: formatNumber(spec.cost[r] * k),
+          own: formatNumber(own(r)),
+          short: own(r) < spec.cost[r] * k,
+        });
+    rows.push({
+      name: 'Idle population',
+      needed: formatNumber(spec.population * k),
+      own: formatNumber(idle),
+      short: idle < spec.population * k,
+    });
+    return rows;
   }
 
   let error = $state('');
@@ -177,7 +221,7 @@
       const orders = where.map((b, i) => ({ slot: b.slot, count: split[i] ?? 0 })).filter((o) => o.count > 0);
       for (const o of orders)
         await command({ type: 'train', payload: { cityId: city.id, slot: o.slot, troop, count: o.count } });
-      count = 0;
+      recruiting = null;
     });
   const cancel = (taskId: string) =>
     send(() => command({ type: 'cancelTrain', payload: { cityId: city.id, taskId } }));
@@ -193,235 +237,270 @@
     });
   }
 
+  // Escape or the close button on the Barracks closes the Recruit window first, if it is open
+  const close = () => (recruiting ? (recruiting = null) : closeWindow());
+
   const title = $derived(barracks ? `Barracks · Lv ${barracks.level}` : 'Barracks');
 </script>
 
-<Window {title} width={900} height={600} onclose={closeWindow}>
+<Window {title} width={860} height={600} onclose={close}>
   {#if !barracks}
     <p class="note pad">Open a Barracks in the town to train troops there.</p>
   {:else}
-    <div class="layout">
-      <aside class="left">
-        <div class="head">
-          <div>
-            <b class="name">Barracks</b>
-            <span>Level <b class="gold">{barracks.level}</b></span>
-          </div>
-          <Button small variant="dark" onclick={() => openBuild(barracks.slot)}>Upgrade</Button>
-        </div>
+    <div class="page">
+      <div class="top">
+        <div class="art" aria-hidden="true">⚔</div>
+        <p class="desc">{DESCRIPTION}</p>
+        <Button onclick={() => openBuild(barracks.slot)}>Upgrade</Button>
+      </div>
 
-        {#if allBarracks.length > 1}
-          <div class="switch">
-            <button type="button" onclick={() => step(-1)} aria-label="Previous Barracks">‹</button>
-            <span>Barracks <b>{index + 1}</b> / {allBarracks.length}</span>
-            <button type="button" onclick={() => step(1)} aria-label="Next Barracks">›</button>
-          </div>
-        {/if}
+      <div class="cols">
+        <aside class="left">
+          <p class="line">
+            Estimated time:
+            <b>{queue.length ? formatDuration(remaining(queue[queue.length - 1]!, clock.now)) : '00s'}</b>
+          </p>
 
-        <p class="total">
-          Total training time:
-          <b>{queue.length ? formatDuration(remaining(queue[queue.length - 1]!, clock.now)) : '—'}</b>
-        </p>
-
-        <div class="caption">Now training</div>
-        {#if current}
-          {@const left = remaining(current, clock.now)}
-          <div class="card busy">
-            <div class="grow">
-              <b>{current.label}</b>
-              <span>Time: <b class="gold inline">{formatDuration(left)}</b></span>
-            </div>
-            <div class="stack">
+          <div class="caption">Training</div>
+          {#if current}
+            {@const left = remaining(current, clock.now)}
+            <div class="card busy">
+              <div class="grow">
+                <b>{current.label}</b>
+                <span>{formatDuration(left)} left</span>
+              </div>
               {#if game.fromServer && left <= FREE_SPEEDUP_MS}
                 <Button small disabled={sending} onclick={() => send(() => speedUp(current))}>Speedup</Button>
               {/if}
               <Button small variant="red" disabled={sending} onclick={() => cancel(current.id)}>Cancel</Button
               >
             </div>
-          </div>
-        {:else}
-          <div class="card"><span class="muted">Nothing. Pick a troop to train.</span></div>
-        {/if}
-
-        <div class="caption">
-          Waiting <span class="count">{waiting.length} / {Math.max(0, barracks.level - 1)}</span>
-        </div>
-        <div class="waiting">
-          {#each waiting as task (task.id)}
-            <div class="card small">
-              <div class="grow">
-                <b>{task.label}</b>
-                <span>Done in {formatDuration(remaining(task, clock.now))}</span>
-              </div>
-              <Button small variant="red" disabled={sending} onclick={() => cancel(task.id)}>Cancel</Button>
-            </div>
           {:else}
-            <span class="muted">None.</span>
-          {/each}
-        </div>
+            <span class="muted">Nothing. Recruit a troop on the right.</span>
+          {/if}
 
-        <Button small variant="red" disabled={sending || allTraining.length === 0} onclick={cancelAll}
-          >Cancel all Barracks queues</Button
-        >
-      </aside>
+          <div class="caption">Waiting: {waiting.length}/{barracks.level}</div>
+          <div class="waiting">
+            {#each waiting as task (task.id)}
+              <div class="card">
+                <div class="grow">
+                  <b>{task.label}</b>
+                  <span>Done in {formatDuration(remaining(task, clock.now))}</span>
+                </div>
+                <Button small variant="red" disabled={sending} onclick={() => cancel(task.id)}>Cancel</Button>
+              </div>
+            {/each}
+          </div>
 
-      <section class="right">
-        <div class="grid">
+          {#if allTraining.length > 0}
+            <Button small variant="red" disabled={sending} onclick={cancelAll}
+              >Cancel all Barracks queues</Button
+            >
+          {/if}
+          {#if error && !recruiting}<p class="error" role="alert">{error}</p>{/if}
+        </aside>
+
+        <section class="grid">
           {#each TROOPS as troop (troop)}
             {@const lock = locked(troop)}
-            <button
-              type="button"
-              class="troop"
-              class:on={selected === troop}
-              class:locked={lock !== null}
-              title={lock ?? `Train ${TROOP_DATA[troop].name}`}
-              onclick={() => pick(troop)}
-            >
-              <span class="tname">{TROOP_DATA[troop].name}</span>
-              <span class="have">Have <b>{formatNumber(city.troops?.[troop] ?? 0)}</b></span>
-              <span class="pick">Train</span>
-              {#if lock}<span class="no" aria-label={lock}>🚫</span>{/if}
-            </button>
+            <div class="troop" class:locked={lock !== null} title={lock ?? ''}>
+              <div class="tname">{TROOP_DATA[troop].name}</div>
+              <div class="tbody">
+                <div class="portrait" aria-hidden="true">
+                  {TROOP_DATA[troop].name.slice(0, 1)}
+                  {#if lock}<span class="no">🚫</span>{/if}
+                </div>
+                <div class="side">
+                  <span class="have">{formatNumber(city.troops?.[troop] ?? 0)}</span>
+                  <button
+                    type="button"
+                    class="recruit"
+                    class:grey={lock !== null}
+                    onclick={() => recruit(troop)}>Recruit</button
+                  >
+                </div>
+              </div>
+            </div>
           {/each}
-        </div>
-
-        {#if selected}
-          {@const spec = TROOP_DATA[selected]}
-          {@const shown = Math.max(n, 1)}
-          {@const why = blocker(selected)}
-          {@const longest = split.length ? Math.max(...split) : shown}
-          <div class="order">
-            <div class="row">
-              <b class="name">{spec.name}</b>
-              <span class="cost">
-                {#each RESOURCE_TYPES.filter((r) => spec.cost[r] > 0) as r (r)}
-                  <span><ResourceIcon type={r} size={14} /> {formatNumber(spec.cost[r] * shown)}</span>
-                {/each}
-                <span
-                  ><ResourceIcon type="population" size={14} /> {formatNumber(spec.population * shown)}</span
-                >
-                <span>⏱ {formatDuration(trainSeconds(selected, longest, research) * 1000)}</span>
-              </span>
-            </div>
-            <span class="muted">
-              {n > 1 ? `Cost for ${formatNumber(n)}` : 'Cost for one'} · each eats {spec.upkeep} food an hour ·
-              {formatNumber(idle)} idle people
-              {#if split.length > 1}
-                · split {split.map(formatNumber).join(' / ')} over {split.length} Barracks{/if}
-              {#if where.length === 1 && where[0]!.slot !== barracks.slot}
-                · goes to Barracks {allBarracks.indexOf(where[0]!) + 1}{/if}
-            </span>
-            <div class="row">
-              <label><input type="checkbox" bind:checked={options.split} /> Split between all barracks</label>
-              <label
-                ><input type="checkbox" bind:checked={options.idleOnly} /> Only assign to idle barracks</label
-              >
-            </div>
-            <div class="row">
-              <input
-                class="num"
-                type="number"
-                min="0"
-                step="1"
-                placeholder="0"
-                aria-label="How many {spec.name}"
-                bind:value={count}
-              />
-              <Button
-                small
-                variant="blue"
-                disabled={!game.fromServer}
-                onclick={() => (count = most(selected!))}>Max</Button
-              >
-              <Button
-                disabled={!game.fromServer || sending || n === 0 || why !== null}
-                onclick={() => train(selected!)}>Train</Button
-              >
-              {#if why}<span class="why">{why}</span>{/if}
-            </div>
-          </div>
-        {:else}
-          <p class="note">Pick a troop to train it.</p>
-        {/if}
-        {#if !game.fromServer}<p class="note">Showing sample data: training needs the game server.</p>{/if}
-        {#if error}<p class="error" role="alert">{error}</p>{/if}
-      </section>
+        </section>
+      </div>
     </div>
   {/if}
+
+  {#snippet footer()}
+    <div class="pager">
+      {#if allBarracks.length > 1}
+        <button type="button" onclick={() => step(-1)} aria-label="Previous Barracks">◀</button>
+        <span>{index + 1}/{allBarracks.length}</span>
+        <button type="button" onclick={() => step(1)} aria-label="Next Barracks">▶</button>
+      {/if}
+    </div>
+    <Button variant="dark" onclick={closeWindow}>Close</Button>
+  {/snippet}
 </Window>
 
+{#if recruiting && barracks}
+  {@const troop = recruiting}
+  {@const spec = TROOP_DATA[troop]}
+  {@const stats = TROOP_STATS[troop]}
+  {@const why = blocker(troop)}
+  {@const longest = split.length ? Math.max(...split) : Math.max(n, 1)}
+  <Window title={spec.name} width={500} height={640} onclose={() => (recruiting = null)}>
+    <div class="recruit-body">
+      <div class="top">
+        <div class="art small" aria-hidden="true">{spec.name.slice(0, 1)}</div>
+        <p class="desc">{TROOP_DESCRIPTION[troop] ?? ''}</p>
+      </div>
+
+      <div class="stats">
+        <span>Attack: <b>{stats.attack}</b></span>
+        <span>Defence: <b>{stats.defence}</b></span>
+        <span>Range: <b>{formatNumber(stats.range)}</b></span>
+        <span>Speed: <b>{formatNumber(stats.speed)}</b></span>
+        <span>Load: <b>{formatNumber(spec.load)}</b></span>
+        <span>Life: <b>{formatNumber(stats.life)}</b></span>
+        <span>Food: <b>{spec.upkeep}/h</b></span>
+        <span>Population: <b>{spec.population}</b></span>
+      </div>
+
+      <table>
+        <thead><tr><th>Requirement</th><th>Needed</th><th>You own</th></tr></thead>
+        <tbody>
+          {#each requirements(troop) as row (row.name)}
+            <tr class:short={row.short}>
+              <td>{row.name}</td>
+              <td>{row.needed}</td>
+              <td>{row.own}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+
+      <div class="form">
+        <div class="fld">You own <output>{formatNumber(city.troops?.[troop] ?? 0)}</output></div>
+        <div class="fld">
+          Train
+          <input
+            type="number"
+            min="0"
+            step="1"
+            placeholder="0"
+            bind:value={count}
+            aria-label="How many to train"
+          />
+        </div>
+        <div class="fld">
+          Maximum
+          <button
+            type="button"
+            class="max"
+            title="Train the most you can"
+            disabled={!game.fromServer}
+            onclick={() => (count = most(troop))}>{formatNumber(most(troop))}</button
+          >
+        </div>
+        <div class="fld">
+          Duration <output>{formatDuration(trainSeconds(troop, longest, research) * 1000)}</output>
+        </div>
+      </div>
+
+      <label class="check"
+        ><input type="checkbox" bind:checked={options.split} /> Split production to all Barracks</label
+      >
+      <label class="check"
+        ><input type="checkbox" bind:checked={options.idleOnly} /> Share production with idle Barracks only</label
+      >
+      {#if split.length > 1}
+        <span class="muted">{split.map(formatNumber).join(' / ')} over {split.length} Barracks</span>
+      {:else if where.length === 1 && where[0]!.slot !== barracks.slot}
+        <span class="muted">Goes to Barracks {allBarracks.indexOf(where[0]!) + 1}</span>
+      {/if}
+
+      {#if why}<p class="error">{why}</p>{/if}
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+      {#if !game.fromServer}<p class="note">Showing sample data: training needs the game server.</p>{/if}
+    </div>
+
+    {#snippet footer()}
+      <Button variant="dark" onclick={() => (recruiting = null)}>Cancel</Button>
+      <Button disabled={!game.fromServer || sending || n === 0 || why !== null} onclick={() => train(troop)}
+        >OK</Button
+      >
+    {/snippet}
+  </Window>
+{/if}
+
 <style>
-  .layout {
-    display: grid;
-    grid-template-columns: 280px 1fr;
+  .page,
+  .recruit-body {
+    display: flex;
+    flex-direction: column;
     gap: 10px;
     height: 100%;
     padding: 10px;
     box-sizing: border-box;
   }
-  .left,
-  .right {
+  .top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .art {
+    flex: 0 0 auto;
+    width: 96px;
+    height: 72px;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--bronze);
+    border-radius: 4px;
+    background: linear-gradient(#e9d6a0, #b9955a);
+    font: 800 32px var(--font-display);
+    color: #5a3a10;
+  }
+  .art.small {
+    width: 64px;
+    height: 64px;
+  }
+  .desc {
+    flex: 1;
+    align-self: stretch;
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid #6d8aa8;
+    border-radius: 4px;
+    background: #d8eefa;
+    font-size: 12px;
+    min-height: 40px;
+  }
+  .cols {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 290px 1fr;
+    gap: 10px;
+  }
+  .left {
     display: flex;
     flex-direction: column;
     gap: 8px;
     min-height: 0;
   }
-  .right {
-    overflow-y: auto;
-  }
-  .head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 10px;
-    border-radius: 6px;
-    background: #ffffff55;
-    border: 1px solid #6d8aa8;
-  }
-  .head span {
-    display: block;
-    font-size: 12px;
-  }
-  .name {
-    font: 800 15px var(--font-display);
-  }
-  .gold {
-    color: #b8860b;
-  }
-  .switch {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    font-size: 12px;
-  }
-  .switch button {
-    width: 22px;
-    height: 22px;
-    border-radius: 4px;
-    border: 1px solid #b8860b;
-    background: linear-gradient(#f3d36b, #d99a1a);
-    font: 800 14px var(--font-display);
-    cursor: pointer;
-    line-height: 1;
-  }
-  .total {
+  .line {
     margin: 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #6d8aa8;
     font-size: 12px;
   }
   .caption {
-    font: 800 12px var(--font-display);
-    color: var(--navy);
-  }
-  .count {
-    font: 700 11px var(--font-body);
-    color: var(--navy-mid);
+    padding-top: 4px;
+    font-size: 12px;
+    font-weight: 700;
   }
   .card {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px;
+    gap: 6px;
+    padding: 6px 8px;
     border-radius: 6px;
     border: 1px solid #6d8aa8;
     background: var(--row);
@@ -431,142 +510,188 @@
     background: #fff6dc;
     border-color: #c9a227;
   }
-  .card.small {
-    padding: 4px 8px;
-  }
   .card b {
     display: block;
     font-size: 12px;
-  }
-  .card b.inline {
-    display: inline;
   }
   .grow {
     flex: 1;
     min-width: 0;
   }
-  .stack {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
   .waiting {
     flex: 1;
-    min-height: 60px;
+    min-height: 40px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 6px;
-    border-radius: 6px;
-    background: var(--row);
-    border: 1px solid #6d8aa8;
   }
   .grid {
+    min-height: 0;
+    overflow-y: auto;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 6px;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-rows: max-content;
+    align-content: start;
+    gap: 8px;
+    padding: 6px;
+    border: 1px solid #6d8aa8;
+    border-radius: 4px;
+    background: #8fbfdc;
   }
   .troop {
-    position: relative;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 4px;
-    padding: 8px;
-    text-align: left;
-    border-radius: 6px;
-    border: 1px solid #6d8aa8;
-    background: var(--row);
-    color: var(--navy);
-    cursor: pointer;
-  }
-  .troop:hover {
-    border-color: #b8860b;
-  }
-  .troop.on {
-    border: 2px solid #b8860b;
-    background: #fff6dc;
-    padding: 7px;
-  }
-  .troop.locked .tname,
-  .troop.locked .have {
-    opacity: 0.6;
+    border: 1px solid #2f5a7a;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #eef3f2;
   }
   .tname {
-    grid-column: 1 / -1;
+    padding: 3px;
     text-align: center;
+    background: linear-gradient(#1f5a82, #0f3a5a);
+    color: #fff;
     font: 800 12px var(--font-display);
+    letter-spacing: 1px;
   }
-  .have {
-    font-size: 11px;
-    align-self: center;
+  .tbody {
+    display: flex;
+    gap: 8px;
+    padding: 6px;
   }
-  .have b {
-    color: #b8860b;
-  }
-  .pick {
-    padding: 2px 10px;
-    border-radius: 4px;
-    border: 1px solid #b8860b;
-    background: linear-gradient(#f3d36b, #d99a1a);
-    font: 800 11px var(--font-display);
+  .portrait {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    display: grid;
+    place-items: center;
+    border: 1px solid #b9955a;
+    background: linear-gradient(#e9d6a0, #b9955a);
+    font: 800 24px var(--font-display);
+    color: #5a3a10;
   }
   .no {
     position: absolute;
-    right: 6px;
-    bottom: -2px;
-    font-size: 13px;
+    right: 2px;
+    bottom: 0;
+    font-size: 14px;
   }
-  .order {
+  .side {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 10px;
-    border-radius: 6px;
-    border: 2px solid #b8860b;
-    background: #fff6dc;
-    font-size: 11px;
+    align-items: flex-end;
+    justify-content: space-between;
   }
-  .row {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px 14px;
+  .have {
+    font-size: 12px;
+    color: #555;
   }
-  .cost {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-  }
-  .cost > span {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-weight: 700;
-  }
-  label {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-weight: 700;
+  .recruit {
+    min-width: 74px;
+    height: 22px;
+    border-radius: 3px;
+    border: 1px solid #b8600b;
+    background: linear-gradient(#ffc24a, #f08a0a);
+    color: #fff;
+    font: 700 12px var(--font-body);
+    text-shadow: 0 1px 1px #0006;
     cursor: pointer;
   }
-  .num {
-    width: 96px;
-    height: 26px;
-    padding: 0 6px;
-    border-radius: 4px;
+  .recruit.grey {
+    border-color: #777;
+    background: linear-gradient(#b8b8b8, #808080);
+  }
+  .troop.locked .portrait {
+    filter: grayscale(0.6);
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px 10px;
+    padding: 8px 12px;
     border: 1px solid #6d8aa8;
+    border-radius: 4px;
+    background: #d8eefa;
+    font-size: 12px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th {
+    padding: 4px 8px;
+    text-align: left;
+    background: linear-gradient(180deg, #fff09a, #f4c81a);
+    color: #5a1600;
+  }
+  td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #c7d6e4;
+    background: #d8eefa;
+  }
+  tr.short td {
+    color: var(--err);
+    font-weight: 700;
+  }
+  .form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+  }
+  .fld {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .fld output,
+  .fld input,
+  .max {
+    width: 110px;
+    height: 24px;
+    box-sizing: border-box;
+    padding: 0 6px;
+    border: 1px solid #2f5a7a;
+    border-radius: 3px;
+    background: #fff;
+    color: var(--navy);
     font: 700 12px var(--font-body);
     text-align: right;
+    line-height: 22px;
+  }
+  .max {
+    cursor: pointer;
+    color: var(--navy);
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font: 700 12px var(--font-display);
+    cursor: pointer;
+  }
+  .pager {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--title);
+    font-weight: 700;
+  }
+  .pager button {
+    border: 0;
+    background: none;
+    color: var(--gold);
+    font-size: 18px;
+    cursor: pointer;
   }
   .muted {
     color: var(--navy-mid);
     font-size: 11px;
-  }
-  .why {
-    color: var(--err);
-    font-weight: 700;
   }
   .note {
     margin: 0;
@@ -580,5 +705,6 @@
     margin: 0;
     color: var(--err);
     font-weight: 700;
+    font-size: 12px;
   }
 </style>
