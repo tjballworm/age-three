@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { auth } from '$state/auth.svelte';
   import { clock } from '$state/clock.svelte';
   import { game, openWindow } from '$state/game.svelte';
+  import { logOut } from '$state/sync';
   import { formatClock, formatNumber } from '$ui/format';
 
   const p = $derived(game.player);
@@ -22,6 +24,9 @@
     <div class="net {game.connection}" title={game.fromServer ? 'Playing on the game server' : 'Showing sample data'}>
       {game.connection === 'online' ? 'Online' : game.connection === 'connecting' ? 'Connecting…' : game.fromServer ? 'Offline · reconnecting' : 'Offline · sample data'}
     </div>
+    {#if auth.status === 'loggedIn'}
+      <button class="logout" type="button" onclick={logOut}>Log out</button>
+    {/if}
     <div class="clock" title="Server time">{formatClock(clock.now)}</div>
   </div>
   <dl class="stats">
@@ -106,6 +111,19 @@
   }
   .net.connecting::before {
     background: #f5b82e;
+  }
+  .logout {
+    align-self: flex-start;
+    padding: 0;
+    font-size: 10px;
+    color: #c9b483;
+    background: none;
+    border: 0;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .logout:hover {
+    color: var(--gold-light);
   }
   .clock {
     margin-top: auto;

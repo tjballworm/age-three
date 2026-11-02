@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { auth } from '$state/auth.svelte';
   import { game } from '$state/game.svelte';
   import Hud from './hud/Hud.svelte';
+  import LoginScreen from './LoginScreen.svelte';
   import TileHoverCard from './hud/TileHoverCard.svelte';
   import BuildWindow from './windows/BuildWindow.svelte';
   import TileWindow from './windows/TileWindow.svelte';
@@ -38,6 +40,9 @@
     {/if}
     {#if game.buildSlot !== null}
       <BuildWindow slot={game.buildSlot} />
+    {/if}
+    {#if auth.status === 'loggedOut'}
+      <LoginScreen />
     {/if}
   </div>
   <!-- Positioned in screen pixels next to the hovered map tile, so it lives outside the scaled stage. -->

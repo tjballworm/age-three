@@ -11,9 +11,9 @@ defmodule Age3.Store.PgTest do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Age3.Repo)
   end
 
-  test "login creates a player with a starter city, and finds them again" do
-    {:ok, id} = Pg.login("Test Lord")
-    assert {:ok, ^id} = Pg.login("Test Lord")
+  test "find_or_create_player creates a player with a starter city, and finds them again" do
+    {:ok, id} = Pg.find_or_create_player("Test Lord")
+    assert {:ok, ^id} = Pg.find_or_create_player("Test Lord")
 
     {:ok, player, [city], []} = Pg.state(id, System.system_time(:millisecond))
     assert %{name: "Test Lord", title: "Civilian", alliance: nil, rank: 0} = player
@@ -32,7 +32,7 @@ defmodule Age3.Store.PgTest do
   end
 
   test "build pays now, finishes when due, and one build at a time" do
-    {:ok, id} = Pg.login("Builder")
+    {:ok, id} = Pg.find_or_create_player("Builder")
     now = System.system_time(:millisecond)
     {:ok, _, [city], []} = Pg.state(id, now)
 
@@ -51,7 +51,7 @@ defmodule Age3.Store.PgTest do
   end
 
   test "cancel refunds the cost" do
-    {:ok, id} = Pg.login("Canceller")
+    {:ok, id} = Pg.find_or_create_player("Canceller")
     now = System.system_time(:millisecond)
     {:ok, _, [city], []} = Pg.state(id, now)
     {:ok, _} = Pg.build(id, city.id, "f0", "farm", now)

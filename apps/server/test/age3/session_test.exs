@@ -20,33 +20,66 @@ defmodule Age3.SessionTest do
     replies
   end
 
-  defp hello(version), do: ~s({"type":"hello","id":1,"payload":{"version":#{version},"name":"Lord TJ"}})
+  defp login(password, version \\ Session.version()) do
+    payload = %{version: version, username: "Lord TJ", password: password}
+    Jason.encode!(%{type: "login", id: 1, payload: payload})
+  end
+
+  defp hello(payload) do
+    Jason.encode!(%{type: "hello", id: 1, payload: Map.put(payload, :version, Session.version())})
+  end
+
+  @get_state ~s({"type":"getState","id":2,"payload":{}})
 
   test "rejects junk" do
     assert [%{"type" => "error"}, %{"type" => "error"}] =
              run(["not json", ~s({"type":"launchNukes","payload":{}})])
   end
 
-  test "needs hello first" do
+  test "needs a login first" do
     assert [%{"type" => "error", "id" => 1, "payload" => %{"code" => "not_logged_in"}}] =
              run([~s({"type":"getState","id":1,"payload":{}})])
   end
 
-  test "login and state" do
-    assert [welcome, state] = run([hello(Session.version()), ~s({"type":"getState","id":2,"payload":{}})])
-    assert %{"type" => "welcome", "id" => 1, "payload" => %{"playerId" => "p1"}} = welcome
+  test "login hands out a token, then state works" do
+    assert [welcome, state] = run([login("secret123"), @get_state])
+    assert %{"type" => "welcome", "id" => 1, "payload" => %{"playerId" => "p1", "token" => "t1"}} = welcome
     assert %{"type" => "state", "id" => 2, "payload" => %{"player" => %{"name" => "Lord TJ"}}} = state
+  end
+
+  test "wrong password is refused and doesn't log in" do
+    assert [refused, state] = run([login("guess"), @get_state])
+    assert refused["payload"]["code"] == "bad_login"
+    assert state["payload"]["code"] == "not_logged_in"
+  end
+
+  test "hello with a saved token logs back in, without a new token" do
+    assert [%{"type" => "welcome", "payload" => welcome}, %{"type" => "state"}] =
+             run([hello(%{token: "t1"}), @get_state])
+
+    assert welcome["playerId"] == "p1"
+    refute Map.has_key?(welcome, "token")
+  end
+
+  test "hello with an unknown token asks for a new login" do
+    assert [refused, state] = run([hello(%{token: "stolen"}), @get_state])
+    assert refused["payload"]["code"] == "session_expired"
+    assert state["payload"]["code"] == "not_logged_in"
+  end
+
+  test "the old name-only hello no longer logs in" do
+    assert [%{"payload" => %{"code" => "bad_message"}}] = run([hello(%{name: "Lord TJ"})])
   end
 
   test "state carries the tasks" do
     assert [_, %{"payload" => %{"tasks" => [], "serverTime" => 1_000}}] =
-             run([hello(Session.version()), ~s({"type":"getState","id":2,"payload":{}})])
+             run([login("secret123"), ~s({"type":"getState","id":2,"payload":{}})])
   end
 
   test "build replies with the new state and wakes the task runner" do
     assert [_, %{"type" => "state", "id" => 2}] =
              run([
-               hello(Session.version()),
+               login("secret123"),
                ~s({"type":"build","id":2,"payload":{"cityId":"c1","slot":0,"type":"cottage"}})
              ])
 
@@ -56,12 +89,12 @@ defmodule Age3.SessionTest do
   test "build errors carry their code" do
     assert [_, %{"type" => "error", "payload" => %{"code" => "queue_busy"}}] =
              run([
-               hello(Session.version()),
+               login("secret123"),
                ~s({"type":"build","id":2,"payload":{"cityId":"c1","slot":"f2"}})
              ])
 
     assert [_, %{"payload" => %{"code" => "bad_message"}}] =
-             run([hello(Session.version()), ~s({"type":"build","id":2,"payload":{"slot":0}})])
+             run([login("secret123"), ~s({"type":"build","id":2,"payload":{"slot":0}})])
 
     refute_received {:wake, _}
   end
@@ -69,13 +102,13 @@ defmodule Age3.SessionTest do
   test "cancelBuild" do
     assert [_, %{"type" => "state"}, %{"payload" => %{"code" => "bad_message"}}] =
              run([
-               hello(Session.version()),
+               login("secret123"),
                ~s({"type":"cancelBuild","id":2,"payload":{"cityId":"c1","taskId":"t1"}}),
                ~s({"type":"cancelBuild","id":3,"payload":{"cityId":"c1","taskId":"nope"}})
              ])
   end
 
-  test "commands need hello first" do
+  test "commands need a login first" do
     assert [%{"payload" => %{"code" => "not_logged_in"}}] =
              run([~s({"type":"build","id":1,"payload":{"cityId":"c1","slot":0}})])
   end
@@ -88,7 +121,8 @@ defmodule Age3.SessionTest do
   end
 
   test "version mismatch" do
-    assert [%{"payload" => %{"code" => "version_mismatch"}}] = run([hello(Session.version() + 1)])
+    assert [%{"payload" => %{"code" => "version_mismatch"}}] =
+             run([login("secret123", Session.version() + 1)])
   end
 
   test "ping" do

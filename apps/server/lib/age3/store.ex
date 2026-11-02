@@ -3,8 +3,15 @@ defmodule Age3.Store do
   # so tests can swap in a fake without a database. A behaviour is Elixir's version of a Go interface.
   @moduledoc false
 
-  @doc "Finds the player with this name, creating them and a starter city the first time."
-  @callback login(name :: String.t()) :: {:ok, player_id :: String.t()} | {:error, term}
+  @doc "The player's id if the username and password match."
+  @callback authenticate(name :: String.t(), password :: String.t()) ::
+              {:ok, player_id :: String.t()} | :error
+
+  @doc "A new login token for the player, for the browser to keep."
+  @callback new_token(player_id :: String.t()) :: token :: String.t()
+
+  @doc "The player a login token belongs to, if it's still valid."
+  @callback player_for_token(token :: String.t()) :: {:ok, player_id :: String.t()} | :error
 
   @doc """
   The player, all their cities with buildings and fields, and their cities' running tasks, shaped as the client's
@@ -41,10 +48,17 @@ defmodule Age3.Store.Pg do
   @behaviour Age3.Store
 
   import Ecto.Query
-  alias Age3.{Build, Building, City, Data, Economy, Game, Player, Repo, Task}
+  alias Age3.{Accounts, Build, Building, City, Data, Economy, Game, Player, Repo, Task}
 
   @impl true
-  def login(name) do
+  defdelegate authenticate(name, password), to: Accounts
+  @impl true
+  defdelegate new_token(player_id), to: Accounts
+  @impl true
+  defdelegate player_for_token(token), to: Accounts
+
+  @doc "Finds the player with this name, creating them and a starter city the first time. Used by Accounts."
+  def find_or_create_player(name) do
     case Repo.get_by(Player, name: name) do
       %Player{id: id} -> {:ok, id}
       nil -> create_player(name)
