@@ -5,7 +5,6 @@
   import Window from '$ui/components/Window.svelte';
   import CityOverview from './CityOverview.svelte';
   import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
-  import ResearchWindow from './ResearchWindow.svelte';
   import TrainWindow from './TrainWindow.svelte';
   import TroopsOverview from './TroopsOverview.svelte';
 
@@ -19,7 +18,6 @@
     mail: { title: 'Mail', tabs: ['Inbox', 'Sent', 'Compose'] },
     leaderboard: { title: 'Leaderboard', tabs: ['Player', 'Hero', 'Alliance'] },
     shop: { title: 'Shop', tabs: ['Featured', 'Speed-ups', 'Resources', 'Chests'] },
-    tech: { title: 'Academy · Research', tabs: ['Economy', 'Military'] },
     market: { title: 'Marketplace', tabs: ['Buy', 'Sell', 'My Orders'] },
     events: { title: 'Events', tabs: ['Current', 'Upcoming'] },
     settings: { title: 'Settings', tabs: ['Game', 'Sound', 'Account'] },
@@ -50,8 +48,6 @@
       <CityOverview />
     {:else if game.openWindow === 'city' && tab === 'Troops'}
       <TroopsOverview />
-    {:else if game.openWindow === 'tech'}
-      <ResearchWindow group={tab === 'Military' ? 'military' : 'economy'} />
     {:else if game.openWindow === 'leaderboard'}
       <LeaderboardPlaceholder board={tab} />
     {:else}

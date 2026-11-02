@@ -22,7 +22,6 @@ export type WindowId =
   | 'mail'
   | 'leaderboard'
   | 'shop'
-  | 'tech'
   | 'market'
   | 'events'
   | 'settings'

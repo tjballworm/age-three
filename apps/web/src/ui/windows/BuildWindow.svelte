@@ -15,12 +15,15 @@
     type TechId,
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
-  import { currentCity, game, openBuild, openTrain, openWindow, type BuildSlot } from '$state/game.svelte';
+  import { currentCity, game, openBuild, openTrain, type BuildSlot } from '$state/game.svelte';
   import { command, speedUp } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
+  import Icon from '$ui/components/Icon.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
   import Window from '$ui/components/Window.svelte';
   import { formatDuration, formatNumber } from '$ui/format';
+  import { tooltip } from '$ui/tooltip.svelte';
+  import ResearchPanel from './ResearchPanel.svelte';
 
   // Build on an empty plot or field, or upgrade the building that stands there. The checks here only grey out
   // buttons and explain why; the server makes the real decision and its error is shown if it refuses.
@@ -127,78 +130,116 @@
           : 'Empty plot',
   );
   const close = () => openBuild(null);
+  /** The Academy gets one window with its upgrade on top and all its research below. */
+  const isAcademy = $derived(standing?.type === 'academy');
 </script>
 
-<Window {title} width={620} height={440} onclose={close}>
-  <div class="body">
-    {#if !game.fromServer}
-      <p class="note">Showing sample data: building needs the game server.</p>
-    {/if}
+{#snippet costLine(type: BuildingType, level: number)}
+  {@const lv = buildingLevel(type, level)}
+  {#if lv}
+    <span class="cost">
+      {#each RESOURCE_TYPES.filter((r) => lv.cost[r] > 0) as r (r)}
+        <span><ResourceIcon type={r} size={14} /> {formatNumber(lv.cost[r])}</span>
+      {/each}
+      <span>⏱ {formatDuration(buildSeconds(lv.seconds, research) * 1000)}</span>
+    </span>
+  {/if}
+{/snippet}
 
-    {#if building}
-      <div class="row busy">
-        <div>
-          <b>{building.label}</b>
-          <span>{formatDuration(remaining(building, clock.now))} left</span>
-        </div>
-        <div class="actions">
-          {#if game.fromServer && remaining(building, clock.now) <= FREE_SPEEDUP_MS}
-            <Button disabled={sending} onclick={() => send(() => speedUp(building))}>Speedup</Button>
+<Window {title} width={isAcademy ? 900 : 620} height={isAcademy ? 600 : 440} onclose={close}>
+  {#if isAcademy && standing}
+    {@const next = options[0]!}
+    {@const why = blocker(next.type, next.level) ?? (queueBusy ? 'Already building in this city' : null)}
+    {#snippet upgradeTip()}
+      <b class="tip-title">Academy → Lv {next.level}</b>
+      {@render costLine(next.type, next.level)}
+      {#if why}<span class="tip-why">{why}</span>{/if}
+    {/snippet}
+    <div class="body academy">
+      <div class="head">
+        <div class="badge"><Icon name="research" size={40} /></div>
+        <div class="name">
+          <b>Academy</b>
+          <span
+            >Level <em>{standing.level}</em>{standing.level >= MAX_BUILDING_LEVEL ? ' · Max Level' : ''}</span
+          >
+          {#if building}
+            <span>{building.label} · {formatDuration(remaining(building, clock.now))} left</span>
           {/if}
-          <Button variant="red" disabled={sending} onclick={() => cancel(building.id)}>Cancel</Button>
         </div>
+        {#if building}
+          <div class="actions">
+            {#if game.fromServer && remaining(building, clock.now) <= FREE_SPEEDUP_MS}
+              <Button disabled={sending} onclick={() => send(() => speedUp(building))}>Speedup</Button>
+            {/if}
+            <Button variant="red" disabled={sending} onclick={() => cancel(building.id)}>Cancel</Button>
+          </div>
+        {:else if standing.level >= MAX_BUILDING_LEVEL}
+          <Button disabled>Max Level</Button>
+        {:else}
+          <span class="tip-anchor" use:tooltip={upgradeTip}>
+            <Button disabled={!game.fromServer || sending || why !== null} onclick={() => build(next.type)}
+              >Upgrade</Button
+            >
+          </span>
+        {/if}
       </div>
-      <p class="note">
-        Cancelling gives back the whole cost. Builds with 5 minutes or less left can be sped up for free.
-      </p>
-    {:else}
-      {#each options as { type, level } (type)}
-        {@const lv = buildingLevel(type, level)}
-        {@const why = blocker(type, level) ?? (queueBusy ? 'Already building in this city' : null)}
-        {@const adds = gain(type, level)}
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+      <ResearchPanel />
+    </div>
+  {:else}
+    <div class="body">
+      {#if !game.fromServer}
+        <p class="note">Showing sample data: building needs the game server.</p>
+      {/if}
+
+      {#if building}
+        <div class="row busy">
+          <div>
+            <b>{building.label}</b>
+            <span>{formatDuration(remaining(building, clock.now))} left</span>
+          </div>
+          <div class="actions">
+            {#if game.fromServer && remaining(building, clock.now) <= FREE_SPEEDUP_MS}
+              <Button disabled={sending} onclick={() => send(() => speedUp(building))}>Speedup</Button>
+            {/if}
+            <Button variant="red" disabled={sending} onclick={() => cancel(building.id)}>Cancel</Button>
+          </div>
+        </div>
+        <p class="note">
+          Cancelling gives back the whole cost. Builds with 5 minutes or less left can be sped up for free.
+        </p>
+      {:else}
+        {#each options as { type, level } (type)}
+          {@const why = blocker(type, level) ?? (queueBusy ? 'Already building in this city' : null)}
+          {@const adds = gain(type, level)}
+          <div class="row">
+            <div class="what">
+              <b>{BUILDINGS[type].name} → Lv {level}</b>
+              {@render costLine(type, level)}
+              {#if adds}<span class="gain">{adds}</span>{/if}
+              {#if why}<span class="why">{why}</span>{/if}
+            </div>
+            <Button disabled={!game.fromServer || sending || why !== null} onclick={() => build(type)}>
+              {standing ? 'Upgrade' : 'Build'}
+            </Button>
+          </div>
+        {/each}
+      {/if}
+
+      {#if standing?.type === 'barracks' && typeof slot === 'number'}
         <div class="row">
           <div class="what">
-            <b>{BUILDINGS[type].name} → Lv {level}</b>
-            {#if lv}
-              <span class="cost">
-                {#each RESOURCE_TYPES.filter((r) => lv.cost[r] > 0) as r (r)}
-                  <span><ResourceIcon type={r} size={14} /> {formatNumber(lv.cost[r])}</span>
-                {/each}
-                <span>⏱ {formatDuration(buildSeconds(lv.seconds, research) * 1000)}</span>
-              </span>
-            {/if}
-            {#if adds}<span class="gain">{adds}</span>{/if}
-            {#if why}<span class="why">{why}</span>{/if}
+            <b>Train troops</b>
+            <span>Recruit workers, infantry, cavalry and siege engines from your idle population.</span>
           </div>
-          <Button disabled={!game.fromServer || sending || why !== null} onclick={() => build(type)}>
-            {standing ? 'Upgrade' : 'Build'}
-          </Button>
+          <Button onclick={() => openTrain(slot as number)}>Open</Button>
         </div>
-      {/each}
-    {/if}
+      {/if}
 
-    {#if standing?.type === 'academy'}
-      <div class="row">
-        <div class="what">
-          <b>Research</b>
-          <span>Improve production, storage, building speed and your army.</span>
-        </div>
-        <Button onclick={() => openWindow('tech')}>Open</Button>
-      </div>
-    {/if}
-
-    {#if standing?.type === 'barracks' && typeof slot === 'number'}
-      <div class="row">
-        <div class="what">
-          <b>Train troops</b>
-          <span>Recruit workers, infantry, cavalry and siege engines from your idle population.</span>
-        </div>
-        <Button onclick={() => openTrain(slot as number)}>Open</Button>
-      </div>
-    {/if}
-
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
-  </div>
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+    </div>
+  {/if}
 
   {#snippet footer()}
     <Button variant="dark" onclick={close}>Close</Button>
@@ -268,6 +309,59 @@
   .error {
     margin: 0;
     color: var(--err);
+    font-weight: 700;
+  }
+  .body.academy {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    overflow: hidden;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid #6d8aa8;
+    background: linear-gradient(180deg, #eef6fc, #d6e8f6);
+    color: var(--navy);
+  }
+  .badge {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 6px;
+    border: 2px solid var(--bronze);
+    background: #1d2a3a;
+    color: #f3d27a;
+  }
+  .name {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+  }
+  .name b {
+    font: 800 18px var(--font-display);
+  }
+  .name em {
+    font-style: normal;
+    font-weight: 800;
+    color: #b07a10;
+  }
+  .tip-anchor {
+    display: inline-block;
+  }
+  .tip-title {
+    display: block;
+    font: 800 12px var(--font-display);
+  }
+  .tip-why {
+    display: block;
+    margin-top: 4px;
+    color: #ff8a7a;
     font-weight: 700;
   }
 </style>
