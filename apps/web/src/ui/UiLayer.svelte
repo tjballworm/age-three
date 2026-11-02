@@ -2,6 +2,7 @@
   import { game } from '$state/game.svelte';
   import Hud from './hud/Hud.svelte';
   import TileHoverCard from './hud/TileHoverCard.svelte';
+  import BuildWindow from './windows/BuildWindow.svelte';
   import TileWindow from './windows/TileWindow.svelte';
   import WindowHost from './windows/WindowHost.svelte';
 
@@ -34,6 +35,9 @@
     <WindowHost />
     {#if game.selectedTile}
       <TileWindow tile={game.selectedTile} />
+    {/if}
+    {#if game.buildSlot !== null}
+      <BuildWindow slot={game.buildSlot} />
     {/if}
   </div>
   <!-- Positioned in screen pixels next to the hovered map tile, so it lives outside the scaled stage. -->

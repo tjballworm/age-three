@@ -1,6 +1,6 @@
 defmodule Age3.Building do
-  # A row in the buildings table: one building in a town. slot is "0".."31", "townhall" or "walls", and
-  # (city_id, slot) is the key, so there is no id column.
+  # A row in the buildings table: one building in a town or field in its outskirts. slot is "0".."31",
+  # "townhall", "walls" or "f0".."f12", and (city_id, slot) is the key, so there is no id column.
   @moduledoc false
   use Ecto.Schema
 
@@ -11,6 +11,5 @@ defmodule Age3.Building do
     field :slot, :string, primary_key: true
     field :type, :string
     field :level, :integer
-    field :upgrading, :boolean, default: false
   end
 end

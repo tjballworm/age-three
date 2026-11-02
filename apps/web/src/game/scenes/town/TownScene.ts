@@ -24,6 +24,8 @@ export interface TownSceneEvents {
   /** Pointer is over a building, or `null` when it leaves. */
   hover?(building: TownBuilding | null): void;
   select?(building: TownBuilding): void;
+  /** An empty plot was clicked. */
+  selectPlot?(slot: number): void;
 }
 
 /**
@@ -232,6 +234,17 @@ export class TownScene {
     return null;
   }
 
+  /** The empty plot under a point, if any. */
+  private emptyPlotAt(sx: number, sy: number): number | null {
+    const { x, y } = this.toTown(sx, sy);
+    for (let slot = 0; slot < TOWN_SLOTS; slot++) {
+      if (this.list.some((b) => b.slot === slot)) continue;
+      const [px, py] = plotPosition(slot);
+      if (Math.abs(x - px) / (PLOT_W / 2) + Math.abs(y - py) / (PLOT_H / 2) <= 1) return slot;
+    }
+    return null;
+  }
+
   private setHover(b: TownBuilding | null) {
     if (b === this.hovered) return;
     const prev = this.hovered && this.sprites.get(this.hovered)?.children[0];
@@ -288,7 +301,9 @@ export class TownScene {
       if (!click) return;
       const p = local(e);
       const b = this.buildingAt(p.x, p.y);
-      if (b) this.events.select?.(b);
+      if (b) return this.events.select?.(b);
+      const slot = this.emptyPlotAt(p.x, p.y);
+      if (slot !== null) this.events.selectPlot?.(slot);
     };
     const leave = () => this.setHover(null);
     const wheel = (e: WheelEvent) => {
