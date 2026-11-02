@@ -15,11 +15,13 @@ defmodule Age3.Store.PgTest do
     {:ok, id} = Pg.login("Test Lord")
     assert {:ok, ^id} = Pg.login("Test Lord")
 
-    {:ok, player, [city]} = Pg.state(id)
+    {:ok, player, [city]} = Pg.state(id, System.system_time(:millisecond))
     assert %{name: "Test Lord", title: "Civilian", alliance: nil, rank: 0} = player
     assert city.name == "Test Lord's Town"
-    assert city.x in 0..99 and city.y in 0..99
-    assert %{"gold" => %{"amount" => 5000, "perHour" => 100, "cap" => 100_000}} = city.resources
+    assert city.x in 0..799 and city.y in 0..799
+    # settled to now, so a moment's production may have been added
+    assert %{"gold" => %{"amount" => gold, "perHour" => 100, "cap" => 100_000}} = city.resources
+    assert_in_delta gold, 5000, 1
 
     assert Enum.sort_by(city.buildings, & &1.slot) == [
              %{type: "townhall", level: 1, slot: "townhall"},
@@ -28,7 +30,7 @@ defmodule Age3.Store.PgTest do
   end
 
   test "state for an unknown player" do
-    assert {:error, :not_found} = Pg.state(Ecto.UUID.generate())
-    assert {:error, :not_found} = Pg.state("not-a-uuid")
+    assert {:error, :not_found} = Pg.state(Ecto.UUID.generate(), 0)
+    assert {:error, :not_found} = Pg.state("not-a-uuid", 0)
   end
 end
