@@ -7,5 +7,5 @@ defmodule Age3.FakeStore do
   def login(_name), do: {:ok, "p1"}
 
   @impl true
-  def state(id), do: {:ok, %{id: id, name: "Lord TJ"}, []}
+  def state(id, _now_ms), do: {:ok, %{id: id, name: "Lord TJ"}, []}
 end

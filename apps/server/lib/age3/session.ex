@@ -74,9 +74,12 @@ defmodule Age3.Session do
     do: {error(id, "not_logged_in", "Say hello first."), session}
 
   defp handle("getState", _payload, id, session) do
-    case session.store.state(session.player_id) do
+    # one clock reading: resources are settled to exactly the serverTime the client projects from
+    now = session.now.()
+
+    case session.store.state(session.player_id, now) do
       {:ok, player, cities} ->
-        {reply(id, "state", %{player: player, cities: cities, serverTime: session.now.()}), session}
+        {reply(id, "state", %{player: player, cities: cities, serverTime: now}), session}
 
       {:error, :not_found} ->
         {error(id, "not_logged_in", "Player not found."), session}

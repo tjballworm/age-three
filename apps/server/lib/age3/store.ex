@@ -6,8 +6,9 @@ defmodule Age3.Store do
   @doc "Finds the player with this name, creating them and a starter city the first time."
   @callback login(name :: String.t()) :: {:ok, player_id :: String.t()} | {:error, term}
 
-  @doc "The player and all their cities with buildings, shaped as the client's JSON."
-  @callback state(player_id :: String.t()) :: {:ok, player :: map, cities :: [map]} | {:error, :not_found}
+  @doc "The player and all their cities with buildings, shaped as the client's JSON, resources as at now_ms."
+  @callback state(player_id :: String.t(), now_ms :: integer) ::
+              {:ok, player :: map, cities :: [map]} | {:error, :not_found}
 end
 
 defmodule Age3.Store.Pg do
@@ -16,7 +17,7 @@ defmodule Age3.Store.Pg do
   @behaviour Age3.Store
 
   import Ecto.Query
-  alias Age3.{Building, City, Game, Player, Repo}
+  alias Age3.{Building, City, Economy, Game, Player, Repo}
 
   @impl true
   def login(name) do
@@ -80,7 +81,7 @@ defmodule Age3.Store.Pg do
   end
 
   @impl true
-  def state(player_id) do
+  def state(player_id, now_ms) do
     with {:ok, _} <- Ecto.UUID.cast(player_id),
          %Player{} = player <- Repo.get(Player, player_id) do
       buildings = from(b in Building, order_by: b.slot)
@@ -90,7 +91,7 @@ defmodule Age3.Store.Pg do
           from c in City, where: c.player_id == ^player_id, order_by: c.id, preload: [buildings: ^buildings]
         )
 
-      {:ok, player_json(player), Enum.map(cities, &city_json/1)}
+      {:ok, player_json(player), Enum.map(cities, &city_json(&1, now_ms))}
     else
       _ -> {:error, :not_found}
     end
@@ -111,14 +112,17 @@ defmodule Age3.Store.Pg do
     }
   end
 
-  defp city_json(c) do
+  # Resources are settled to now_ms on the way out; the stored snapshot only changes when something spends.
+  defp city_json(c, now_ms) do
+    since_ms = DateTime.to_unix(c.synced_at, :millisecond)
+
     %{
       id: c.id,
       name: c.name,
       x: c.x,
       y: c.y,
       level: c.level,
-      resources: c.resources,
+      resources: Economy.settle(c.resources, since_ms, now_ms),
       population: c.population,
       loyalty: c.loyalty,
       taxRate: c.tax_rate,

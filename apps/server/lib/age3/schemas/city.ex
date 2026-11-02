@@ -15,6 +15,8 @@ defmodule Age3.City do
     field :tax_rate, :integer, default: 10
     field :resources, :map
     field :population, :map
+    # when the resources snapshot was taken; Age3.Economy.settle works forward from here
+    field :synced_at, :utc_datetime_usec
     has_many :buildings, Age3.Building
   end
 end
