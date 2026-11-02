@@ -24,10 +24,11 @@ describe('building data', () => {
     for (const type of Object.keys(FIELD_NAME))
       expect(BUILDINGS[type as keyof typeof BUILDINGS].area).toBe('field');
     for (const spec of Object.values(BUILDINGS))
-      for (const [need, level] of Object.entries(spec.requires)) {
-        expect(BUILDINGS).toHaveProperty(need);
-        expect(level).toBeGreaterThanOrEqual(1);
-      }
+      for (const { requires } of spec.levels)
+        for (const [need, level] of Object.entries(requires ?? {})) {
+          expect(BUILDINGS).toHaveProperty(need);
+          expect(level).toBeGreaterThanOrEqual(1);
+        }
   });
 
   it('looks levels up from 1', () => {

@@ -23,10 +23,10 @@ defmodule Age3.Data do
   @doc ~s(Every building type, e.g. "cottage" or "farm".)
   def building_types, do: Map.keys(@data["buildings"])
 
-  @doc ~s(One building's spec: "area", "multiple", "requires" and "levels", or nil for an unknown type.)
+  @doc ~s(One building's spec: "area", "multiple" and "levels", or nil for an unknown type.)
   def building(type), do: @data["buildings"][type]
 
-  @doc ~s(Cost and time to reach level: %{"cost" => %{"food" => ...}, "seconds" => ...}, or nil.)
+  @doc ~s(Cost, time and needs to reach level: %{"cost" => %{"food" => ...}, "seconds" => ..., "requires" => ...}, or nil.)
   def level(type, level) when is_integer(level) and level >= 1 do
     case building(type) do
       %{"levels" => levels} -> Enum.at(levels, level - 1)

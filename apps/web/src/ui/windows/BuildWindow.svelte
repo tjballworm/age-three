@@ -58,13 +58,11 @@
     const spec = BUILDINGS[type];
     if (level > MAX_BUILDING_LEVEL) return 'Already at the highest level';
     if (type !== 'townhall' && level > levelOf('townhall')) return `Needs Town Hall Lv ${level}`;
-    if (level === 1) {
-      for (const [need, lv] of Object.entries(spec.requires))
-        if (levelOf(need as BuildingType) < lv!)
-          return `Needs ${BUILDINGS[need as BuildingType].name} Lv ${lv}`;
-      if (!spec.multiple && levelOf(type) > 0) return 'Only one per city';
-    }
-    const cost = buildingLevel(type, level)!.cost;
+    const { cost, requires } = buildingLevel(type, level)!;
+    for (const [need, lv] of Object.entries(requires ?? {}))
+      if (levelOf(need as BuildingType) < lv!)
+        return `Needs ${BUILDINGS[need as BuildingType].name} Lv ${lv}`;
+    if (level === 1 && !spec.multiple && levelOf(type) > 0) return 'Only one per city';
     for (const r of RESOURCE_TYPES)
       if (stockAt(city.resources[r], game.syncedAt, clock.now) < cost[r]) return 'Not enough resources';
     return null;

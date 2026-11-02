@@ -62,13 +62,12 @@ defmodule Age3.Build do
     if level <= level_of(buildings, "townhall"), do: :ok, else: {:error, "requirement_not_met"}
   end
 
-  # New buildings only: the other buildings they need first, and the one-per-city limit.
-  defp requirements(_buildings, _type, level) when level > 1, do: :ok
-
-  defp requirements(buildings, type, 1) do
+  # The other buildings this level needs first (from the data file), and for new buildings the one-per-city limit.
+  defp requirements(buildings, type, level) do
     spec = Data.building(type)
-    met? = Enum.all?(spec["requires"], fn {need, level} -> level_of(buildings, need) >= level end)
-    taken? = not spec["multiple"] and Enum.any?(buildings, &(&1.type == type))
+    needs = Data.level(type, level)["requires"] || %{}
+    met? = Enum.all?(needs, fn {need, lv} -> level_of(buildings, need) >= lv end)
+    taken? = level == 1 and not spec["multiple"] and Enum.any?(buildings, &(&1.type == type))
     if met? and not taken?, do: :ok, else: {:error, "requirement_not_met"}
   end
 
