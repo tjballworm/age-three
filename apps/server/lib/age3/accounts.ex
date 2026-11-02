@@ -1,11 +1,9 @@
 defmodule Age3.Accounts do
   # Logins: checking a username and password, and the tokens that keep a browser logged in.
   #
-  # There's no sign-up yet; TJ creates accounts by hand with set_password/2:
-  #   locally:  iex -S mix   then   Age3.Accounts.set_password("Lord TJ")
-  #   on Fly:   fly ssh console -a age-three-server
-  #             then   /app/bin/age3 rpc 'Age3.Accounts.set_password("Lord TJ")'
-  # It creates the player (with a starter city) if the name is new, sets a random password, and prints it.
+  # There's no sign-up yet; TJ creates accounts on the admin page (Age3Web.AdminController, at /admin) or,
+  # locally, with `iex -S mix` and then Age3.Accounts.set_password("Lord TJ").
+  # It creates the player (with a starter city) if the name is new and sets a random password.
   @moduledoc false
 
   import Ecto.Query
@@ -17,7 +15,7 @@ defmodule Age3.Accounts do
 
   @doc """
   Sets a player's password, creating the player if the name is new, and logs them out everywhere.
-  Leave out the password to get a random one. Prints the username and password to hand to the player.
+  Leave out the password to get a random one. Returns the username and password to hand to the player.
   """
   def set_password(name, password \\ Password.generate()) when is_binary(name) and is_binary(password) do
     name = String.trim(name)
@@ -38,9 +36,17 @@ defmodule Age3.Accounts do
         Repo.delete_all(from(t in AuthToken, where: t.player_id == ^player_id))
       end)
 
-      IO.puts("username: #{name}\npassword: #{password}")
-      :ok
+      {:ok, %{username: name, password: password}}
     end
+  end
+
+  @doc "Every player, for the admin page: name, and whether they have a password (can log in)."
+  def list do
+    Repo.all(
+      from p in Player,
+        order_by: p.name,
+        select: %{name: p.name, canLogIn: not is_nil(p.password_hash)}
+    )
   end
 
   @doc "The player's id if the username and password match."
