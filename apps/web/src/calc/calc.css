@@ -1,0 +1,184 @@
+@import '@fontsource/cinzel/latin-600.css';
+@import '@fontsource/cinzel/latin-800.css';
+@import '@fontsource/noto-sans/latin-400.css';
+@import '@fontsource/noto-sans/latin-700.css';
+@import '../styles/tokens.css';
+
+/* The calculator is a normal scrolling page, unlike the full-screen game. */
+:root {
+  --bg: #0f1612;
+  --panel: #18221c;
+  --line: #3a3322;
+  --text: #f1e7cf;
+  --muted: #b9ad8f;
+  --attack: #e0734f;
+  --defend: #5ea6d6;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 var(--font-body);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+code {
+  background: #0006;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+fieldset {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 10px 0 0;
+  padding: 8px 0 0;
+  min-width: 0;
+}
+
+legend {
+  width: 100%;
+  padding: 0;
+  margin-bottom: 6px;
+  font: 600 13px var(--font-display);
+  color: var(--gold-light);
+  letter-spacing: 0.5px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 7.5em);
+  gap: 5px 10px;
+  align-items: center;
+}
+
+.grid label {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+input[type='text'],
+input[type='number'] {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  font: inherit;
+  color: var(--text);
+  background: #0b100d;
+  border: 1px solid #4a4230;
+  border-radius: 4px;
+}
+
+input[type='number'] {
+  text-align: right;
+}
+
+input:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+input:disabled {
+  opacity: 0.5;
+}
+
+input[type='checkbox'] {
+  justify-self: end;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--gold-deep);
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: #2a2a1e;
+  border: 1px solid #5a4a26;
+  border-radius: 6px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+button.primary {
+  font: 800 15px var(--font-display);
+  letter-spacing: 1px;
+  color: var(--brown-text);
+  background: linear-gradient(var(--gold-light), var(--gold-deep));
+  border-color: var(--bronze);
+  padding: 9px 28px;
+}
+
+button.link,
+a.link {
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  color: var(--gold);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+caption {
+  text-align: left;
+  font: 600 14px var(--font-display);
+  color: var(--gold-light);
+  padding: 4px 0;
+}
+
+th,
+td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #2c2a1e;
+  text-align: right;
+  white-space: nowrap;
+}
+
+th:first-child,
+td:first-child {
+  text-align: left;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+tfoot td {
+  font-weight: 700;
+}
+
+details summary {
+  cursor: pointer;
+  color: var(--gold);
+  margin: 6px 0;
+}
+
+@media (max-width: 480px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 6.5em);
+  }
+}
