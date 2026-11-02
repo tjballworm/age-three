@@ -25,7 +25,10 @@
       {game.connection === 'online' ? 'Online' : game.connection === 'connecting' ? 'Connecting…' : game.fromServer ? 'Offline · reconnecting' : 'Offline · sample data'}
     </div>
     {#if auth.status === 'loggedIn'}
-      <button class="logout" type="button" onclick={logOut}>Log out</button>
+      <div class="links">
+        <button class="logout" type="button" onclick={logOut}>Log out</button>
+        <button class="logout" type="button" onclick={() => openWindow('cheats')}>Cheats</button>
+      </div>
     {/if}
     <div class="clock" title="Server time">{formatClock(clock.now)}</div>
   </div>
@@ -111,6 +114,10 @@
   }
   .net.connecting::before {
     background: #f5b82e;
+  }
+  .links {
+    display: flex;
+    gap: 10px;
   }
   .logout {
     align-self: flex-start;

@@ -82,6 +82,19 @@ defmodule Age3.Store do
   @callback set_tax(player_id :: String.t(), city_id :: String.t(), tax_rate :: integer, now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
 
+  @doc """
+  A testing command from Age3.Cheats (action and its parsed args). target is {:city, city_id} for one of the
+  player's own cities, or {:player, name} for every city of any player (and their research). No permission check:
+  any player can cheat on any account. Returns the id of the player whose game changed.
+  """
+  @callback cheat(
+              player_id :: String.t(),
+              target :: {:city, String.t()} | {:player, String.t()},
+              action :: String.t(),
+              args :: map,
+              now_ms :: integer
+            ) :: {:ok, target_player_id :: String.t()} | {:error, code :: String.t()}
+
   @doc "Stops a construction that hasn't finished and refunds its whole cost."
   @callback cancel_build(
               player_id :: String.t(),
@@ -98,7 +111,22 @@ defmodule Age3.Store.Pg do
   @behaviour Age3.Store
 
   import Ecto.Query
-  alias Age3.{Accounts, Build, Building, City, Data, Economy, Game, Player, Repo, Research, Task, Train}
+
+  alias Age3.{
+    Accounts,
+    Build,
+    Building,
+    Cheats,
+    City,
+    Data,
+    Economy,
+    Game,
+    Player,
+    Repo,
+    Research,
+    Task,
+    Train
+  }
 
   @impl true
   defdelegate authenticate(name, password), to: Accounts
@@ -425,6 +453,170 @@ defmodule Age3.Store.Pg do
       {:ok, _} -> :ok
       {:error, code} -> {:error, code}
     end
+  end
+
+  # Cheats (testing commands). Locks the target cities in id order and then the player, like research does, so
+  # they can't deadlock with other commands. Anything already due finishes first.
+
+  @impl true
+  def cheat(player_id, target, action, args, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      {target_id, city_ids} = cheat_target(player_id, target) || Repo.rollback(not_found(target))
+
+      Repo.all(from c in City, where: c.id in ^city_ids, order_by: c.id, lock: "FOR UPDATE", select: c.id)
+      Enum.each(city_ids, &complete_due(&1, now))
+
+      if Cheats.research?(action) do
+        research =
+          Repo.one!(from p in Player, where: p.id == ^target_id, lock: "FOR UPDATE", select: p.research)
+
+        research =
+          case action do
+            "setResearch" -> Cheats.set_research(research, args.tech, args.level)
+            "researchAll" -> Cheats.all_research(args.level)
+          end
+
+        Repo.update_all(from(p in Player, where: p.id == ^target_id), set: [research: research])
+        # production, storage and build times change in every city
+        Enum.each(city_ids, &resnapshot(Repo.get!(City, &1), now))
+      else
+        Enum.each(city_ids, fn id ->
+          case cheat_city(Repo.get!(City, id), action, args, now_ms) do
+            {:error, code} -> Repo.rollback(code)
+            _done -> :ok
+          end
+        end)
+      end
+
+      target_id
+    end)
+  end
+
+  # {target player's id, the city ids to change}, or nil when there is no such city or player.
+  defp cheat_target(player_id, {:city, city_id}) do
+    with {:ok, id} <- Ecto.UUID.cast(city_id),
+         true <- Repo.exists?(from c in City, where: c.id == ^id and c.player_id == ^player_id) do
+      {player_id, [id]}
+    else
+      _ -> nil
+    end
+  end
+
+  defp cheat_target(_player_id, {:player, name}) do
+    case Repo.get_by(Player, name: name) do
+      %Player{id: id} ->
+        {id, Repo.all(from c in City, where: c.player_id == ^id, order_by: c.id, select: c.id)}
+
+      nil ->
+        nil
+    end
+  end
+
+  defp not_found({:player, _}), do: "player_not_found"
+  defp not_found(_target), do: "bad_message"
+
+  # One city's cheat, inside the transaction holding its lock. {:error, code} undoes the whole cheat.
+  defp cheat_city(city, "addResources", %{amounts: amounts}, now_ms) do
+    resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+    save_resources(city, Cheats.add_resources(resources, amounts), now_ms)
+  end
+
+  defp cheat_city(city, "fillResources", _args, now_ms) do
+    resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+    save_resources(city, Cheats.fill_resources(resources), now_ms)
+  end
+
+  # troops eat food, so the rates change too
+  defp cheat_city(city, "addTroops", %{troops: troops}, now_ms) do
+    Repo.update_all(from(c in City, where: c.id == ^city.id),
+      set: [troops: Cheats.add_troops(city.troops, troops)]
+    )
+
+    resnapshot(city, to_datetime(now_ms))
+  end
+
+  # the population can't go above the limit (it would be cut back at the next change); cottages raise the limit
+  defp cheat_city(city, "setPopulation", %{amount: amount}, now_ms) do
+    since_ms = to_ms(city.synced_at)
+    resources = Economy.settle(city.resources, since_ms, now_ms)
+    pop = Economy.settle_population(city.population, city.tax_rate, since_ms, now_ms)
+    save_resources(city, resources, now_ms, pop["current"] - min(amount, pop["max"]))
+  end
+
+  # every task ends now; training batches still waiting in a queue start now too
+  defp cheat_city(city, "finishAll", _args, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.update_all(from(t in Task, where: t.city_id == ^city.id and t.started_at > ^now),
+      set: [started_at: now]
+    )
+
+    Repo.update_all(from(t in Task, where: t.city_id == ^city.id), set: [ends_at: now])
+    complete_due(city.id, now)
+    :ok
+  end
+
+  # anything being built on the slot, or trained in it, is dropped without a refund
+  defp cheat_city(city, "setBuilding", %{slot: slot, type: type, level: level}, now_ms) do
+    buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+
+    case Cheats.place(buildings, slot, type, level) do
+      {:error, code} ->
+        {:error, code}
+
+      result ->
+        Repo.delete_all(from t in Task, where: t.city_id == ^city.id and t.slot == ^slot)
+
+        case result do
+          {:remove} ->
+            Repo.delete_all(from b in Building, where: b.city_id == ^city.id and b.slot == ^slot)
+
+          {:set, type} ->
+            Repo.insert!(%Building{city_id: city.id, slot: slot, type: type, level: level},
+              on_conflict: [set: [type: type, level: level]],
+              conflict_target: [:city_id, :slot]
+            )
+        end
+
+        resnapshot(city, to_datetime(now_ms))
+        :ok
+    end
+  end
+
+  # constructions in progress are dropped, as their levels would no longer make sense
+  defp cheat_city(city, "levelAll", %{level: level}, now_ms) do
+    Repo.delete_all(from t in Task, where: t.city_id == ^city.id and t.kind == "build")
+    Repo.update_all(from(b in Building, where: b.city_id == ^city.id), set: [level: level])
+    resnapshot(city, to_datetime(now_ms))
+  end
+
+  defp cheat_city(city, "resetCity", _args, now_ms) do
+    Repo.delete_all(from t in Task, where: t.city_id == ^city.id)
+    Repo.delete_all(from b in Building, where: b.city_id == ^city.id and b.slot not in ["townhall", "walls"])
+
+    Repo.insert_all(
+      Building,
+      [
+        %{city_id: city.id, slot: "townhall", type: "townhall", level: 1},
+        %{city_id: city.id, slot: "walls", type: "walls", level: 1}
+      ],
+      on_conflict: [set: [level: 1]],
+      conflict_target: [:city_id, :slot]
+    )
+
+    Repo.update_all(from(c in City, where: c.id == ^city.id),
+      set: [
+        tax_rate: 10,
+        troops: %{},
+        resources: Game.starter_resources(),
+        population: Game.starter_population(),
+        synced_at: to_datetime(now_ms)
+      ]
+    )
+
+    :ok
   end
 
   defp find_task(city_id, task_id, kinds) do

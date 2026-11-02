@@ -330,4 +330,98 @@ defmodule Age3.Store.PgTest do
     assert {:error, :not_found} = Pg.state(Ecto.UUID.generate(), 0)
     assert {:error, :not_found} = Pg.state("not-a-uuid", 0)
   end
+
+  describe "cheat" do
+    test "gives resources, troops and population to a city" do
+      {:ok, id} = Pg.find_or_create_player("Cheater")
+      now = System.system_time(:millisecond)
+      {:ok, _, [city], []} = Pg.state(id, now)
+      target = {:city, city.id}
+
+      assert {:ok, ^id} = Pg.cheat(id, target, "addResources", %{amounts: %{"gold" => 1_000_000}}, now)
+      assert {:ok, ^id} = Pg.cheat(id, target, "addTroops", %{troops: %{"warrior" => 1000}}, now)
+      assert {:ok, ^id} = Pg.cheat(id, target, "setPopulation", %{amount: 40}, now)
+
+      {:ok, _, [city], []} = Pg.state(id, now)
+      assert_in_delta city.resources["gold"]["amount"], 1_005_000, 1
+      assert city.troops == %{"warrior" => 1000}
+      # the troops eat, so food per hour went down
+      assert city.resources["food"]["perHour"] < 100
+      assert_in_delta city.population["current"], 40, 1
+
+      assert {:ok, ^id} = Pg.cheat(id, target, "fillResources", %{}, now)
+      {:ok, _, [city], []} = Pg.state(id, now)
+      assert city.resources["stone"]["amount"] >= city.resources["stone"]["cap"]
+    end
+
+    test "works on any player by name, and on someone else's city only by name" do
+      {:ok, me} = Pg.find_or_create_player("Tester A")
+      {:ok, other} = Pg.find_or_create_player("Tester B")
+      now = System.system_time(:millisecond)
+      {:ok, _, [their_city], []} = Pg.state(other, now)
+
+      assert {:error, "bad_message"} = Pg.cheat(me, {:city, their_city.id}, "fillResources", %{}, now)
+      assert {:error, "player_not_found"} = Pg.cheat(me, {:player, "Nobody Here"}, "fillResources", %{}, now)
+
+      assert {:ok, ^other} =
+               Pg.cheat(me, {:player, "Tester B"}, "addTroops", %{troops: %{"archer" => 7}}, now)
+
+      {:ok, _, [their_city], []} = Pg.state(other, now)
+      assert their_city.troops == %{"archer" => 7}
+    end
+
+    test "finishAll finishes builds, research and training at once" do
+      {:ok, id} = Pg.find_or_create_player("Impatient")
+      now = System.system_time(:millisecond)
+      {:ok, _, [city], []} = Pg.state(id, now)
+      target = {:city, city.id}
+
+      {:ok, _} = Pg.build(id, city.id, "3", "cottage", now)
+      {:ok, _, _, [_task]} = Pg.state(id, now)
+      assert {:ok, ^id} = Pg.cheat(id, target, "finishAll", %{}, now)
+
+      {:ok, _, [city], []} = Pg.state(id, now)
+      assert %{type: "cottage", level: 1, slot: 3} in city.buildings
+    end
+
+    test "sets buildings and research levels for free, and resets a city" do
+      {:ok, id} = Pg.find_or_create_player("Architect")
+      now = System.system_time(:millisecond)
+      {:ok, _, [city], []} = Pg.state(id, now)
+      target = {:city, city.id}
+
+      assert {:ok, _} = Pg.cheat(id, target, "setBuilding", %{slot: "7", type: "academy", level: 5}, now)
+      assert {:ok, _} = Pg.cheat(id, target, "setBuilding", %{slot: "f0", type: "farm", level: 3}, now)
+
+      assert {:error, "bad_slot"} =
+               Pg.cheat(id, target, "setBuilding", %{slot: "f1", type: "academy", level: 1}, now)
+
+      assert {:ok, _} = Pg.cheat(id, target, "levelAll", %{level: 9}, now)
+      assert {:ok, _} = Pg.cheat(id, target, "setResearch", %{tech: "agriculture", level: 4}, now)
+
+      {:ok, player, [city], []} = Pg.state(id, now)
+      assert %{type: "academy", level: 9, slot: 7} in city.buildings
+      assert %{type: "townhall", level: 9, slot: "townhall"} in city.buildings
+      assert %{type: "farm", level: 9, slot: 0} in city.fields
+      assert player.research == %{"agriculture" => 4}
+      gold = city.resources["gold"]["amount"]
+      assert_in_delta gold, 5000, 1
+
+      assert {:ok, _} = Pg.cheat(id, target, "setBuilding", %{slot: "f0", type: nil, level: 0}, now)
+      assert {:ok, _} = Pg.cheat(id, {:player, "Architect"}, "researchAll", %{level: 0}, now)
+      {:ok, player, [city], []} = Pg.state(id, now)
+      assert city.fields == []
+      assert player.research == %{}
+
+      assert {:ok, _} = Pg.cheat(id, target, "resetCity", %{}, now)
+      {:ok, _, [city], []} = Pg.state(id, now)
+
+      assert Enum.sort_by(city.buildings, & &1.slot) == [
+               %{type: "townhall", level: 1, slot: "townhall"},
+               %{type: "walls", level: 1, slot: "walls"}
+             ]
+
+      assert city.troops == %{}
+    end
+  end
 end

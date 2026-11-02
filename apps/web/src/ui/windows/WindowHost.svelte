@@ -3,6 +3,7 @@
   import Button from '$ui/components/Button.svelte';
   import Tabs from '$ui/components/Tabs.svelte';
   import Window from '$ui/components/Window.svelte';
+  import CheatsWindow from './CheatsWindow.svelte';
   import CityOverview from './CityOverview.svelte';
   import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
   import TrainWindow from './TrainWindow.svelte';
@@ -23,6 +24,7 @@
     settings: { title: 'Settings', tabs: ['Game', 'Sound', 'Account'] },
     city: { title: 'City Overview', tabs: ['Resources', 'Buildings', 'Troops'] },
     train: { title: 'Barracks', tabs: [] },
+    cheats: { title: 'Cheats · Testing', tabs: ['Resources & troops', 'Buildings & research'] },
   };
 
   let tab = $state('');
@@ -48,6 +50,8 @@
       <CityOverview />
     {:else if game.openWindow === 'city' && tab === 'Troops'}
       <TroopsOverview />
+    {:else if game.openWindow === 'cheats'}
+      <CheatsWindow page={tab === 'Buildings & research' ? 'buildings' : 'resources'} />
     {:else if game.openWindow === 'leaderboard'}
       <LeaderboardPlaceholder board={tab} />
     {:else}

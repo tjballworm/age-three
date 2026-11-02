@@ -9,8 +9,13 @@ defmodule Age3.Session do
 
   @version 1
 
-  # wake is told when a new task will end, so the task runner can finish it on time
-  defstruct store: Age3.Store.Pg, player_id: nil, now: &__MODULE__.millis/0, wake: &Age3.TaskRunner.wake/1
+  # wake is told when a new task will end, so the task runner can finish it on time; notify is told when a cheat
+  # changed another player's game, so their open sockets can show it
+  defstruct store: Age3.Store.Pg,
+            player_id: nil,
+            now: &__MODULE__.millis/0,
+            wake: &Age3.TaskRunner.wake/1,
+            notify: &__MODULE__.notify/1
 
   def version, do: @version
   def millis, do: System.system_time(:millisecond)
@@ -81,7 +86,8 @@ defmodule Age3.Session do
               "research",
               "cancelResearch",
               "train",
-              "cancelTrain"
+              "cancelTrain",
+              "cheat"
             ],
        do: {error(id, "not_logged_in", "Log in first."), session}
 
@@ -229,8 +235,49 @@ defmodule Age3.Session do
   defp handle("setTax", _payload, id, session),
     do: {error(id, "bad_message", "The tax rate must be a whole number from 0 to 100."), session}
 
+  # A testing command (see Age3.Cheats): {action, cityId} for one of your cities, or {action, player} for every
+  # city of any player by username, plus the action's fields. No permission check on purpose: every tester can
+  # cheat, on any account. Replies with your own new state; another player's open game gets theirs pushed.
+  defp handle("cheat", %{"action" => action} = payload, id, session) when is_binary(action) do
+    now = session.now.()
+
+    with true <- Age3.Cheats.enabled?() || {:error, "bad_message"},
+         {:ok, target} <- cheat_target(payload),
+         {:ok, args} <- Age3.Cheats.parse(action, payload),
+         {:ok, target_id} <- session.store.cheat(session.player_id, target, action, args, now) do
+      if target_id != session.player_id, do: session.notify.(target_id)
+      state_reply(id, session, now)
+    else
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("cheat", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid cheat."), session}
+
   defp handle(_type, _payload, id, session),
     do: {error(id, "bad_message", "Unknown message type."), session}
+
+  defp cheat_target(%{"player" => name}) when is_binary(name) and name != "",
+    do: {:ok, {:player, String.trim(name)}}
+
+  defp cheat_target(%{"cityId" => city_id}) when is_binary(city_id), do: {:ok, {:city, city_id}}
+  defp cheat_target(_payload), do: {:error, "bad_message"}
+
+  @doc "Tells a player's open sockets that their game changed (Age3Web.GameSocket pushes them the new state)."
+  def notify(player_id) do
+    Registry.dispatch(Age3.Players, player_id, fn sockets ->
+      for {pid, _} <- sockets, do: send(pid, :refresh)
+    end)
+  end
+
+  @doc "The push for a change made by someone else (a cheat): the player's whole state, with no id. nil if unreadable."
+  def refresh(session) do
+    case state_reply(nil, session, session.now.()) do
+      {%{type: "state"} = push, _session} -> push
+      _ -> nil
+    end
+  end
 
   @doc """
   The push for a finished task: the task plus the player's whole new state. nil if the state can't be read.
@@ -283,6 +330,7 @@ defmodule Age3.Session do
   defp message("too_early"),
     do: "Speedup is only free in the last 5 minutes of a build, research or training."
 
+  defp message("player_not_found"), do: "No player with that name."
   defp message(_code), do: "Not a valid request."
 
   defp welcome(id, player_id, token, session) do

@@ -1,6 +1,6 @@
 // Client <-> server messages. Every message has a `type` discriminator.
 
-import type { BuildingType, City, Player, TechId, TimedTask, TroopType } from '@age3/core';
+import type { BuildingType, City, Player, ResourceType, TechId, TimedTask, TroopType } from '@age3/core';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -59,6 +59,40 @@ export type SpeedUpMessage = Envelope<'speedUp', { cityId: string; taskId: strin
 /** Sets a city's tax rate, a whole number from 0 to 100. Gold per hour changes from now on. Replies with state. */
 export type SetTaxMessage = Envelope<'setTax', { cityId: string; taxRate: number }>;
 
+/**
+ * A testing command. Target one of your cities with `cityId`, or every city of any player (and their research)
+ * with `player` (a username). There is no permission check: every tester can cheat, on any account. Replies with
+ * your own state; the other player's open game is pushed theirs as a `state` message with no id.
+ */
+export type CheatMessage = Envelope<'cheat', CheatTarget & CheatAction>;
+export type CheatTarget = { cityId: string; player?: never } | { player: string; cityId?: never };
+export type CheatAction =
+  /** Adds to each resource (negative takes away, never below 0). May go over the storage limit. */
+  | { action: 'addResources'; amounts: Partial<Record<ResourceType, number>> }
+  /** Every resource up to the storage limit. */
+  | { action: 'fillResources' }
+  /** Adds troops (negative takes away, never below 0). */
+  | { action: 'addTroops'; troops: Partial<Record<TroopType, number>> }
+  /** The population, from 0 up to the city's limit (cottages raise the limit). */
+  | { action: 'setPopulation'; amount: number }
+  /** Every construction, research and training batch in the city finishes now. */
+  | { action: 'finishAll' }
+  /** The building on a slot at any level, free and with no requirements. Leave out type to keep what is there; level 0 removes it. */
+  | {
+      action: 'setBuilding';
+      slot: number | 'townhall' | 'walls' | `f${number}`;
+      type?: BuildingType;
+      level: number;
+    }
+  /** Every building and field in the city at this level (constructions in progress are dropped). */
+  | { action: 'levelAll'; level: number }
+  /** One tech at a level (0 forgets it). Research only counts up to each city's Academy level. */
+  | { action: 'setResearch'; tech: TechId; level: number }
+  /** Every tech at a level. */
+  | { action: 'researchAll'; level: number }
+  /** Back to a new city: Town Hall and walls Lv1, starting resources, no troops, no tasks. */
+  | { action: 'resetCity' };
+
 export type ClientMessage =
   | LoginMessage
   | HelloMessage
@@ -71,7 +105,8 @@ export type ClientMessage =
   | ResearchMessage
   | CancelResearchMessage
   | TrainMessage
-  | CancelTrainMessage;
+  | CancelTrainMessage
+  | CheatMessage;
 
 // ---------- server -> client ----------
 
@@ -88,6 +123,7 @@ export interface GameState {
   tasks: TimedTask[];
   serverTime: number;
 }
+/** The reply to getState and commands; also pushed with no id when a cheat on another account changed this game. */
 export type StateMessage = Envelope<'state', GameState>;
 /** Pushed (no id) when one of the player's tasks finishes, with the whole new state. */
 export type TaskDoneMessage = Envelope<'taskDone', GameState & { task: TimedTask }>;
@@ -124,4 +160,6 @@ export type ErrorCode =
   /** the Barracks already has as many batches queued as its level */
   | 'train_queue_full'
   /** not enough idle population for the batch */
-  | 'not_enough_population';
+  | 'not_enough_population'
+  /** a cheat named a player who doesn't exist */
+  | 'player_not_found';
