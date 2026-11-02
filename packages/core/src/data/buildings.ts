@@ -3,7 +3,7 @@
 // The numbers come from the Evony Age II wiki (evony.fandom.com), with a few wiki typos fixed to their table's
 // doubling pattern. Town Hall Lv1 has no wiki cost (every city starts with one), so it keeps the old placeholder.
 
-import type { FieldType, ResourceType, TownBuildingType } from '../types';
+import type { FieldType, ResourceType, TechId, TownBuildingType } from '../types';
 import data from './buildings.json';
 
 export type BuildingType = TownBuildingType | FieldType;
@@ -13,6 +13,8 @@ export interface BuildingLevel {
   cost: Record<ResourceType, number>;
   /** Other buildings, and their levels, needed before building or upgrading to this level. */
   requires?: Partial<Record<BuildingType, number>>;
+  /** Research, and its levels, needed first (Relief Station needs Horseback Riding). */
+  research?: Partial<Record<TechId, number>>;
   /** Build time at normal speed. */
   seconds: number;
   /** Fields only: how much of their resource this level makes each hour. */

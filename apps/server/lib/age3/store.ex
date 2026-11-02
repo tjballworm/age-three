@@ -32,7 +32,22 @@ defmodule Age3.Store do
               now_ms :: integer
             ) :: {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
 
-  @doc "Finishes a construction now, for free, when it has Data.free_speedup_ms/0 or less left."
+  @doc """
+  Starts researching the next level of tech in one of the player's cities, in its Academy, paying the cost now.
+  Returns when it will finish.
+  """
+  @callback research(player_id :: String.t(), city_id :: String.t(), tech :: String.t(), now_ms :: integer) ::
+              {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
+
+  @doc "Stops a research that hasn't finished and refunds its whole cost."
+  @callback cancel_research(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              task_id :: String.t(),
+              now_ms :: integer
+            ) :: :ok | {:error, code :: String.t()}
+
+  @doc "Finishes a construction or research now, for free, when it has Data.free_speedup_ms/0 or less left."
   @callback speed_up(player_id :: String.t(), city_id :: String.t(), task_id :: String.t(), now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
 
@@ -56,7 +71,7 @@ defmodule Age3.Store.Pg do
   @behaviour Age3.Store
 
   import Ecto.Query
-  alias Age3.{Accounts, Build, Building, City, Data, Economy, Game, Player, Repo, Task}
+  alias Age3.{Accounts, Build, Building, City, Data, Economy, Game, Player, Repo, Research, Task}
 
   @impl true
   defdelegate authenticate(name, password), to: Accounts
@@ -129,11 +144,13 @@ defmodule Age3.Store.Pg do
   @impl true
   def state(player_id, now_ms) do
     with {:ok, _} <- Ecto.UUID.cast(player_id),
-         %Player{} = player <- Repo.get(Player, player_id) do
+         %Player{} <- Repo.get(Player, player_id) do
       now = to_datetime(now_ms)
       city_ids = Repo.all(from c in City, where: c.player_id == ^player_id, select: c.id)
       Enum.each(city_ids, &finish_due_in_city(&1, now))
       Enum.each(city_ids, &refresh_stale(&1, now))
+      # read after finishing tasks, which can raise research levels
+      player = Repo.get!(Player, player_id)
 
       buildings = from(b in Building, order_by: b.slot)
 
@@ -169,8 +186,11 @@ defmodule Age3.Store.Pg do
       buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
       resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
 
-      case Build.check(buildings, resources, slot, type) do
+      case Build.check(buildings, resources, slot, type, research_of(player_id)) do
         {:ok, plan} ->
+          # the Academy can't be upgraded in the middle of a research
+          if plan.type == "academy" and researching?(city.id), do: Repo.rollback("academy_busy")
+
           save_resources(city.id, Build.spend(resources, plan.cost), now)
 
           Repo.insert!(%Task{
@@ -196,15 +216,82 @@ defmodule Age3.Store.Pg do
   end
 
   @impl true
-  def cancel_build(player_id, city_id, task_id, now_ms) do
+  def cancel_build(player_id, city_id, task_id, now_ms),
+    do: cancel(player_id, city_id, task_id, "build", now_ms)
+
+  # Research. Same pattern as construction: lock the city, finish what is due, check, pay, insert a task. The
+  # player's row is locked after the city's (research levels are shared by all their cities), the same order
+  # complete_due takes them in, so two commands can't deadlock.
+
+  @impl true
+  def research(player_id, city_id, tech, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
+
+      research =
+        Repo.one!(from p in Player, where: p.id == ^player_id, lock: "FOR UPDATE", select: p.research)
+
+      if researching?(city.id), do: Repo.rollback("research_busy")
+
+      # one Academy can't research while it is being upgraded, and one tech can't run in two cities at once
+      if Repo.exists?(
+           from t in Task, where: t.city_id == ^city.id and t.kind == "build" and t.target_type == "academy"
+         ),
+         do: Repo.rollback("academy_busy")
+
+      if Repo.exists?(
+           from t in Task,
+             join: c in City,
+             on: c.id == t.city_id,
+             where: c.player_id == ^player_id and t.kind == "research" and t.target_type == ^tech
+         ),
+         do: Repo.rollback("already_researching")
+
+      buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+
+      case Research.check(buildings, research, resources, tech) do
+        {:ok, plan} ->
+          save_resources(city.id, Build.spend(resources, plan.cost), now)
+
+          Repo.insert!(%Task{
+            city_id: city.id,
+            kind: "research",
+            label: "#{Data.tech(tech)["name"]} → Lv #{plan.level}",
+            target_type: tech,
+            target_level: plan.level,
+            cost: plan.cost,
+            started_at: now,
+            ends_at: to_datetime(now_ms + plan.seconds * 1000)
+          })
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> case do
+      {:ok, task} -> {:ok, to_ms(task.ends_at)}
+      {:error, code} -> {:error, code}
+    end
+  end
+
+  @impl true
+  def cancel_research(player_id, city_id, task_id, now_ms),
+    do: cancel(player_id, city_id, task_id, "research", now_ms)
+
+  # Stops a task of this kind that hasn't finished and gives its whole cost back.
+  defp cancel(player_id, city_id, task_id, kind, now_ms) do
     now = to_datetime(now_ms)
 
     Repo.transaction(fn ->
       city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
 
-      # a build that has already finished can't be cancelled, and finishing one changes the city, so read it again
+      # a task that has already finished can't be cancelled, and finishing one changes the city, so read it again
       city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
-      task = build_task(city.id, task_id) || Repo.rollback("bad_message")
+      task = find_task(city.id, task_id, [kind]) || Repo.rollback("bad_message")
       resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
       save_resources(city.id, Build.spend(resources, task.cost, -1), now)
       Repo.delete!(task)
@@ -222,7 +309,7 @@ defmodule Age3.Store.Pg do
     Repo.transaction(fn ->
       city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
       complete_due(city.id, now)
-      task = build_task(city.id, task_id) || Repo.rollback("bad_message")
+      task = find_task(city.id, task_id, ["build", "research"]) || Repo.rollback("bad_message")
 
       if to_ms(task.ends_at) - now_ms > Data.free_speedup_ms(), do: Repo.rollback("too_early")
 
@@ -251,15 +338,21 @@ defmodule Age3.Store.Pg do
     end
   end
 
-  defp build_task(city_id, task_id) do
+  defp find_task(city_id, task_id, kinds) do
     case Ecto.UUID.cast(task_id) do
       {:ok, id} ->
-        Repo.one(from t in Task, where: t.id == ^id and t.city_id == ^city_id and t.kind == "build")
+        Repo.one(from t in Task, where: t.id == ^id and t.city_id == ^city_id and t.kind in ^kinds)
 
       :error ->
         nil
     end
   end
+
+  defp researching?(city_id),
+    do: Repo.exists?(from t in Task, where: t.city_id == ^city_id and t.kind == "research")
+
+  defp research_of(player_id),
+    do: Repo.one(from p in Player, where: p.id == ^player_id, select: p.research) || %{}
 
   @doc """
   Finishes every task that is due by now_ms, in every city. For Age3.TaskRunner, which tells the players.
@@ -304,25 +397,51 @@ defmodule Age3.Store.Pg do
     end
   end
 
-  # Inside a transaction holding the city's lock: applies each finished build to its building and drops the task.
-  # Production changes the moment a building finishes, so resources are settled up to that moment at the old
-  # rates and saved as a new snapshot with the new rates and population.
+  # Inside a transaction holding the city's lock: applies each finished task (a building's new level, or the
+  # player's new research level) and drops it. Production changes the moment a task finishes, so resources are
+  # settled up to that moment at the old rates and saved as a new snapshot with the new rates and population.
+  # Research also changes the player's other cities; refresh_stale gives them the new rates on the next state.
   defp complete_due(city_id, now) do
     tasks = Repo.all(from t in Task, where: t.city_id == ^city_id and t.ends_at <= ^now, order_by: t.ends_at)
 
     for t <- tasks do
       city = Repo.get!(City, city_id)
-
-      Repo.insert!(%Building{city_id: city_id, slot: t.slot, type: t.target_type, level: t.target_level},
-        on_conflict: [set: [type: t.target_type, level: t.target_level]],
-        conflict_target: [:city_id, :slot]
-      )
-
+      apply_task(city, t)
       Repo.delete!(t)
       resnapshot(city, t.ends_at)
     end
 
     tasks
+  end
+
+  defp apply_task(_city, %Task{kind: "build"} = t) do
+    Repo.insert!(%Building{city_id: t.city_id, slot: t.slot, type: t.target_type, level: t.target_level},
+      on_conflict: [set: [type: t.target_type, level: t.target_level]],
+      conflict_target: [:city_id, :slot]
+    )
+  end
+
+  # only ever raises a level, in case the same level somehow finished twice
+  defp apply_task(city, %Task{kind: "research"} = t) do
+    Repo.update_all(
+      from(p in Player,
+        where: p.id == ^city.player_id,
+        update: [
+          set: [
+            research:
+              fragment(
+                "? || jsonb_build_object(?::text, greatest(coalesce((?->>?::text)::int, 0), ?::int))",
+                p.research,
+                ^t.target_type,
+                p.research,
+                ^t.target_type,
+                ^t.target_level
+              )
+          ]
+        ]
+      ),
+      []
+    )
   end
 
   # Inside a transaction holding the city's lock. Settles the resources up to `at` at the rates the city had
@@ -338,20 +457,21 @@ defmodule Age3.Store.Pg do
     Repo.update_all(from(c in City, where: c.id == ^city.id),
       set:
         [
-          resources: Economy.recalc(resources, buildings, tax_rate),
+          resources: Economy.recalc(resources, buildings, tax_rate, research_of(city.player_id)),
           population: Economy.population(buildings),
           synced_at: synced_at
         ] ++ changes
     )
   end
 
-  # A city saved before its rates came from buildings (or before the data file changed) still has the old
-  # rates, caps or population. Gives it the right ones from now on.
+  # A city saved before its rates came from buildings (or before the data file changed, or before a research
+  # finished in another city) still has the old rates, caps or population. Gives it the right ones from now on.
   defp refresh_stale(city_id, now) do
     city = City |> Repo.get!(city_id) |> Repo.preload(:buildings)
 
     stale? =
-      Economy.recalc(city.resources, city.buildings, city.tax_rate) != city.resources or
+      Economy.recalc(city.resources, city.buildings, city.tax_rate, research_of(city.player_id)) !=
+        city.resources or
         Economy.population(city.buildings) != city.population
 
     if stale? do
@@ -391,6 +511,7 @@ defmodule Age3.Store.Pg do
       alliance: p.alliance,
       prestige: p.prestige,
       honor: p.honor,
+      research: p.research,
       # not stored yet; the backlog has it derived from prestige
       rank: 0
     }

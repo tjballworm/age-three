@@ -144,16 +144,16 @@
       "area": "town",
       "multiple": false,
       "levels": [
-        {"cost": {"food": 1500, "lumber": 5000, "stone": 4500, "iron": 500, "gold": 0}, "seconds": 3600, "requires": {"stable": 1}},
-        {"cost": {"food": 3000, "lumber": 10000, "stone": 9000, "iron": 1000, "gold": 0}, "seconds": 7200, "requires": {"stable": 1}},
-        {"cost": {"food": 6000, "lumber": 20000, "stone": 18000, "iron": 2000, "gold": 0}, "seconds": 14400, "requires": {"stable": 1}},
-        {"cost": {"food": 12000, "lumber": 40000, "stone": 36000, "iron": 4000, "gold": 0}, "seconds": 28800, "requires": {"stable": 1}},
-        {"cost": {"food": 24000, "lumber": 80000, "stone": 72000, "iron": 8000, "gold": 0}, "seconds": 57600, "requires": {"stable": 1}},
-        {"cost": {"food": 48000, "lumber": 160000, "stone": 144000, "iron": 16000, "gold": 0}, "seconds": 115200, "requires": {"stable": 1}},
-        {"cost": {"food": 96000, "lumber": 320000, "stone": 288000, "iron": 32000, "gold": 0}, "seconds": 230400, "requires": {"stable": 1}},
-        {"cost": {"food": 192000, "lumber": 640000, "stone": 576000, "iron": 64000, "gold": 0}, "seconds": 460800, "requires": {"stable": 1}},
-        {"cost": {"food": 384000, "lumber": 1280000, "stone": 1152000, "iron": 128000, "gold": 0}, "seconds": 921600, "requires": {"stable": 1}},
-        {"cost": {"food": 768000, "lumber": 2560000, "stone": 2304000, "iron": 256000, "gold": 0}, "seconds": 1843200, "requires": {"stable": 1}}
+        {"cost": {"food": 1500, "lumber": 5000, "stone": 4500, "iron": 500, "gold": 0}, "seconds": 3600, "requires": {"stable": 1}, "research": {"horsebackRiding": 1}},
+        {"cost": {"food": 3000, "lumber": 10000, "stone": 9000, "iron": 1000, "gold": 0}, "seconds": 7200, "requires": {"stable": 1}, "research": {"horsebackRiding": 2}},
+        {"cost": {"food": 6000, "lumber": 20000, "stone": 18000, "iron": 2000, "gold": 0}, "seconds": 14400, "requires": {"stable": 1}, "research": {"horsebackRiding": 3}},
+        {"cost": {"food": 12000, "lumber": 40000, "stone": 36000, "iron": 4000, "gold": 0}, "seconds": 28800, "requires": {"stable": 1}, "research": {"horsebackRiding": 4}},
+        {"cost": {"food": 24000, "lumber": 80000, "stone": 72000, "iron": 8000, "gold": 0}, "seconds": 57600, "requires": {"stable": 1}, "research": {"horsebackRiding": 5}},
+        {"cost": {"food": 48000, "lumber": 160000, "stone": 144000, "iron": 16000, "gold": 0}, "seconds": 115200, "requires": {"stable": 1}, "research": {"horsebackRiding": 6}},
+        {"cost": {"food": 96000, "lumber": 320000, "stone": 288000, "iron": 32000, "gold": 0}, "seconds": 230400, "requires": {"stable": 1}, "research": {"horsebackRiding": 7}},
+        {"cost": {"food": 192000, "lumber": 640000, "stone": 576000, "iron": 64000, "gold": 0}, "seconds": 460800, "requires": {"stable": 1}, "research": {"horsebackRiding": 8}},
+        {"cost": {"food": 384000, "lumber": 1280000, "stone": 1152000, "iron": 128000, "gold": 0}, "seconds": 921600, "requires": {"stable": 1}, "research": {"horsebackRiding": 9}},
+        {"cost": {"food": 768000, "lumber": 2560000, "stone": 2304000, "iron": 256000, "gold": 0}, "seconds": 1843200, "requires": {"stable": 1}, "research": {"horsebackRiding": 10}}
       ]
     },
     "forge": {

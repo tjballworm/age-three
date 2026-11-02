@@ -3,7 +3,7 @@ defmodule Age3.Build do
   # Age3.Store.Pg calls check/4 inside a transaction, after settling the resources to now.
   @moduledoc false
 
-  alias Age3.Data
+  alias Age3.{Data, Research}
 
   @town_plots for n <- 0..31, do: Integer.to_string(n)
   @field_plots for n <- 0..12, do: "f#{n}"
@@ -12,18 +12,21 @@ defmodule Age3.Build do
   Can `type` be built on `slot`, or the building already there be upgraded? buildings is a list of
   %{slot, type, level} (structs or maps); resources is the settled Record<ResourceType, ResourceStock> map.
   type is the building to put on an empty slot, and nil (or the same type) to upgrade what is there.
+  research is the player's research levels (capped at this city's Academy level): some levels need research, and
+  Construction makes building faster.
 
   Returns {:ok, %{type, level, cost, seconds}} for the new level, or {:error, code}.
   """
-  def check(buildings, resources, slot, type) do
+  def check(buildings, resources, slot, type, research \\ %{}) do
     current = Enum.find(buildings, &(&1.slot == slot))
+    research = Research.in_city(research, buildings)
 
     with {:ok, type, level} <- target(current, slot, type),
          :ok <- below_town_hall(buildings, type, level),
-         :ok <- requirements(buildings, type, level),
+         :ok <- requirements(buildings, research, type, level),
          %{"cost" => cost, "seconds" => seconds} <- Data.level(type, level),
          :ok <- affordable(resources, cost) do
-      {:ok, %{type: type, level: level, cost: cost, seconds: seconds}}
+      {:ok, %{type: type, level: level, cost: cost, seconds: Research.build_seconds(seconds, research)}}
     else
       {:error, _code} = error -> error
       nil -> {:error, "bad_slot"}
@@ -62,20 +65,22 @@ defmodule Age3.Build do
     if level <= level_of(buildings, "townhall"), do: :ok, else: {:error, "requirement_not_met"}
   end
 
-  # The other buildings this level needs first (from the data file), and for new buildings the one-per-city limit.
-  defp requirements(buildings, type, level) do
+  # The other buildings and research this level needs first (from the data file), and for new buildings the
+  # one-per-city limit.
+  defp requirements(buildings, research, type, level) do
     spec = Data.building(type)
-    needs = Data.level(type, level)["requires"] || %{}
-    met? = Enum.all?(needs, fn {need, lv} -> level_of(buildings, need) >= lv end)
+    met? = Research.met?(buildings, research, Data.level(type, level) || %{})
     taken? = level == 1 and not spec["multiple"] and Enum.any?(buildings, &(&1.type == type))
     if met? and not taken?, do: :ok, else: {:error, "requirement_not_met"}
   end
 
-  defp level_of(buildings, type) do
+  @doc "The highest level of type among the buildings, 0 when there is none."
+  def level_of(buildings, type) do
     buildings |> Enum.filter(&(&1.type == type)) |> Enum.map(& &1.level) |> Enum.max(fn -> 0 end)
   end
 
-  defp affordable(resources, cost) do
+  @doc "Whether the settled resources cover cost; {:error, \"not_enough_resources\"} when they don't."
+  def affordable(resources, cost) do
     if Enum.all?(cost, fn {name, amount} -> resources[name]["amount"] >= amount end),
       do: :ok,
       else: {:error, "not_enough_resources"}

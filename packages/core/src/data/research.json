@@ -1,0 +1,383 @@
+{
+  "maxLevel": 10,
+  "techs": {
+    "agriculture": {
+      "name": "Agriculture",
+      "group": "economy",
+      "effect": "Food from farms",
+      "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      "unit": "%",
+      "active": true,
+      "levels": [
+        {"cost": {"food": 500, "lumber": 0, "stone": 0, "iron": 0, "gold": 1000}, "seconds": 400, "requires": {"academy": 1, "farm": 1}},
+        {"cost": {"food": 1000, "lumber": 0, "stone": 0, "iron": 0, "gold": 2000}, "seconds": 800, "requires": {"academy": 2, "farm": 2}},
+        {"cost": {"food": 2000, "lumber": 0, "stone": 0, "iron": 0, "gold": 4000}, "seconds": 1600, "requires": {"academy": 3, "farm": 3}},
+        {"cost": {"food": 4000, "lumber": 0, "stone": 0, "iron": 0, "gold": 8000}, "seconds": 3200, "requires": {"academy": 4, "farm": 4}},
+        {"cost": {"food": 8000, "lumber": 0, "stone": 0, "iron": 0, "gold": 16000}, "seconds": 6400, "requires": {"academy": 5, "farm": 5}},
+        {"cost": {"food": 16000, "lumber": 0, "stone": 0, "iron": 0, "gold": 32000}, "seconds": 12800, "requires": {"academy": 6, "farm": 6}},
+        {"cost": {"food": 32000, "lumber": 0, "stone": 0, "iron": 0, "gold": 64000}, "seconds": 25600, "requires": {"academy": 7, "farm": 7}},
+        {"cost": {"food": 64000, "lumber": 0, "stone": 0, "iron": 0, "gold": 128000}, "seconds": 51200, "requires": {"academy": 8, "farm": 8}},
+        {"cost": {"food": 128000, "lumber": 0, "stone": 0, "iron": 0, "gold": 256000}, "seconds": 102400, "requires": {"academy": 9, "farm": 9}},
+        {"cost": {"food": 256000, "lumber": 0, "stone": 0, "iron": 0, "gold": 512000}, "seconds": 204800, "requires": {"academy": 10, "farm": 10}}
+      ]
+    },
+    "lumbering": {
+      "name": "Lumbering",
+      "group": "economy",
+      "effect": "Lumber from sawmills",
+      "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      "unit": "%",
+      "active": true,
+      "levels": [
+        {"cost": {"food": 0, "lumber": 500, "stone": 0, "iron": 100, "gold": 1200}, "seconds": 500, "requires": {"academy": 1, "sawmill": 1}},
+        {"cost": {"food": 0, "lumber": 1000, "stone": 0, "iron": 200, "gold": 2400}, "seconds": 1000, "requires": {"academy": 2, "sawmill": 2}},
+        {"cost": {"food": 0, "lumber": 2000, "stone": 0, "iron": 400, "gold": 4800}, "seconds": 2000, "requires": {"academy": 3, "sawmill": 3}},
+        {"cost": {"food": 0, "lumber": 4000, "stone": 0, "iron": 800, "gold": 9600}, "seconds": 4000, "requires": {"academy": 4, "sawmill": 4}},
+        {"cost": {"food": 0, "lumber": 8000, "stone": 0, "iron": 1600, "gold": 19200}, "seconds": 8000, "requires": {"academy": 5, "sawmill": 5}},
+        {"cost": {"food": 0, "lumber": 16000, "stone": 0, "iron": 3200, "gold": 38400}, "seconds": 16000, "requires": {"academy": 6, "sawmill": 6}},
+        {"cost": {"food": 0, "lumber": 32000, "stone": 0, "iron": 6400, "gold": 76800}, "seconds": 32000, "requires": {"academy": 7, "sawmill": 7}},
+        {"cost": {"food": 0, "lumber": 64000, "stone": 0, "iron": 12800, "gold": 153600}, "seconds": 64000, "requires": {"academy": 8, "sawmill": 8}},
+        {"cost": {"food": 0, "lumber": 128000, "stone": 0, "iron": 25600, "gold": 307200}, "seconds": 128000, "requires": {"academy": 9, "sawmill": 9}},
+        {"cost": {"food": 0, "lumber": 256000, "stone": 0, "iron": 51200, "gold": 614400}, "seconds": 256000, "requires": {"academy": 10, "sawmill": 10}}
+      ]
+    },
+    "masonry": {
+      "name": "Masonry",
+      "group": "economy",
+      "effect": "Stone from quarries",
+      "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      "unit": "%",
+      "active": true,
+      "levels": [
+        {"cost": {"food": 0, "lumber": 0, "stone": 500, "iron": 200, "gold": 1500}, "seconds": 600, "requires": {"academy": 2, "quarry": 1}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 1000, "iron": 400, "gold": 3000}, "seconds": 1200, "requires": {"academy": 2, "quarry": 2}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 2000, "iron": 800, "gold": 6000}, "seconds": 2400, "requires": {"academy": 3, "quarry": 3}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 4000, "iron": 1600, "gold": 12000}, "seconds": 4800, "requires": {"academy": 4, "quarry": 4}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 8000, "iron": 3200, "gold": 24000}, "seconds": 9600, "requires": {"academy": 5, "quarry": 5}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 16000, "iron": 6400, "gold": 48000}, "seconds": 19200, "requires": {"academy": 6, "quarry": 6}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 32000, "iron": 12800, "gold": 96000}, "seconds": 38400, "requires": {"academy": 7, "quarry": 7}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 64000, "iron": 25600, "gold": 192000}, "seconds": 76800, "requires": {"academy": 8, "quarry": 8}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 128000, "iron": 51200, "gold": 384000}, "seconds": 153600, "requires": {"academy": 9, "quarry": 9}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 256000, "iron": 102400, "gold": 768000}, "seconds": 307200, "requires": {"academy": 10, "quarry": 10}}
+      ]
+    },
+    "mining": {
+      "name": "Mining",
+      "group": "economy",
+      "effect": "Iron from iron mines",
+      "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      "unit": "%",
+      "active": true,
+      "levels": [
+        {"cost": {"food": 0, "lumber": 0, "stone": 0, "iron": 800, "gold": 2000}, "seconds": 700, "requires": {"academy": 2, "ironmine": 1}, "research": {"masonry": 1}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 0, "iron": 1600, "gold": 4000}, "seconds": 1400, "requires": {"academy": 2, "ironmine": 2}, "research": {"masonry": 1}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 0, "iron": 3200, "gold": 8000}, "seconds": 2800, "requires": {"academy": 3, "ironmine": 3}, "research": {"masonry": 1}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 0, "iron": 6400, "gold": 16000}, "seconds": 5600, "requires": {"academy": 4, "ironmine": 4}, "research": {"masonry": 1}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 0, "iron": 12800, "gold": 32000}, "seconds": 11200, "requires": {"academy": 5, "ironmine": 5}, "research": {"masonry": 1}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 0, "iron": 25600, "gold": 64000}, "seconds": 22400, "requires": {"academy": 6, "ironmine": 6}, "research": {"masonry": 1}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 0, "iron": 51200, "gold": 128000}, "seconds": 44800, "requires": {"academy": 7, "ironmine": 7}, "research": {"masonry": 1}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 0, "iron": 102400, "gold": 256000}, "seconds": 89600, "requires": {"academy": 8, "ironmine": 8}, "research": {"masonry": 1}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 0, "iron": 204800, "gold": 512000}, "seconds": 179200, "requires": {"academy": 9, "ironmine": 9}, "research": {"masonry": 1}},
+        {"cost": {"food": 0, "lumber": 0, "stone": 0, "iron": 409600, "gold": 1024000}, "seconds": 358400, "requires": {"academy": 10, "ironmine": 10}, "research": {"masonry": 1}}
+      ]
+    },
+    "stockpile": {
+      "name": "Stockpile",
+      "group": "economy",
+      "effect": "Warehouse storage",
+      "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      "unit": "%",
+      "active": true,
+      "levels": [
+        {"cost": {"food": 0, "lumber": 1200, "stone": 1000, "iron": 800, "gold": 2000}, "seconds": 900, "requires": {"academy": 6, "warehouse": 1}, "research": {"lumbering": 3}},
+        {"cost": {"food": 0, "lumber": 2400, "stone": 2000, "iron": 1600, "gold": 4000}, "seconds": 1800, "requires": {"academy": 6, "warehouse": 2}, "research": {"lumbering": 3}},
+        {"cost": {"food": 0, "lumber": 4800, "stone": 4000, "iron": 3200, "gold": 8000}, "seconds": 3600, "requires": {"academy": 6, "warehouse": 3}, "research": {"lumbering": 3}},
+        {"cost": {"food": 0, "lumber": 9600, "stone": 8000, "iron": 6400, "gold": 16000}, "seconds": 7200, "requires": {"academy": 6, "warehouse": 4}, "research": {"lumbering": 3}},
+        {"cost": {"food": 0, "lumber": 19200, "stone": 16000, "iron": 12800, "gold": 32000}, "seconds": 14400, "requires": {"academy": 6, "warehouse": 5}, "research": {"lumbering": 3}},
+        {"cost": {"food": 0, "lumber": 38400, "stone": 32000, "iron": 25600, "gold": 64000}, "seconds": 28800, "requires": {"academy": 6, "warehouse": 6}, "research": {"lumbering": 3}},
+        {"cost": {"food": 0, "lumber": 76800, "stone": 64000, "iron": 51200, "gold": 128000}, "seconds": 57600, "requires": {"academy": 7, "warehouse": 7}, "research": {"lumbering": 3}},
+        {"cost": {"food": 0, "lumber": 153600, "stone": 128000, "iron": 102400, "gold": 256000}, "seconds": 115200, "requires": {"academy": 8, "warehouse": 8}, "research": {"lumbering": 3}},
+        {"cost": {"food": 0, "lumber": 307200, "stone": 256000, "iron": 204800, "gold": 512000}, "seconds": 230400, "requires": {"academy": 9, "warehouse": 9}, "research": {"lumbering": 3}},
+        {"cost": {"food": 0, "lumber": 614400, "stone": 512000, "iron": 409600, "gold": 1024000}, "seconds": 460800, "requires": {"academy": 10, "warehouse": 10}, "research": {"lumbering": 3}}
+      ]
+    },
+    "construction": {
+      "name": "Construction",
+      "group": "economy",
+      "effect": "Faster building (time x0.9 per level)",
+      "bonus": [10, 19, 27, 34, 41, 47, 52, 57, 61, 65],
+      "unit": "%",
+      "active": true,
+      "levels": [
+        {"cost": {"food": 0, "lumber": 2000, "stone": 2000, "iron": 2000, "gold": 5000}, "seconds": 1800, "requires": {"academy": 5}, "research": {"lumbering": 5, "metalCasting": 2}},
+        {"cost": {"food": 0, "lumber": 4000, "stone": 4000, "iron": 4000, "gold": 10000}, "seconds": 3600, "requires": {"academy": 5}, "research": {"lumbering": 5, "metalCasting": 2}},
+        {"cost": {"food": 0, "lumber": 8000, "stone": 8000, "iron": 8000, "gold": 20000}, "seconds": 7200, "requires": {"academy": 5}, "research": {"lumbering": 5, "metalCasting": 2}},
+        {"cost": {"food": 0, "lumber": 16000, "stone": 16000, "iron": 16000, "gold": 40000}, "seconds": 14400, "requires": {"academy": 5}, "research": {"lumbering": 5, "metalCasting": 2}},
+        {"cost": {"food": 0, "lumber": 32000, "stone": 32000, "iron": 32000, "gold": 80000}, "seconds": 28800, "requires": {"academy": 5}, "research": {"lumbering": 5, "metalCasting": 2}},
+        {"cost": {"food": 0, "lumber": 64000, "stone": 64000, "iron": 64000, "gold": 160000}, "seconds": 57600, "requires": {"academy": 6}, "research": {"lumbering": 5, "metalCasting": 2}},
+        {"cost": {"food": 0, "lumber": 128000, "stone": 128000, "iron": 128000, "gold": 320000}, "seconds": 115200, "requires": {"academy": 7}, "research": {"lumbering": 5, "metalCasting": 2}},
+        {"cost": {"food": 0, "lumber": 256000, "stone": 256000, "iron": 256000, "gold": 640000}, "seconds": 230400, "requires": {"academy": 8}, "research": {"lumbering": 5, "metalCasting": 2}},
+        {"cost": {"food": 0, "lumber": 512000, "stone": 512000, "iron": 512000, "gold": 1280000}, "seconds": 460800, "requires": {"academy": 9}, "research": {"lumbering": 5, "metalCasting": 2}},
+        {"cost": {"food": 0, "lumber": 1024000, "stone": 1024000, "iron": 1024000, "gold": 2560000}, "seconds": 921600, "requires": {"academy": 10}, "research": {"lumbering": 5, "metalCasting": 2}}
+      ]
+    },
+    "militaryScience": {
+      "name": "Military Science",
+      "group": "military",
+      "effect": "Faster troop training (time x0.9 per level)",
+      "bonus": [10, 19, 27, 34, 41, 47, 52, 57, 61, 65],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 600, "lumber": 100, "stone": 100, "iron": 150, "gold": 2500}, "seconds": 900, "requires": {"academy": 1, "forge": 1}},
+        {"cost": {"food": 1200, "lumber": 200, "stone": 200, "iron": 300, "gold": 5000}, "seconds": 1800, "requires": {"academy": 2, "forge": 2}},
+        {"cost": {"food": 2400, "lumber": 400, "stone": 400, "iron": 600, "gold": 10000}, "seconds": 3600, "requires": {"academy": 3, "forge": 3}},
+        {"cost": {"food": 4800, "lumber": 800, "stone": 800, "iron": 1200, "gold": 20000}, "seconds": 7200, "requires": {"academy": 4, "forge": 4}},
+        {"cost": {"food": 9600, "lumber": 1600, "stone": 1600, "iron": 2400, "gold": 40000}, "seconds": 14400, "requires": {"academy": 5, "forge": 5}},
+        {"cost": {"food": 19200, "lumber": 3200, "stone": 3200, "iron": 4800, "gold": 80000}, "seconds": 28800, "requires": {"academy": 6, "forge": 6}},
+        {"cost": {"food": 38400, "lumber": 6400, "stone": 6400, "iron": 9600, "gold": 160000}, "seconds": 57600, "requires": {"academy": 7, "forge": 7}},
+        {"cost": {"food": 76800, "lumber": 12800, "stone": 12800, "iron": 19200, "gold": 320000}, "seconds": 115200, "requires": {"academy": 8, "forge": 8}},
+        {"cost": {"food": 153600, "lumber": 25600, "stone": 25600, "iron": 38400, "gold": 640000}, "seconds": 230400, "requires": {"academy": 9, "forge": 9}},
+        {"cost": {"food": 307200, "lumber": 51200, "stone": 51200, "iron": 76800, "gold": 1280000}, "seconds": 460800, "requires": {"academy": 10, "forge": 10}}
+      ]
+    },
+    "militaryTradition": {
+      "name": "Military Tradition",
+      "group": "military",
+      "effect": "Army attack",
+      "bonus": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 800, "lumber": 120, "stone": 0, "iron": 200, "gold": 3000}, "seconds": 1200, "requires": {"academy": 2}, "research": {"militaryScience": 1}},
+        {"cost": {"food": 1600, "lumber": 240, "stone": 0, "iron": 400, "gold": 6000}, "seconds": 2400, "requires": {"academy": 2}, "research": {"militaryScience": 1}},
+        {"cost": {"food": 3200, "lumber": 480, "stone": 0, "iron": 800, "gold": 12000}, "seconds": 4800, "requires": {"academy": 3}, "research": {"militaryScience": 1}},
+        {"cost": {"food": 6400, "lumber": 960, "stone": 0, "iron": 1600, "gold": 24000}, "seconds": 9600, "requires": {"academy": 4}, "research": {"militaryScience": 1}},
+        {"cost": {"food": 12800, "lumber": 1920, "stone": 0, "iron": 3200, "gold": 48000}, "seconds": 19200, "requires": {"academy": 5}, "research": {"militaryScience": 1}},
+        {"cost": {"food": 25600, "lumber": 3840, "stone": 0, "iron": 6400, "gold": 96000}, "seconds": 38400, "requires": {"academy": 6}, "research": {"militaryScience": 1}},
+        {"cost": {"food": 51200, "lumber": 7680, "stone": 0, "iron": 12800, "gold": 192000}, "seconds": 76800, "requires": {"academy": 7}, "research": {"militaryScience": 1}},
+        {"cost": {"food": 102400, "lumber": 15360, "stone": 0, "iron": 25600, "gold": 384000}, "seconds": 153600, "requires": {"academy": 8}, "research": {"militaryScience": 1}},
+        {"cost": {"food": 204800, "lumber": 30720, "stone": 0, "iron": 51200, "gold": 768000}, "seconds": 307200, "requires": {"academy": 9}, "research": {"militaryScience": 1}},
+        {"cost": {"food": 409600, "lumber": 61440, "stone": 0, "iron": 102400, "gold": 1536000}, "seconds": 614400, "requires": {"academy": 10}, "research": {"militaryScience": 1}}
+      ]
+    },
+    "ironWorking": {
+      "name": "Iron Working",
+      "group": "military",
+      "effect": "Army defence",
+      "bonus": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 700, "lumber": 150, "stone": 0, "iron": 300, "gold": 3500}, "seconds": 1500, "requires": {"academy": 3}},
+        {"cost": {"food": 1400, "lumber": 300, "stone": 0, "iron": 600, "gold": 7000}, "seconds": 3000, "requires": {"academy": 3}},
+        {"cost": {"food": 2800, "lumber": 600, "stone": 0, "iron": 1200, "gold": 14000}, "seconds": 6000, "requires": {"academy": 3}},
+        {"cost": {"food": 5600, "lumber": 1200, "stone": 0, "iron": 2400, "gold": 28000}, "seconds": 12000, "requires": {"academy": 4}},
+        {"cost": {"food": 11200, "lumber": 2400, "stone": 0, "iron": 4800, "gold": 56000}, "seconds": 24000, "requires": {"academy": 5}},
+        {"cost": {"food": 22400, "lumber": 4800, "stone": 0, "iron": 9600, "gold": 112000}, "seconds": 48000, "requires": {"academy": 6}},
+        {"cost": {"food": 44800, "lumber": 9600, "stone": 0, "iron": 19200, "gold": 224000}, "seconds": 96000, "requires": {"academy": 7}},
+        {"cost": {"food": 89600, "lumber": 19200, "stone": 0, "iron": 38400, "gold": 448000}, "seconds": 192000, "requires": {"academy": 8}},
+        {"cost": {"food": 179200, "lumber": 38400, "stone": 0, "iron": 76800, "gold": 896000}, "seconds": 384000, "requires": {"academy": 9}},
+        {"cost": {"food": 358400, "lumber": 76800, "stone": 0, "iron": 153600, "gold": 1792000}, "seconds": 768000, "requires": {"academy": 10}}
+      ]
+    },
+    "medicine": {
+      "name": "Medicine",
+      "group": "military",
+      "effect": "Army life",
+      "bonus": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 1500, "lumber": 0, "stone": 0, "iron": 0, "gold": 3600}, "seconds": 1800, "requires": {"academy": 6}, "research": {"logistics": 3}},
+        {"cost": {"food": 3000, "lumber": 0, "stone": 0, "iron": 0, "gold": 7200}, "seconds": 3600, "requires": {"academy": 6}, "research": {"logistics": 3}},
+        {"cost": {"food": 6000, "lumber": 0, "stone": 0, "iron": 0, "gold": 14400}, "seconds": 7200, "requires": {"academy": 6}, "research": {"logistics": 3}},
+        {"cost": {"food": 12000, "lumber": 0, "stone": 0, "iron": 0, "gold": 28800}, "seconds": 14400, "requires": {"academy": 6}, "research": {"logistics": 3}},
+        {"cost": {"food": 24000, "lumber": 0, "stone": 0, "iron": 0, "gold": 57600}, "seconds": 28800, "requires": {"academy": 6}, "research": {"logistics": 3}},
+        {"cost": {"food": 48000, "lumber": 0, "stone": 0, "iron": 0, "gold": 115200}, "seconds": 57600, "requires": {"academy": 6}, "research": {"logistics": 3}},
+        {"cost": {"food": 96000, "lumber": 0, "stone": 0, "iron": 0, "gold": 230400}, "seconds": 115200, "requires": {"academy": 7}, "research": {"logistics": 3}},
+        {"cost": {"food": 192000, "lumber": 0, "stone": 0, "iron": 0, "gold": 460800}, "seconds": 230400, "requires": {"academy": 8}, "research": {"logistics": 3}},
+        {"cost": {"food": 384000, "lumber": 0, "stone": 0, "iron": 0, "gold": 921600}, "seconds": 460800, "requires": {"academy": 9}, "research": {"logistics": 3}},
+        {"cost": {"food": 768000, "lumber": 0, "stone": 0, "iron": 0, "gold": 1843200}, "seconds": 921600, "requires": {"academy": 10}, "research": {"logistics": 3}}
+      ]
+    },
+    "archery": {
+      "name": "Archery",
+      "group": "military",
+      "effect": "Shooting range",
+      "bonus": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 0, "lumber": 800, "stone": 500, "iron": 600, "gold": 5000}, "seconds": 2400, "requires": {"academy": 4}, "research": {"militaryScience": 4}},
+        {"cost": {"food": 0, "lumber": 1600, "stone": 1000, "iron": 1200, "gold": 10000}, "seconds": 4800, "requires": {"academy": 4}, "research": {"militaryScience": 4}},
+        {"cost": {"food": 0, "lumber": 3200, "stone": 2000, "iron": 2400, "gold": 20000}, "seconds": 9600, "requires": {"academy": 4}, "research": {"militaryScience": 4}},
+        {"cost": {"food": 0, "lumber": 6400, "stone": 4000, "iron": 4800, "gold": 40000}, "seconds": 19200, "requires": {"academy": 4}, "research": {"militaryScience": 4}},
+        {"cost": {"food": 0, "lumber": 12800, "stone": 8000, "iron": 9600, "gold": 80000}, "seconds": 38400, "requires": {"academy": 5}, "research": {"militaryScience": 4}},
+        {"cost": {"food": 0, "lumber": 25600, "stone": 16000, "iron": 19200, "gold": 160000}, "seconds": 76800, "requires": {"academy": 6}, "research": {"militaryScience": 4}},
+        {"cost": {"food": 0, "lumber": 51200, "stone": 32000, "iron": 38400, "gold": 320000}, "seconds": 153600, "requires": {"academy": 7}, "research": {"militaryScience": 4}},
+        {"cost": {"food": 0, "lumber": 102400, "stone": 64000, "iron": 76800, "gold": 640000}, "seconds": 307200, "requires": {"academy": 8}, "research": {"militaryScience": 4}},
+        {"cost": {"food": 0, "lumber": 204800, "stone": 128000, "iron": 153600, "gold": 1280000}, "seconds": 614400, "requires": {"academy": 9}, "research": {"militaryScience": 4}},
+        {"cost": {"food": 0, "lumber": 409600, "stone": 256000, "iron": 307200, "gold": 2560000}, "seconds": 1228800, "requires": {"academy": 10}, "research": {"militaryScience": 4}}
+      ]
+    },
+    "horsebackRiding": {
+      "name": "Horseback Riding",
+      "group": "military",
+      "effect": "Cavalry and mechanics speed",
+      "bonus": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 1000, "lumber": 0, "stone": 0, "iron": 0, "gold": 6000}, "seconds": 2000, "requires": {"academy": 5, "stable": 1}, "research": {"militaryScience": 5}},
+        {"cost": {"food": 2000, "lumber": 0, "stone": 0, "iron": 0, "gold": 12000}, "seconds": 4000, "requires": {"academy": 5, "stable": 2}, "research": {"militaryScience": 5}},
+        {"cost": {"food": 4000, "lumber": 0, "stone": 0, "iron": 0, "gold": 24000}, "seconds": 8000, "requires": {"academy": 5, "stable": 3}, "research": {"militaryScience": 5}},
+        {"cost": {"food": 8000, "lumber": 0, "stone": 0, "iron": 0, "gold": 48000}, "seconds": 16000, "requires": {"academy": 5, "stable": 4}, "research": {"militaryScience": 5}},
+        {"cost": {"food": 16000, "lumber": 0, "stone": 0, "iron": 0, "gold": 96000}, "seconds": 32000, "requires": {"academy": 5, "stable": 5}, "research": {"militaryScience": 5}},
+        {"cost": {"food": 32000, "lumber": 0, "stone": 0, "iron": 0, "gold": 192000}, "seconds": 64000, "requires": {"academy": 6, "stable": 6}, "research": {"militaryScience": 5}},
+        {"cost": {"food": 64000, "lumber": 0, "stone": 0, "iron": 0, "gold": 384000}, "seconds": 128000, "requires": {"academy": 7, "stable": 7}, "research": {"militaryScience": 5}},
+        {"cost": {"food": 128000, "lumber": 0, "stone": 0, "iron": 0, "gold": 768000}, "seconds": 256000, "requires": {"academy": 8, "stable": 8}, "research": {"militaryScience": 5}},
+        {"cost": {"food": 256000, "lumber": 0, "stone": 0, "iron": 0, "gold": 1536000}, "seconds": 512000, "requires": {"academy": 9, "stable": 9}, "research": {"militaryScience": 5}},
+        {"cost": {"food": 512000, "lumber": 0, "stone": 0, "iron": 0, "gold": 3072000}, "seconds": 1024000, "requires": {"academy": 10, "stable": 10}, "research": {"militaryScience": 5}}
+      ]
+    },
+    "compass": {
+      "name": "Compass",
+      "group": "military",
+      "effect": "Infantry speed",
+      "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 600, "lumber": 0, "stone": 0, "iron": 0, "gold": 3000}, "seconds": 1800, "requires": {"academy": 4}, "research": {"militaryScience": 3}},
+        {"cost": {"food": 1200, "lumber": 0, "stone": 0, "iron": 0, "gold": 6000}, "seconds": 3600, "requires": {"academy": 4}, "research": {"militaryScience": 3}},
+        {"cost": {"food": 2400, "lumber": 0, "stone": 0, "iron": 0, "gold": 12000}, "seconds": 7200, "requires": {"academy": 4}, "research": {"militaryScience": 3}},
+        {"cost": {"food": 4800, "lumber": 0, "stone": 0, "iron": 0, "gold": 24000}, "seconds": 14400, "requires": {"academy": 4}, "research": {"militaryScience": 3}},
+        {"cost": {"food": 9600, "lumber": 0, "stone": 0, "iron": 0, "gold": 48000}, "seconds": 28800, "requires": {"academy": 5}, "research": {"militaryScience": 3}},
+        {"cost": {"food": 19200, "lumber": 0, "stone": 0, "iron": 0, "gold": 96000}, "seconds": 57600, "requires": {"academy": 6}, "research": {"militaryScience": 3}},
+        {"cost": {"food": 38400, "lumber": 0, "stone": 0, "iron": 0, "gold": 192000}, "seconds": 115200, "requires": {"academy": 7}, "research": {"militaryScience": 3}},
+        {"cost": {"food": 76800, "lumber": 0, "stone": 0, "iron": 0, "gold": 384000}, "seconds": 230400, "requires": {"academy": 8}, "research": {"militaryScience": 3}},
+        {"cost": {"food": 153600, "lumber": 0, "stone": 0, "iron": 0, "gold": 768000}, "seconds": 460800, "requires": {"academy": 9}, "research": {"militaryScience": 3}},
+        {"cost": {"food": 307200, "lumber": 0, "stone": 0, "iron": 0, "gold": 1536000}, "seconds": 921600, "requires": {"academy": 10}, "research": {"militaryScience": 3}}
+      ]
+    },
+    "logistics": {
+      "name": "Logistics",
+      "group": "military",
+      "effect": "Army load",
+      "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 500, "lumber": 0, "stone": 200, "iron": 0, "gold": 3000}, "seconds": 1600, "requires": {"academy": 4}, "research": {"militaryScience": 2}},
+        {"cost": {"food": 1000, "lumber": 0, "stone": 400, "iron": 0, "gold": 6000}, "seconds": 3200, "requires": {"academy": 4}, "research": {"militaryScience": 2}},
+        {"cost": {"food": 2000, "lumber": 0, "stone": 800, "iron": 0, "gold": 12000}, "seconds": 6400, "requires": {"academy": 4}, "research": {"militaryScience": 2}},
+        {"cost": {"food": 4000, "lumber": 0, "stone": 1600, "iron": 0, "gold": 24000}, "seconds": 12800, "requires": {"academy": 4}, "research": {"militaryScience": 2}},
+        {"cost": {"food": 8000, "lumber": 0, "stone": 3200, "iron": 0, "gold": 48000}, "seconds": 25600, "requires": {"academy": 5}, "research": {"militaryScience": 2}},
+        {"cost": {"food": 16000, "lumber": 0, "stone": 6400, "iron": 0, "gold": 96000}, "seconds": 51200, "requires": {"academy": 6}, "research": {"militaryScience": 2}},
+        {"cost": {"food": 32000, "lumber": 0, "stone": 12800, "iron": 0, "gold": 192000}, "seconds": 102400, "requires": {"academy": 7}, "research": {"militaryScience": 2}},
+        {"cost": {"food": 64000, "lumber": 0, "stone": 25600, "iron": 0, "gold": 384000}, "seconds": 204800, "requires": {"academy": 8}, "research": {"militaryScience": 2}},
+        {"cost": {"food": 128000, "lumber": 0, "stone": 51200, "iron": 0, "gold": 768000}, "seconds": 409600, "requires": {"academy": 9}, "research": {"militaryScience": 2}},
+        {"cost": {"food": 256000, "lumber": 0, "stone": 102400, "iron": 0, "gold": 1536000}, "seconds": 819200, "requires": {"academy": 10}, "research": {"militaryScience": 2}}
+      ]
+    },
+    "metalCasting": {
+      "name": "Metal Casting",
+      "group": "military",
+      "effect": "Faster mechanics building",
+      "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 0, "lumber": 500, "stone": 0, "iron": 500, "gold": 5000}, "seconds": 900, "requires": {"academy": 3, "workshop": 1}, "research": {"mining": 2}},
+        {"cost": {"food": 0, "lumber": 1000, "stone": 0, "iron": 1000, "gold": 10000}, "seconds": 1800, "requires": {"academy": 3, "workshop": 2}, "research": {"mining": 2}},
+        {"cost": {"food": 0, "lumber": 2000, "stone": 0, "iron": 2000, "gold": 20000}, "seconds": 3600, "requires": {"academy": 3, "workshop": 3}, "research": {"mining": 2}},
+        {"cost": {"food": 0, "lumber": 4000, "stone": 0, "iron": 4000, "gold": 40000}, "seconds": 7200, "requires": {"academy": 4, "workshop": 4}, "research": {"mining": 2}},
+        {"cost": {"food": 0, "lumber": 8000, "stone": 0, "iron": 8000, "gold": 80000}, "seconds": 14400, "requires": {"academy": 5, "workshop": 5}, "research": {"mining": 2}},
+        {"cost": {"food": 0, "lumber": 16000, "stone": 0, "iron": 16000, "gold": 160000}, "seconds": 28800, "requires": {"academy": 6, "workshop": 6}, "research": {"mining": 2}},
+        {"cost": {"food": 0, "lumber": 32000, "stone": 0, "iron": 32000, "gold": 320000}, "seconds": 57600, "requires": {"academy": 7, "workshop": 7}, "research": {"mining": 2}},
+        {"cost": {"food": 0, "lumber": 64000, "stone": 0, "iron": 64000, "gold": 640000}, "seconds": 115200, "requires": {"academy": 8, "workshop": 8}, "research": {"mining": 2}},
+        {"cost": {"food": 0, "lumber": 128000, "stone": 0, "iron": 128000, "gold": 1280000}, "seconds": 230400, "requires": {"academy": 9, "workshop": 9}, "research": {"mining": 2}},
+        {"cost": {"food": 0, "lumber": 256000, "stone": 0, "iron": 256000, "gold": 2560000}, "seconds": 460800, "requires": {"academy": 10, "workshop": 10}, "research": {"mining": 2}}
+      ]
+    },
+    "engineering": {
+      "name": "Engineering",
+      "group": "military",
+      "effect": "Walls and fortification endurance",
+      "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 0, "lumber": 2500, "stone": 3000, "iron": 1500, "gold": 6000}, "seconds": 2100, "requires": {"academy": 8}, "research": {"construction": 3}},
+        {"cost": {"food": 0, "lumber": 5000, "stone": 6000, "iron": 3000, "gold": 12000}, "seconds": 4200, "requires": {"academy": 8}, "research": {"construction": 3}},
+        {"cost": {"food": 0, "lumber": 10000, "stone": 12000, "iron": 6000, "gold": 24000}, "seconds": 8400, "requires": {"academy": 8}, "research": {"construction": 3}},
+        {"cost": {"food": 0, "lumber": 20000, "stone": 24000, "iron": 12000, "gold": 48000}, "seconds": 16800, "requires": {"academy": 8}, "research": {"construction": 3}},
+        {"cost": {"food": 0, "lumber": 40000, "stone": 48000, "iron": 24000, "gold": 96000}, "seconds": 33600, "requires": {"academy": 8}, "research": {"construction": 3}},
+        {"cost": {"food": 0, "lumber": 80000, "stone": 96000, "iron": 48000, "gold": 192000}, "seconds": 67200, "requires": {"academy": 8}, "research": {"construction": 3}},
+        {"cost": {"food": 0, "lumber": 160000, "stone": 192000, "iron": 96000, "gold": 384000}, "seconds": 134400, "requires": {"academy": 8}, "research": {"construction": 3}},
+        {"cost": {"food": 0, "lumber": 320000, "stone": 384000, "iron": 192000, "gold": 768000}, "seconds": 268800, "requires": {"academy": 8}, "research": {"construction": 3}},
+        {"cost": {"food": 0, "lumber": 640000, "stone": 768000, "iron": 384000, "gold": 1536000}, "seconds": 537600, "requires": {"academy": 9}, "research": {"construction": 3}},
+        {"cost": {"food": 0, "lumber": 1280000, "stone": 1536000, "iron": 768000, "gold": 3072000}, "seconds": 1075200, "requires": {"academy": 10}, "research": {"construction": 3}}
+      ]
+    },
+    "machinery": {
+      "name": "Machinery",
+      "group": "military",
+      "effect": "Fortifications repaired after battle (x base rate)",
+      "bonus": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      "unit": "x",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 0, "lumber": 600, "stone": 700, "iron": 800, "gold": 5500}, "seconds": 2400, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
+        {"cost": {"food": 0, "lumber": 1200, "stone": 1400, "iron": 1600, "gold": 11000}, "seconds": 4800, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
+        {"cost": {"food": 0, "lumber": 2400, "stone": 2800, "iron": 3200, "gold": 22000}, "seconds": 9600, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
+        {"cost": {"food": 0, "lumber": 4800, "stone": 5600, "iron": 6400, "gold": 44000}, "seconds": 19200, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
+        {"cost": {"food": 0, "lumber": 9600, "stone": 11200, "iron": 12800, "gold": 88000}, "seconds": 38400, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
+        {"cost": {"food": 0, "lumber": 19200, "stone": 22400, "iron": 25600, "gold": 176000}, "seconds": 76800, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
+        {"cost": {"food": 0, "lumber": 38400, "stone": 44800, "iron": 51200, "gold": 352000}, "seconds": 153600, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
+        {"cost": {"food": 0, "lumber": 76800, "stone": 89600, "iron": 102400, "gold": 704000}, "seconds": 307200, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
+        {"cost": {"food": 0, "lumber": 153600, "stone": 179200, "iron": 204800, "gold": 1408000}, "seconds": 614400, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
+        {"cost": {"food": 0, "lumber": 307200, "stone": 358400, "iron": 409600, "gold": 2816000}, "seconds": 1228800, "requires": {"academy": 10}, "research": {"metalCasting": 4}}
+      ]
+    },
+    "informatics": {
+      "name": "Informatics",
+      "group": "military",
+      "effect": "More detail in scout reports",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 300, "lumber": 0, "stone": 0, "iron": 0, "gold": 2000}, "seconds": 300, "requires": {"academy": 3}},
+        {"cost": {"food": 600, "lumber": 0, "stone": 0, "iron": 0, "gold": 4000}, "seconds": 600, "requires": {"academy": 3}},
+        {"cost": {"food": 1200, "lumber": 0, "stone": 0, "iron": 0, "gold": 8000}, "seconds": 1200, "requires": {"academy": 3}},
+        {"cost": {"food": 2400, "lumber": 0, "stone": 0, "iron": 0, "gold": 16000}, "seconds": 2400, "requires": {"academy": 4}},
+        {"cost": {"food": 4800, "lumber": 0, "stone": 0, "iron": 0, "gold": 32000}, "seconds": 4800, "requires": {"academy": 5}},
+        {"cost": {"food": 9600, "lumber": 0, "stone": 0, "iron": 0, "gold": 64000}, "seconds": 9600, "requires": {"academy": 6}},
+        {"cost": {"food": 19200, "lumber": 0, "stone": 0, "iron": 0, "gold": 128000}, "seconds": 19200, "requires": {"academy": 7}},
+        {"cost": {"food": 38400, "lumber": 0, "stone": 0, "iron": 0, "gold": 256000}, "seconds": 38400, "requires": {"academy": 8}},
+        {"cost": {"food": 76800, "lumber": 0, "stone": 0, "iron": 0, "gold": 512000}, "seconds": 76800, "requires": {"academy": 9}},
+        {"cost": {"food": 153600, "lumber": 0, "stone": 0, "iron": 0, "gold": 1024000}, "seconds": 153600, "requires": {"academy": 10}}
+      ]
+    },
+    "privateering": {
+      "name": "Privateering",
+      "group": "military",
+      "effect": "Less of a rival's warehouse protection when plundering",
+      "bonus": [3, 6, 9, 12, 15, 18, 21, 24, 27, 30],
+      "unit": "%",
+      "active": false,
+      "levels": [
+        {"cost": {"food": 5000, "lumber": 0, "stone": 0, "iron": 2000, "gold": 10000}, "seconds": 3600, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
+        {"cost": {"food": 10000, "lumber": 0, "stone": 0, "iron": 4000, "gold": 20000}, "seconds": 7200, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
+        {"cost": {"food": 20000, "lumber": 0, "stone": 0, "iron": 8000, "gold": 40000}, "seconds": 14400, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
+        {"cost": {"food": 40000, "lumber": 0, "stone": 0, "iron": 16000, "gold": 80000}, "seconds": 28800, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
+        {"cost": {"food": 80000, "lumber": 0, "stone": 0, "iron": 32000, "gold": 160000}, "seconds": 57600, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
+        {"cost": {"food": 160000, "lumber": 0, "stone": 0, "iron": 64000, "gold": 320000}, "seconds": 115200, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
+        {"cost": {"food": 320000, "lumber": 0, "stone": 0, "iron": 128000, "gold": 640000}, "seconds": 230400, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
+        {"cost": {"food": 640000, "lumber": 0, "stone": 0, "iron": 256000, "gold": 1280000}, "seconds": 460800, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
+        {"cost": {"food": 1280000, "lumber": 0, "stone": 0, "iron": 512000, "gold": 2560000}, "seconds": 921600, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
+        {"cost": {"food": 2560000, "lumber": 0, "stone": 0, "iron": 1024000, "gold": 5120000}, "seconds": 1843200, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}}
+      ]
+    }
+  }
+}

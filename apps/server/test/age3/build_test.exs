@@ -72,4 +72,25 @@ defmodule Age3.BuildTest do
     assert spent["lumber"]["amount"] == 200.5
     assert Build.spend(spent, cost, -1) == res
   end
+
+  test "Relief Station levels need Horseback Riding research of the same level" do
+    town = [%{slot: "1", type: "stable", level: 1}, %{slot: "townhall", type: "townhall", level: 2} | @town]
+    assert {:error, "requirement_not_met"} = Build.check(town, rich(), "0", "reliefstation")
+    # research only counts in a city with an Academy
+    hbr = %{"horsebackRiding" => 1}
+    assert {:error, "requirement_not_met"} = Build.check(town, rich(), "0", "reliefstation", hbr)
+    town = [%{slot: "2", type: "academy", level: 1} | town]
+    assert {:ok, _} = Build.check(town, rich(), "0", "reliefstation", hbr)
+  end
+
+  test "Construction research shortens build times" do
+    town = [%{slot: "2", type: "academy", level: 1} | @town]
+    seconds = Data.level("cottage", 1)["seconds"]
+    assert {:ok, plan} = Build.check(town, rich(), "3", "cottage", %{"construction" => 1})
+    assert plan.seconds == round(seconds * 0.9)
+    # Construction 3 counts as 1 with an Academy Lv1, and as nothing without an Academy
+    assert {:ok, %{seconds: s}} = Build.check(town, rich(), "3", "cottage", %{"construction" => 3})
+    assert s == round(seconds * 0.9)
+    assert {:ok, %{seconds: ^seconds}} = Build.check(@town, rich(), "3", "cottage", %{"construction" => 3})
+  end
 end

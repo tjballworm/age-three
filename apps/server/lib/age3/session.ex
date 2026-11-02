@@ -72,7 +72,7 @@ defmodule Age3.Session do
     do: {error(id, "bad_message", "Not a valid ping."), session}
 
   defp handle(type, _payload, id, %{player_id: nil} = session)
-       when type in ["getState", "build", "cancelBuild", "speedUp", "setTax"],
+       when type in ["getState", "build", "cancelBuild", "speedUp", "setTax", "research", "cancelResearch"],
        do: {error(id, "not_logged_in", "Log in first."), session}
 
   defp handle("getState", _payload, id, session), do: state_reply(id, session, session.now.())
@@ -110,7 +110,39 @@ defmodule Age3.Session do
   defp handle("cancelBuild", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid cancel."), session}
 
-  # Finish a build for free when it has 5 minutes or less left: {cityId, taskId}.
+  # Research the next level of a tech in the city's Academy: {cityId, tech}. Replies with the new state.
+  defp handle("research", %{"cityId" => city_id, "tech" => tech}, id, session)
+       when is_binary(city_id) and is_binary(tech) do
+    now = session.now.()
+
+    case session.store.research(session.player_id, city_id, tech, now) do
+      {:ok, ends_at} ->
+        session.wake.(ends_at)
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("research", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid research."), session}
+
+  # Stop a research and get its cost back: {cityId, taskId}.
+  defp handle("cancelResearch", %{"cityId" => city_id, "taskId" => task_id}, id, session)
+       when is_binary(city_id) and is_binary(task_id) do
+    now = session.now.()
+
+    case session.store.cancel_research(session.player_id, city_id, task_id, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("cancelResearch", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid cancel."), session}
+
+  # Finish a build or research for free when it has 5 minutes or less left: {cityId, taskId}.
   defp handle("speedUp", %{"cityId" => city_id, "taskId" => task_id}, id, session)
        when is_binary(city_id) and is_binary(task_id) do
     now = session.now.()
@@ -178,6 +210,10 @@ defmodule Age3.Session do
 
   defp message("not_enough_resources"), do: "Not enough resources."
   defp message("queue_busy"), do: "Something is already being built in this city."
+  defp message("research_busy"), do: "This Academy is already researching something."
+  defp message("no_academy"), do: "This city has no Academy."
+  defp message("academy_busy"), do: "The Academy can't research and be upgraded at the same time."
+  defp message("already_researching"), do: "That is already being researched in another city."
   defp message("requirement_not_met"), do: "Requirements not met."
   defp message("bad_slot"), do: "That can't be built there."
   defp message("max_level"), do: "Already at the highest level."

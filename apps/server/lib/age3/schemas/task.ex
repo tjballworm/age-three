@@ -1,6 +1,7 @@
 defmodule Age3.Task do
-  # A row in the tasks table: something with an end time. For now only construction (kind "build"): target_type
-  # goes to target_level on slot when ends_at passes.
+  # A row in the tasks table: something with an end time. Construction (kind "build"): target_type goes to
+  # target_level on slot when ends_at passes. Research (kind "research"): the player's tech target_type goes to
+  # target_level; slot is nil.
   @moduledoc false
   use Ecto.Schema
 

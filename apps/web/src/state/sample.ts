@@ -29,6 +29,7 @@ export function samplePlayer(): Player {
     prestige: 182_440,
     honor: 3_020,
     rank: 1_204,
+    research: { agriculture: 3, lumbering: 2, militaryScience: 1 },
   };
 }
 

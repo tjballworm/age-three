@@ -23,9 +23,11 @@
     march: 'march',
   };
 
-  /** Server builds with 5 minutes or less left get a free Speedup button. */
+  /** Server builds and research with 5 minutes or less left get a free Speedup button. */
   const canSpeedUp = (t: TimedTask) =>
-    game.fromServer && t.kind === 'build' && remaining(t, clock.now) <= FREE_SPEEDUP_MS;
+    game.fromServer &&
+    (t.kind === 'build' || t.kind === 'research') &&
+    remaining(t, clock.now) <= FREE_SPEEDUP_MS;
 
   let filter = $state<Filter>('all');
   let collapsed = $state(false);
