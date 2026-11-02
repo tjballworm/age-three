@@ -6,7 +6,6 @@
   import CheatsWindow from './CheatsWindow.svelte';
   import CityOverview from './CityOverview.svelte';
   import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
-  import TrainWindow from './TrainWindow.svelte';
   import TroopsOverview from './TroopsOverview.svelte';
 
   // Title and tabs for every window. Content is filled in as each feature is built.
@@ -23,7 +22,6 @@
     events: { title: 'Events', tabs: ['Current', 'Upcoming'] },
     settings: { title: 'Settings', tabs: ['Game', 'Sound', 'Account'] },
     city: { title: 'City Overview', tabs: ['Resources', 'Buildings', 'Troops'] },
-    train: { title: 'Barracks', tabs: [] },
     cheats: { title: 'Cheats · Testing', tabs: ['Resources & troops', 'Buildings & research'] },
   };
 
@@ -37,10 +35,7 @@
   });
 </script>
 
-{#if game.openWindow === 'train'}
-  <!-- the Barracks has its own layout (queue left, troops right), so it brings its own window -->
-  <TrainWindow />
-{:else if game.openWindow && def}
+{#if game.openWindow && def}
   <Window title={def.title} onclose={closeWindow}>
     {#snippet tabs()}
       <Tabs tabs={tabList} bind:active={tab} />
