@@ -46,6 +46,8 @@ export const game = $state({
   connection: 'offline' as ConnectionStatus,
   /** True once the player and cities came from the server rather than sample data. */
   fromServer: false,
+  /** True while waiting for the first state from the server, so the sample data never flashes first. */
+  loading: false,
   /** Bumped when the world map's tiles change, so the map redraws. */
   worldVersion: 0,
 });
@@ -63,6 +65,7 @@ export function applyServerState(s: { player: Player; cities: City[]; serverTime
     if (home) game.mapTarget = { x: home.x, y: home.y };
   }
   game.fromServer = true;
+  game.loading = false;
   placeMyCities(s.cities, s.player);
   game.worldVersion++;
 }

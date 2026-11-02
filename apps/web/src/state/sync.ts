@@ -11,10 +11,20 @@ const SERVER_URL: string = import.meta.env.VITE_SERVER_URL ?? (import.meta.env.D
 /** Dev-only login: `?name=` in the address, or Lord TJ. Real accounts replace this later. */
 const devName = () => new URLSearchParams(location.search).get('name')?.trim() || 'Lord TJ';
 
+/** How long the loading screen waits for the server before showing the sample data instead. */
+const LOADING_GIVE_UP_MS = 8_000;
+
 export function startServerSync(): () => void {
   if (!SERVER_URL) return () => {};
+  game.loading = true;
+  const giveUp = () => (game.loading = false);
+  const giveUpTimer = setTimeout(giveUp, LOADING_GIVE_UP_MS);
   const client = connect(SERVER_URL, {
-    onStatus: (s) => (game.connection = s),
+    onStatus: (s) => {
+      game.connection = s;
+      // the first try failed: show the sample data while it keeps reconnecting
+      if (s === 'offline' && !game.fromServer) giveUp();
+    },
     onOpen: async (c) => {
       try {
         await c.request({ type: 'hello', payload: { version: PROTOCOL_VERSION, name: devName() } });
@@ -22,8 +32,12 @@ export function startServerSync(): () => void {
         if (reply.type === 'state') applyServerState(reply.payload);
       } catch (e) {
         console.warn('Server sync failed:', e);
+        giveUp();
       }
     },
   });
-  return () => client.close();
+  return () => {
+    clearTimeout(giveUpTimer);
+    client.close();
+  };
 }

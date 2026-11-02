@@ -17,8 +17,13 @@
 
 <svelte:window bind:innerWidth={vw} bind:innerHeight={vh} />
 
+{#if game.loading}
+  <!-- Covers the canvas too, until the server sends this player's state. -->
+  <div class="loading" role="status">Connecting to the server…</div>
+{/if}
+
 <!-- Clicks pass through the layer to the Pixi canvas except where a panel is. -->
-<div class="ui-layer">
+<div class="ui-layer" class:hidden={game.loading}>
   <div
     class="stage"
     style:width="{vw / scale}px"
@@ -48,6 +53,20 @@
     left: 0;
     top: 0;
     transform-origin: top left;
+  }
+  .hidden {
+    visibility: hidden;
+  }
+  .loading {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    background: var(--navy);
+    color: var(--title);
+    font: 700 20px var(--font-display);
+    letter-spacing: 0.04em;
   }
   .stage > :global(*) {
     pointer-events: auto;
