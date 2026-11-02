@@ -90,7 +90,7 @@
   const cancel = (taskId: string) =>
     send(() => command({ type: 'cancelBuild', payload: { cityId: city.id, taskId } }));
 
-  /** What the next level adds, e.g. "+100 food/h" or "+100 population". */
+  /** What the next level adds, e.g. "+100 food/h", "+100 population" or "+50,000 storage of each resource". */
   function gain(type: BuildingType, level: number): string | null {
     const spec = BUILDINGS[type];
     const next = buildingLevel(type, level);
@@ -98,6 +98,8 @@
     if (spec.resource && next?.perHour)
       return `+${formatNumber(next.perHour - (now?.perHour ?? 0))} ${spec.resource}/h`;
     if (next?.population) return `+${formatNumber(next.population - (now?.population ?? 0))} population`;
+    if (next?.capacity)
+      return `+${formatNumber(next.capacity - (now?.capacity ?? 0))} storage of each resource`;
     return null;
   }
 

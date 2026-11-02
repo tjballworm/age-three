@@ -1,7 +1,7 @@
 {
   "maxLevel": 10,
   "freeSpeedupSeconds": 300,
-  "base": {"perHour": {"food": 100, "lumber": 100, "stone": 100, "iron": 100, "gold": 100}, "population": 100},
+  "base": {"perHour": {"food": 100, "lumber": 100, "stone": 100, "iron": 100, "gold": 100}, "population": 100, "cap": 100000},
   "buildings": {
     "townhall": {
       "name": "Town Hall",
@@ -63,16 +63,16 @@
       "multiple": true,
       "requires": {},
       "levels": [
-        {"cost": {"food": 100, "lumber": 400, "stone": 200, "iron": 100, "gold": 0}, "seconds": 60},
-        {"cost": {"food": 200, "lumber": 800, "stone": 400, "iron": 200, "gold": 0}, "seconds": 120},
-        {"cost": {"food": 400, "lumber": 1600, "stone": 800, "iron": 400, "gold": 0}, "seconds": 240},
-        {"cost": {"food": 800, "lumber": 3200, "stone": 1600, "iron": 800, "gold": 0}, "seconds": 480},
-        {"cost": {"food": 1600, "lumber": 6400, "stone": 3200, "iron": 1600, "gold": 0}, "seconds": 960},
-        {"cost": {"food": 3200, "lumber": 12800, "stone": 6400, "iron": 3200, "gold": 0}, "seconds": 1920},
-        {"cost": {"food": 6400, "lumber": 25600, "stone": 12800, "iron": 6400, "gold": 0}, "seconds": 3840},
-        {"cost": {"food": 12800, "lumber": 51200, "stone": 25600, "iron": 12800, "gold": 0}, "seconds": 7680},
-        {"cost": {"food": 25600, "lumber": 102400, "stone": 51200, "iron": 25600, "gold": 0}, "seconds": 15360},
-        {"cost": {"food": 51200, "lumber": 204800, "stone": 102400, "iron": 51200, "gold": 0}, "seconds": 30720}
+        {"cost": {"food": 100, "lumber": 400, "stone": 200, "iron": 100, "gold": 0}, "seconds": 60, "capacity": 50000},
+        {"cost": {"food": 200, "lumber": 800, "stone": 400, "iron": 200, "gold": 0}, "seconds": 120, "capacity": 150000},
+        {"cost": {"food": 400, "lumber": 1600, "stone": 800, "iron": 400, "gold": 0}, "seconds": 240, "capacity": 300000},
+        {"cost": {"food": 800, "lumber": 3200, "stone": 1600, "iron": 800, "gold": 0}, "seconds": 480, "capacity": 500000},
+        {"cost": {"food": 1600, "lumber": 6400, "stone": 3200, "iron": 1600, "gold": 0}, "seconds": 960, "capacity": 750000},
+        {"cost": {"food": 3200, "lumber": 12800, "stone": 6400, "iron": 3200, "gold": 0}, "seconds": 1920, "capacity": 1050000},
+        {"cost": {"food": 6400, "lumber": 25600, "stone": 12800, "iron": 6400, "gold": 0}, "seconds": 3840, "capacity": 1400000},
+        {"cost": {"food": 12800, "lumber": 51200, "stone": 25600, "iron": 12800, "gold": 0}, "seconds": 7680, "capacity": 1800000},
+        {"cost": {"food": 25600, "lumber": 102400, "stone": 51200, "iron": 25600, "gold": 0}, "seconds": 15360, "capacity": 2250000},
+        {"cost": {"food": 51200, "lumber": 204800, "stone": 102400, "iron": 51200, "gold": 0}, "seconds": 30720, "capacity": 2750000}
       ]
     },
     "barracks": {

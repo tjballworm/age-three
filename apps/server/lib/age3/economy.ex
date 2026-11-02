@@ -38,17 +38,30 @@ defmodule Age3.Economy do
 
   @doc "Population: the base plus what each cottage houses at its level. Everyone counts as idle for now."
   def population(buildings) do
-    max = Data.base()["population"] + (buildings |> Enum.map(&stat(&1, "population")) |> Enum.sum())
+    max = Data.base()["population"] + total(buildings, "population")
     %{"current" => max, "max" => max, "idle" => max}
   end
 
-  @doc "Resources with new perHour rates; amounts and caps are kept."
-  def with_rates(resources, rates) do
-    Map.new(resources, fn {name, stock} -> {name, %{stock | "perHour" => Map.get(rates, name, 0)}} end)
+  @doc "How much of each resource the city can store: the base plus what each warehouse holds at its level."
+  def cap(buildings), do: Data.base()["cap"] + total(buildings, "capacity")
+
+  @doc """
+  Resources with the perHour and cap the city's buildings and tax rate give. Amounts are kept, so settle them
+  first: the new rates only apply from the moment this snapshot is saved.
+  """
+  def recalc(resources, buildings, tax_rate) do
+    rates = rates(buildings, tax_rate)
+    cap = cap(buildings)
+
+    Map.new(resources, fn {name, stock} ->
+      {name, %{stock | "perHour" => Map.get(rates, name, 0), "cap" => cap}}
+    end)
   end
 
   # A number from the building's current level in the data file, 0 when it has none.
   defp stat(b, key), do: (Data.level(b.type, b.level) || %{})[key] || 0
+
+  defp total(buildings, key), do: buildings |> Enum.map(&stat(&1, key)) |> Enum.sum()
 
   defp grow(%{"amount" => amount, "perHour" => per_hour, "cap" => cap} = stock, elapsed) when per_hour > 0 do
     projected = amount + per_hour * elapsed / @hour

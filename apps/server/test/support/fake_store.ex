@@ -26,6 +26,10 @@ defmodule Age3.FakeStore do
   def cancel_build(_player_id, _city_id, "t1", _now_ms), do: :ok
   def cancel_build(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
 
+  @impl true
+  def set_tax(_player_id, "c1", _tax_rate, _now_ms), do: :ok
+  def set_tax(_player_id, _city_id, _tax_rate, _now_ms), do: {:error, "bad_message"}
+
   # task "t1" has under 5 minutes left; "t2" has more
   @impl true
   def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok

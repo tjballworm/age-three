@@ -36,6 +36,10 @@ defmodule Age3.Store do
   @callback speed_up(player_id :: String.t(), city_id :: String.t(), task_id :: String.t(), now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
 
+  @doc "Sets a city's tax rate (0-100). Gold from taxes changes from now on."
+  @callback set_tax(player_id :: String.t(), city_id :: String.t(), tax_rate :: integer, now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
   @doc "Stops a construction that hasn't finished and refunds its whole cost."
   @callback cancel_build(
               player_id :: String.t(),
@@ -129,6 +133,7 @@ defmodule Age3.Store.Pg do
       now = to_datetime(now_ms)
       city_ids = Repo.all(from c in City, where: c.player_id == ^player_id, select: c.id)
       Enum.each(city_ids, &finish_due_in_city(&1, now))
+      Enum.each(city_ids, &refresh_stale(&1, now))
 
       buildings = from(b in Building, order_by: b.slot)
 
@@ -231,6 +236,21 @@ defmodule Age3.Store.Pg do
     end
   end
 
+  @impl true
+  def set_tax(player_id, city_id, tax_rate, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      complete_due(city.id, now)
+      resnapshot(Repo.get!(City, city.id), now, tax_rate: tax_rate)
+    end)
+    |> case do
+      {:ok, _} -> :ok
+      {:error, code} -> {:error, code}
+    end
+  end
+
   defp build_task(city_id, task_id) do
     case Ecto.UUID.cast(task_id) do
       {:ok, id} ->
@@ -292,9 +312,6 @@ defmodule Age3.Store.Pg do
 
     for t <- tasks do
       city = Repo.get!(City, city_id)
-      # never move the snapshot back in time
-      synced_at = Enum.max([city.synced_at, t.ends_at], DateTime)
-      resources = Economy.settle(city.resources, to_ms(city.synced_at), to_ms(synced_at))
 
       Repo.insert!(%Building{city_id: city_id, slot: t.slot, type: t.target_type, level: t.target_level},
         on_conflict: [set: [type: t.target_type, level: t.target_level]],
@@ -302,19 +319,47 @@ defmodule Age3.Store.Pg do
       )
 
       Repo.delete!(t)
-
-      buildings = Repo.all(from b in Building, where: b.city_id == ^city_id)
-
-      Repo.update_all(from(c in City, where: c.id == ^city_id),
-        set: [
-          resources: Economy.with_rates(resources, Economy.rates(buildings, city.tax_rate)),
-          population: Economy.population(buildings),
-          synced_at: synced_at
-        ]
-      )
+      resnapshot(city, t.ends_at)
     end
 
     tasks
+  end
+
+  # Inside a transaction holding the city's lock. Settles the resources up to `at` at the rates the city had
+  # (city is the row as it was before the change), then saves them with the rates, caps and population its
+  # buildings and tax rate give now. `changes` are other City fields to save with it, e.g. tax_rate: 20.
+  defp resnapshot(city, at, changes \\ []) do
+    # never move the snapshot back in time
+    synced_at = Enum.max([city.synced_at, at], DateTime)
+    resources = Economy.settle(city.resources, to_ms(city.synced_at), to_ms(synced_at))
+    tax_rate = Keyword.get(changes, :tax_rate, city.tax_rate)
+    buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+
+    Repo.update_all(from(c in City, where: c.id == ^city.id),
+      set:
+        [
+          resources: Economy.recalc(resources, buildings, tax_rate),
+          population: Economy.population(buildings),
+          synced_at: synced_at
+        ] ++ changes
+    )
+  end
+
+  # A city saved before its rates came from buildings (or before the data file changed) still has the old
+  # rates, caps or population. Gives it the right ones from now on.
+  defp refresh_stale(city_id, now) do
+    city = City |> Repo.get!(city_id) |> Repo.preload(:buildings)
+
+    stale? =
+      Economy.recalc(city.resources, city.buildings, city.tax_rate) != city.resources or
+        Economy.population(city.buildings) != city.population
+
+    if stale? do
+      Repo.transaction(fn ->
+        Repo.one(from c in City, where: c.id == ^city_id, lock: "FOR UPDATE", select: c.id)
+        resnapshot(Repo.get!(City, city_id), now)
+      end)
+    end
   end
 
   defp lock_city(player_id, city_id) do

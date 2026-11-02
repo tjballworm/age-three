@@ -119,6 +119,21 @@ defmodule Age3.SessionTest do
     assert msg =~ "5 minutes"
   end
 
+  test "setTax takes a whole number from 0 to 100" do
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"payload" => %{"code" => "bad_message"}},
+             %{"payload" => %{"code" => "bad_message"}}
+           ] =
+             run([
+               login("secret123"),
+               ~s({"type":"setTax","id":2,"payload":{"cityId":"c1","taxRate":25}}),
+               ~s({"type":"setTax","id":3,"payload":{"cityId":"c1","taxRate":101}}),
+               ~s({"type":"setTax","id":4,"payload":{"cityId":"c1","taxRate":12.5}})
+             ])
+  end
+
   test "commands need a login first" do
     assert [%{"payload" => %{"code" => "not_logged_in"}}] =
              run([~s({"type":"build","id":1,"payload":{"cityId":"c1","slot":0}})])

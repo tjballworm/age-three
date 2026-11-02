@@ -16,6 +16,8 @@ export interface BuildingLevel {
   perHour?: number;
   /** Cottages only: how many people this level houses. */
   population?: number;
+  /** Warehouses only: how much more of each resource the city can store at this level. */
+  capacity?: number;
 }
 
 export interface BuildingSpec {

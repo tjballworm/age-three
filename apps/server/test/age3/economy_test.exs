@@ -70,10 +70,17 @@ defmodule Age3.EconomyTest do
       assert Economy.rates([b("cottage", 2)], 20)["gold"] == 100 + div(pop * 20, 100)
     end
 
-    test "with_rates changes perHour only" do
-      assert Economy.with_rates(%{"food" => stock(5, 1, 9)}, %{"food" => 300}) == %{
-               "food" => stock(5, 300, 9)
-             }
+    test "warehouses raise the cap" do
+      assert Economy.cap([]) == 100_000
+
+      assert Economy.cap([b("warehouse", 1), b("warehouse", 2)]) ==
+               100_000 + Age3.Data.level("warehouse", 1)["capacity"] +
+                 Age3.Data.level("warehouse", 2)["capacity"]
+    end
+
+    test "recalc changes perHour and cap, and keeps amounts" do
+      out = Economy.recalc(%{"food" => stock(5, 1, 9)}, [b("farm", 1)], 10)
+      assert out == %{"food" => stock(5, 100 + Age3.Data.level("farm", 1)["perHour"], 100_000)}
     end
   end
 end

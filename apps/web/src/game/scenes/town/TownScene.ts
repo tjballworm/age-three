@@ -1,6 +1,7 @@
 import { Assets, Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { TOWN_BUILDING_NAME, TOWN_SLOTS, type TownBuilding } from '@age3/core';
 import type { Engine } from '../../engine';
+import { ConstructionMarks } from '../construction';
 import {
   TOWN_ART_NAMES,
   TOWN_GROUND_URL,
@@ -37,6 +38,8 @@ export class TownScene {
   private ground = new Container();
   private buildings = new Container();
   private overlay = new Container();
+  private marks: ConstructionMarks;
+  private building: TownBuilding['slot'][] = [];
   private hoverLabel = new Text({
     text: '',
     style: { fontFamily: 'Arial', fontSize: 15, fontWeight: 'bold', fill: '#ffe9a8', stroke: { color: '#000', width: 4 } },
@@ -65,7 +68,8 @@ export class TownScene {
     this.hoverLabel.anchor.set(0.5, 1);
     this.hoverLabel.visible = false;
     this.overlay.addChild(this.hoverLabel);
-    this.root.addChild(this.ground, this.buildings, this.overlay);
+    this.marks = new ConstructionMarks(engine.app.ticker);
+    this.root.addChild(this.ground, this.buildings, this.marks.root, this.overlay);
     this.root.visible = false;
     engine.layers.world.addChild(this.root);
 
@@ -92,7 +96,14 @@ export class TownScene {
     this.rebuild();
   }
 
+  /** Shows scaffolding on the slots that are being built or upgraded. */
+  setConstruction(slots: TownBuilding['slot'][]) {
+    this.building = slots;
+    this.placeMarks();
+  }
+
   destroy() {
+    this.marks.destroy();
     for (const fn of this.cleanup) fn();
     this.root.destroy({ children: true });
   }
@@ -137,6 +148,18 @@ export class TownScene {
       this.buildings.addChild(node);
       this.sprites.set(b, node);
     }
+    this.placeMarks();
+  }
+
+  private placeMarks() {
+    const wallLevel = this.list.find((b) => b.slot === 'walls')?.level ?? 1;
+    this.marks.set(
+      this.building.map((slot) => {
+        if (slot === 'walls') return [...wallFront(wallLevel), 1];
+        const [x, y] = plotPosition(slot);
+        return [x, y, slot === 'townhall' ? 1.6 : 1];
+      }),
+    );
   }
 
   private artNode(b: TownBuilding) {

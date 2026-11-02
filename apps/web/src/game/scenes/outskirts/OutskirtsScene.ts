@@ -1,6 +1,7 @@
 import { Assets, Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import { FIELD_NAME, FIELD_SLOTS, type Field } from '@age3/core';
 import type { Engine } from '../../engine';
+import { ConstructionMarks } from '../construction';
 import {
   CASTLE_AT,
   OUTSKIRTS_ART_NAMES,
@@ -40,6 +41,7 @@ export class OutskirtsScene {
   private ground = new Container();
   private items = new Container();
   private overlay = new Container();
+  private marks: ConstructionMarks;
   private hoverLabel = new Text({
     text: '',
     style: { fontFamily: 'Arial', fontSize: 15, fontWeight: 'bold', fill: '#ffe9a8', stroke: { color: '#000', width: 4 } },
@@ -68,7 +70,8 @@ export class OutskirtsScene {
     this.hoverLabel.anchor.set(0.5, 1);
     this.hoverLabel.visible = false;
     this.overlay.addChild(this.hoverLabel);
-    this.root.addChild(this.ground, this.items, this.overlay);
+    this.marks = new ConstructionMarks(engine.app.ticker);
+    this.root.addChild(this.ground, this.items, this.marks.root, this.overlay);
     this.root.visible = false;
     engine.layers.world.addChild(this.root);
 
@@ -96,7 +99,13 @@ export class OutskirtsScene {
     this.rebuild();
   }
 
+  /** Shows scaffolding on the field slots that are being built or upgraded. */
+  setConstruction(slots: number[]) {
+    this.marks.set(slots.map((slot) => [...fieldPosition(slot), 1]));
+  }
+
   destroy() {
+    this.marks.destroy();
     for (const fn of this.cleanup) fn();
     this.root.destroy({ children: true });
   }
