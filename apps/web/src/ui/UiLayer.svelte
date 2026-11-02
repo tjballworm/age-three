@@ -4,6 +4,7 @@
   import Hud from './hud/Hud.svelte';
   import LoginScreen from './LoginScreen.svelte';
   import TileHoverCard from './hud/TileHoverCard.svelte';
+  import TooltipLayer from './components/TooltipLayer.svelte';
   import BuildWindow from './windows/BuildWindow.svelte';
   import TileWindow from './windows/TileWindow.svelte';
   import WindowHost from './windows/WindowHost.svelte';
@@ -41,6 +42,7 @@
     {#if game.buildSlot !== null}
       <BuildWindow slot={game.buildSlot} />
     {/if}
+    <TooltipLayer />
     {#if auth.status === 'loggedOut'}
       <LoginScreen />
     {/if}

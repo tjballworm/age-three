@@ -5,7 +5,6 @@
   import Window from '$ui/components/Window.svelte';
   import CityOverview from './CityOverview.svelte';
   import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
-  import ResearchWindow from './ResearchWindow.svelte';
 
   // Title and tabs for every window. Content is filled in as each feature is built.
   const WINDOWS: Record<WindowId, { title: string; tabs: string[] }> = {
@@ -17,7 +16,6 @@
     mail: { title: 'Mail', tabs: ['Inbox', 'Sent', 'Compose'] },
     leaderboard: { title: 'Leaderboard', tabs: ['Player', 'Hero', 'Alliance'] },
     shop: { title: 'Shop', tabs: ['Featured', 'Speed-ups', 'Resources', 'Chests'] },
-    tech: { title: 'Academy · Research', tabs: ['Economy', 'Military'] },
     market: { title: 'Marketplace', tabs: ['Buy', 'Sell', 'My Orders'] },
     events: { title: 'Events', tabs: ['Current', 'Upcoming'] },
     settings: { title: 'Settings', tabs: ['Game', 'Sound', 'Account'] },
@@ -42,8 +40,6 @@
 
     {#if game.openWindow === 'city' && tab === 'Resources'}
       <CityOverview />
-    {:else if game.openWindow === 'tech'}
-      <ResearchWindow group={tab === 'Military' ? 'military' : 'economy'} />
     {:else if game.openWindow === 'leaderboard'}
       <LeaderboardPlaceholder board={tab} />
     {:else}
