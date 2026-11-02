@@ -15,11 +15,26 @@ import {
 
 const MAX_SCALE = 1.6;
 const DRAG_THRESHOLD = 5;
-/** Plot hit area: a diamond this wide and tall round each plot centre. */
-const PLOT_W = 128;
-const PLOT_H = 64;
+/** A plot's whole grass patch: a diamond this wide and tall round its centre. It is the hit area and the hover outline. */
+const PLOT_W = 200;
+const PLOT_H = 100;
+/** The Town Hall's bigger plot. */
+const HALL_W = 320;
+const HALL_H = 160;
 /** How far in from the edge of the wall diamond still counts as the wall (0–1 of the way to the centre). */
 const WALL_BAND = 0.14;
+/** Mouse pointer over an empty plot: a hammer, its head at the top left. */
+const HAMMER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><g transform="translate(1 1)">' +
+    // wooden handle
+    '<path d="M11 11 L27 27" stroke="#2a1a0c" stroke-width="6" stroke-linecap="round"/>' +
+    '<path d="M11 11 L27 27" stroke="#a8743a" stroke-width="3.5" stroke-linecap="round"/>' +
+    // iron head across the handle, with a darker striking face and a highlight
+    '<path d="M19.9 5.8 L14.2 0.1 L0.1 14.2 L5.8 19.9 Z" fill="#b9c2cb" stroke="#2a2a2a" stroke-width="1.5" stroke-linejoin="round"/>' +
+    '<path d="M14.2 0.1 L19.9 5.8 L17.8 7.9 L12.1 2.2 Z" fill="#7d8790" stroke="#2a2a2a" stroke-width="1.2" stroke-linejoin="round"/>' +
+    '<path d="M3 13 L13 3" stroke="#e8edf2" stroke-width="1.2" stroke-linecap="round"/>' +
+    '</g></svg>',
+)}") 11 11, pointer`;
 
 export interface TownSceneEvents {
   /** Pointer is over a building, or `null` when it leaves. */
@@ -38,6 +53,8 @@ export class TownScene {
   private ground = new Container();
   private buildings = new Container();
   private overlay = new Container();
+  /** The glowing outline round the hovered plot; it sits under the buildings. */
+  private hoverMark = new Graphics();
   private marks: ConstructionMarks;
   private building: TownBuilding['slot'][] = [];
   private hoverLabel = new Text({
@@ -49,6 +66,7 @@ export class TownScene {
   private list: TownBuilding[] = [];
   private sprites = new Map<TownBuilding, Container>();
   private hovered: TownBuilding | null = null;
+  private hoveredPlot: number | null = null;
 
   private camX = TOWN_W / 2;
   private camY = TOWN_H / 2;
@@ -69,7 +87,9 @@ export class TownScene {
     this.hoverLabel.visible = false;
     this.overlay.addChild(this.hoverLabel);
     this.marks = new ConstructionMarks(engine.app.ticker);
-    this.root.addChild(this.ground, this.buildings, this.marks.root, this.overlay);
+    this.hoverMark.eventMode = 'none';
+    this.hoverMark.visible = false;
+    this.root.addChild(this.ground, this.hoverMark, this.buildings, this.marks.root, this.overlay);
     this.root.visible = false;
     engine.layers.world.addChild(this.root);
 
@@ -87,7 +107,7 @@ export class TownScene {
     this.active = active;
     this.root.visible = active && this.ready;
     if (active) this.layout();
-    else this.setHover(null);
+    else this.setHover(null, null);
   }
 
   /** Shows a city's buildings. */
@@ -136,6 +156,8 @@ export class TownScene {
   }
 
   private rebuild() {
+    // the hovered building or plot may have changed; the next pointer move marks it again
+    this.setHover(null, null);
     this.buildings.removeChildren().forEach((c) => c.destroy({ children: true }));
     this.sprites.clear();
     for (const b of this.list) {
@@ -238,10 +260,11 @@ export class TownScene {
     for (const b of this.list) {
       if (b.slot === 'walls') continue;
       const [px, py] = plotPosition(b.slot);
-      const w = b.slot === 'townhall' ? PLOT_W * 2.5 : PLOT_W;
-      const h = b.slot === 'townhall' ? PLOT_H * 2.5 : PLOT_H;
-      // the diamond, raised a little so the building itself (not just its base) is the target
-      if (Math.abs(x - px) / (w / 2) + Math.abs(y - (py - h / 4)) / (h / 2) <= 1 && py > bestY) {
+      const w = b.slot === 'townhall' ? HALL_W : PLOT_W;
+      const h = b.slot === 'townhall' ? HALL_H : PLOT_H;
+      // the whole plot diamond, plus the same diamond raised a little so the building itself counts too
+      const inPlot = (lift: number) => Math.abs(x - px) / (w / 2) + Math.abs(y - (py - lift)) / (h / 2) <= 1;
+      if ((inPlot(0) || inPlot(h / 4)) && py > bestY) {
         best = b;
         bestY = py;
       }
@@ -268,13 +291,16 @@ export class TownScene {
     return null;
   }
 
-  private setHover(b: TownBuilding | null) {
-    if (b === this.hovered) return;
+  /** Marks the building or empty plot under the pointer (at most one of the two). */
+  private setHover(b: TownBuilding | null, plot: number | null) {
+    if (b === this.hovered && plot === this.hoveredPlot) return;
     const prev = this.hovered && this.sprites.get(this.hovered)?.children[0];
     if (prev) prev.tint = 0xffffff;
+    if (b !== this.hovered) this.events.hover?.(b);
     this.hovered = b;
-    this.events.hover?.(b);
-    this.engine.app.canvas.style.cursor = b ? 'pointer' : 'grab';
+    this.hoveredPlot = plot;
+    this.engine.app.canvas.style.cursor = b ? 'pointer' : plot !== null ? HAMMER_CURSOR : 'grab';
+    this.drawHoverMark(b && b.slot !== 'walls' ? b.slot : plot);
     if (!b) {
       this.hoverLabel.visible = false;
       return;
@@ -286,6 +312,28 @@ export class TownScene {
     this.hoverLabel.position.set(x, y - (b.slot === 'townhall' ? 150 : b.slot === 'walls' ? 30 : 70));
     this.hoverLabel.scale.set(1 / this.scale);
     this.hoverLabel.visible = true;
+  }
+
+  /** Draws the hover outline round a plot (or the Town Hall's bigger plot), or hides it. */
+  private drawHoverMark(slot: number | 'townhall' | null) {
+    const g = this.hoverMark;
+    g.clear();
+    g.visible = slot !== null;
+    if (slot === null) return;
+    const [x, y] = plotPosition(slot);
+    const d = slot === 'townhall' ? diamond(0, 0, HALL_W, HALL_H) : diamond(0, 0);
+    // a soft wide glow under a crisp pale-gold line, and a faint light wash inside
+    g.poly(d).fill({ color: 0xfff6d8, alpha: 0.16 });
+    g.poly(d).stroke({ width: 10, color: 0xffe9a8, alpha: 0.25, join: 'round' });
+    g.poly(d).stroke({ width: 5, color: 0xffe9a8, alpha: 0.4, join: 'round' });
+    g.poly(d).stroke({ width: 2, color: 0xfff8e0, alpha: 0.95, join: 'round' });
+    g.position.set(x, y);
+  }
+
+  /** What the pointer is over: a building first, otherwise an empty plot. */
+  private hoverAt(sx: number, sy: number) {
+    const b = this.buildingAt(sx, sy);
+    this.setHover(b, b ? null : this.emptyPlotAt(sx, sy));
   }
 
   private bindInput() {
@@ -309,13 +357,13 @@ export class TownScene {
         if (this.drag.moved) {
           this.camX = this.drag.camX - dx / this.scale;
           this.camY = this.drag.camY - dy / this.scale;
-          this.setHover(null);
+          this.setHover(null, null);
           canvas.style.cursor = 'grabbing';
           this.layout();
           return;
         }
       }
-      this.setHover(this.buildingAt(p.x, p.y));
+      this.hoverAt(p.x, p.y);
     };
     const up = (e: PointerEvent) => {
       if (!this.active) return;
@@ -328,7 +376,7 @@ export class TownScene {
       const slot = this.emptyPlotAt(p.x, p.y);
       if (slot !== null) this.events.selectPlot?.(slot);
     };
-    const leave = () => this.setHover(null);
+    const leave = () => this.setHover(null, null);
     const wheel = (e: WheelEvent) => {
       if (!this.active) return;
       e.preventDefault();
@@ -340,7 +388,7 @@ export class TownScene {
       this.camX += before.x - after.x;
       this.camY += before.y - after.y;
       this.layout();
-      this.setHover(null);
+      this.hoverAt(p.x, p.y);
     };
     canvas.addEventListener('pointerdown', down);
     canvas.addEventListener('pointermove', move);
@@ -359,14 +407,14 @@ export class TownScene {
   }
 }
 
-const diamond = (x: number, y: number) => [
+const diamond = (x: number, y: number, w = PLOT_W, h = PLOT_H) => [
   x,
-  y - PLOT_H / 2,
-  x + PLOT_W / 2,
+  y - h / 2,
+  x + w / 2,
   y,
   x,
-  y + PLOT_H / 2,
-  x - PLOT_W / 2,
+  y + h / 2,
+  x - w / 2,
   y,
 ];
 
