@@ -16,4 +16,7 @@ config :age3, Age3Web.Endpoint,
   http: [ip: {0, 0, 0, 0}, port: String.to_integer(System.get_env("PORT", "8080"))],
   server: Application.get_env(:age3, :start_server, true)
 
+# The key for the admin page (/admin). Unset, or shorter than 32 characters, turns the admin page off.
+config :age3, admin_key: System.get_env("ADMIN_KEY")
+
 # DATABASE_URL itself is read in Age3.Repo.init/2, which turns it into connection settings.

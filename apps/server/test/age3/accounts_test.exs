@@ -4,21 +4,15 @@ defmodule Age3.AccountsTest do
 
   @moduletag :db
 
-  import ExUnit.CaptureIO
   alias Age3.Accounts
 
   setup do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Age3.Repo)
   end
 
-  # set_password prints the username and password; keep that out of the test output
-  defp set_password(name, password) do
-    capture_io(fn -> send(self(), Accounts.set_password(name, password)) end)
-  end
-
   test "set_password creates an account that can log in" do
-    set_password("Test Lord", "hunter2hunter2")
-    assert_received :ok
+    assert {:ok, %{username: "Test Lord", password: "hunter2hunter2"}} =
+             Accounts.set_password(" Test Lord ", "hunter2hunter2")
 
     assert {:ok, id} = Accounts.authenticate("Test Lord", "hunter2hunter2")
     assert :error = Accounts.authenticate("Test Lord", "wrong password")
@@ -30,11 +24,11 @@ defmodule Age3.AccountsTest do
   end
 
   test "a new password logs out old tokens" do
-    set_password("Test Lord", "first password")
+    {:ok, _} = Accounts.set_password("Test Lord", "first password")
     {:ok, id} = Accounts.authenticate("Test Lord", "first password")
     token = Accounts.new_token(id)
 
-    set_password("Test Lord", "second password")
+    {:ok, _} = Accounts.set_password("Test Lord", "second password")
     assert :error = Accounts.player_for_token(token)
     assert :error = Accounts.authenticate("Test Lord", "first password")
     assert {:ok, ^id} = Accounts.authenticate("Test Lord", "second password")
@@ -50,8 +44,17 @@ defmodule Age3.AccountsTest do
     assert {:error, _} = Accounts.set_password("Test Lord", "short")
   end
 
-  test "generated passwords are printed" do
-    output = capture_io(fn -> Accounts.set_password("Test Lord") end)
-    assert output =~ ~r/username: Test Lord\npassword: \S{12}\n/
+  test "leaving out the password makes a random one" do
+    assert {:ok, %{password: password}} = Accounts.set_password("Test Lord")
+    assert String.length(password) == 12
+    assert {:ok, _} = Accounts.authenticate("Test Lord", password)
+  end
+
+  test "list shows who can log in" do
+    {:ok, _} = Age3.Store.Pg.find_or_create_player("No Password")
+    {:ok, _} = Accounts.set_password("Has Password", "long enough password")
+    accounts = Accounts.list()
+    assert %{name: "No Password", canLogIn: false} in accounts
+    assert %{name: "Has Password", canLogIn: true} in accounts
   end
 end
