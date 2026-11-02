@@ -28,18 +28,22 @@ defmodule Age3.Game do
 
   defp on_grid?(v, start, step), do: v >= start and rem(v - start, step) == 0
 
-  @doc "A new player's first city starts with these resources: Record<ResourceType, ResourceStock>."
+  @doc """
+  A new player's first city starts with these resources: Record<ResourceType, ResourceStock>. Its Town Hall and
+  walls make nothing, so the rates are the base ones plus taxes at the starting 10%.
+  """
   def starter_resources do
-    stock = fn amount, per_hour -> %{"amount" => amount, "perHour" => per_hour, "cap" => 100_000} end
+    rates = Age3.Economy.rates([], 10)
+    stock = fn name, amount -> %{"amount" => amount, "perHour" => rates[name], "cap" => 100_000} end
 
     %{
-      "gold" => stock.(5_000, 100),
-      "food" => stock.(10_000, 200),
-      "lumber" => stock.(10_000, 200),
-      "stone" => stock.(10_000, 200),
-      "iron" => stock.(5_000, 100)
+      "gold" => stock.("gold", 5_000),
+      "food" => stock.("food", 10_000),
+      "lumber" => stock.("lumber", 10_000),
+      "stone" => stock.("stone", 10_000),
+      "iron" => stock.("iron", 5_000)
     }
   end
 
-  def starter_population, do: %{"current" => 100, "max" => 500, "idle" => 100}
+  def starter_population, do: Age3.Economy.population([])
 end

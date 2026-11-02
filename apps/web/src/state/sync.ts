@@ -1,6 +1,7 @@
 // Keeps the client state in step with the game server. With no server configured (or while it can't be
 // reached) the game keeps showing the sample data, so the client still works on its own.
 
+import type { TimedTask } from '@age3/core';
 import { PROTOCOL_VERSION } from '@age3/protocol';
 import { connect, ServerError, type GameClient, type Request } from '$net/client';
 import { auth, forgetToken, savedToken, saveToken } from './auth.svelte';
@@ -20,6 +21,12 @@ export async function command(message: Request): Promise<void> {
   if (!current) throw new Error('Not connected to the server.');
   const reply = await current.request(message);
   if (reply.type === 'state') applyServerState(reply.payload);
+}
+
+/** Finishes a build for free (it must have 5 minutes or less left) and says so in chat. */
+export async function speedUp(task: TimedTask): Promise<void> {
+  await command({ type: 'speedUp', payload: { cityId: task.cityId, taskId: task.id } });
+  postChat('system', null, `${task.label} complete.`);
 }
 
 /** How long the loading screen waits for the server before showing the sample data instead. */

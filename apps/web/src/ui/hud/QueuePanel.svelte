@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { progress, remaining, type TaskKind } from '@age3/core';
+  import { FREE_SPEEDUP_MS, progress, remaining, type TaskKind, type TimedTask } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { game } from '$state/game.svelte';
+  import { speedUp } from '$state/sync';
   import Icon, { type IconName } from '$ui/components/Icon.svelte';
   import ProgressBar from '$ui/components/ProgressBar.svelte';
   import Tabs from '$ui/components/Tabs.svelte';
@@ -21,6 +22,10 @@
     research: 'research',
     march: 'march',
   };
+
+  /** Server builds with 5 minutes or less left get a free Speedup button. */
+  const canSpeedUp = (t: TimedTask) =>
+    game.fromServer && t.kind === 'build' && remaining(t, clock.now) <= FREE_SPEEDUP_MS;
 
   let filter = $state<Filter>('all');
   let collapsed = $state(false);
@@ -55,6 +60,13 @@
           <span class="ic"><Icon name={ICON[task.kind]} size={14} stroke={2.2} /></span>
           <span class="label">{task.label}</span>
           <span class="time">{formatDuration(remaining(task, clock.now))}</span>
+          {#if canSpeedUp(task)}
+            <button
+              class="speedup"
+              type="button"
+              onclick={() => speedUp(task).catch((e) => console.warn('Speedup failed:', e))}>Speedup</button
+            >
+          {/if}
         </div>
       {:else}
         <div class="empty muted">Nothing in progress</div>
@@ -143,6 +155,17 @@
     font-size: 11px;
     font-variant-numeric: tabular-nums;
     text-shadow: 0 1px 1px #000;
+  }
+  .speedup {
+    position: relative;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 3px;
+    border: 1px solid #c9a227;
+    background: linear-gradient(#f3d36b, #b8860b);
+    color: #2a1c00;
+    font: 800 10px var(--font-display);
+    cursor: pointer;
   }
   .empty {
     padding: 6px 2px;

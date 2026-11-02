@@ -1,5 +1,7 @@
 {
   "maxLevel": 10,
+  "freeSpeedupSeconds": 300,
+  "base": {"perHour": {"food": 100, "lumber": 100, "stone": 100, "iron": 100, "gold": 100}, "population": 100},
   "buildings": {
     "townhall": {
       "name": "Town Hall",
@@ -43,16 +45,16 @@
       "multiple": true,
       "requires": {},
       "levels": [
-        {"cost": {"food": 100, "lumber": 300, "stone": 100, "iron": 50, "gold": 0}, "seconds": 45},
-        {"cost": {"food": 200, "lumber": 600, "stone": 200, "iron": 100, "gold": 0}, "seconds": 90},
-        {"cost": {"food": 400, "lumber": 1200, "stone": 400, "iron": 200, "gold": 0}, "seconds": 180},
-        {"cost": {"food": 800, "lumber": 2400, "stone": 800, "iron": 400, "gold": 0}, "seconds": 360},
-        {"cost": {"food": 1600, "lumber": 4800, "stone": 1600, "iron": 800, "gold": 0}, "seconds": 720},
-        {"cost": {"food": 3200, "lumber": 9600, "stone": 3200, "iron": 1600, "gold": 0}, "seconds": 1440},
-        {"cost": {"food": 6400, "lumber": 19200, "stone": 6400, "iron": 3200, "gold": 0}, "seconds": 2880},
-        {"cost": {"food": 12800, "lumber": 38400, "stone": 12800, "iron": 6400, "gold": 0}, "seconds": 5760},
-        {"cost": {"food": 25600, "lumber": 76800, "stone": 25600, "iron": 12800, "gold": 0}, "seconds": 11520},
-        {"cost": {"food": 51200, "lumber": 153600, "stone": 51200, "iron": 25600, "gold": 0}, "seconds": 23040}
+        {"cost": {"food": 100, "lumber": 300, "stone": 100, "iron": 50, "gold": 0}, "seconds": 45, "population": 100},
+        {"cost": {"food": 200, "lumber": 600, "stone": 200, "iron": 100, "gold": 0}, "seconds": 90, "population": 300},
+        {"cost": {"food": 400, "lumber": 1200, "stone": 400, "iron": 200, "gold": 0}, "seconds": 180, "population": 600},
+        {"cost": {"food": 800, "lumber": 2400, "stone": 800, "iron": 400, "gold": 0}, "seconds": 360, "population": 1000},
+        {"cost": {"food": 1600, "lumber": 4800, "stone": 1600, "iron": 800, "gold": 0}, "seconds": 720, "population": 1500},
+        {"cost": {"food": 3200, "lumber": 9600, "stone": 3200, "iron": 1600, "gold": 0}, "seconds": 1440, "population": 2100},
+        {"cost": {"food": 6400, "lumber": 19200, "stone": 6400, "iron": 3200, "gold": 0}, "seconds": 2880, "population": 2800},
+        {"cost": {"food": 12800, "lumber": 38400, "stone": 12800, "iron": 6400, "gold": 0}, "seconds": 5760, "population": 3600},
+        {"cost": {"food": 25600, "lumber": 76800, "stone": 25600, "iron": 12800, "gold": 0}, "seconds": 11520, "population": 4500},
+        {"cost": {"food": 51200, "lumber": 153600, "stone": 51200, "iron": 25600, "gold": 0}, "seconds": 23040, "population": 5500}
       ]
     },
     "warehouse": {
@@ -293,72 +295,76 @@
       "name": "Farm",
       "area": "field",
       "multiple": true,
+      "resource": "food",
       "requires": {},
       "levels": [
-        {"cost": {"food": 50, "lumber": 300, "stone": 150, "iron": 50, "gold": 0}, "seconds": 30},
-        {"cost": {"food": 100, "lumber": 600, "stone": 300, "iron": 100, "gold": 0}, "seconds": 60},
-        {"cost": {"food": 200, "lumber": 1200, "stone": 600, "iron": 200, "gold": 0}, "seconds": 120},
-        {"cost": {"food": 400, "lumber": 2400, "stone": 1200, "iron": 400, "gold": 0}, "seconds": 240},
-        {"cost": {"food": 800, "lumber": 4800, "stone": 2400, "iron": 800, "gold": 0}, "seconds": 480},
-        {"cost": {"food": 1600, "lumber": 9600, "stone": 4800, "iron": 1600, "gold": 0}, "seconds": 960},
-        {"cost": {"food": 3200, "lumber": 19200, "stone": 9600, "iron": 3200, "gold": 0}, "seconds": 1920},
-        {"cost": {"food": 6400, "lumber": 38400, "stone": 19200, "iron": 6400, "gold": 0}, "seconds": 3840},
-        {"cost": {"food": 12800, "lumber": 76800, "stone": 38400, "iron": 12800, "gold": 0}, "seconds": 7680},
-        {"cost": {"food": 25600, "lumber": 153600, "stone": 76800, "iron": 25600, "gold": 0}, "seconds": 15360}
+        {"cost": {"food": 50, "lumber": 300, "stone": 150, "iron": 50, "gold": 0}, "seconds": 30, "perHour": 100},
+        {"cost": {"food": 100, "lumber": 600, "stone": 300, "iron": 100, "gold": 0}, "seconds": 60, "perHour": 300},
+        {"cost": {"food": 200, "lumber": 1200, "stone": 600, "iron": 200, "gold": 0}, "seconds": 120, "perHour": 600},
+        {"cost": {"food": 400, "lumber": 2400, "stone": 1200, "iron": 400, "gold": 0}, "seconds": 240, "perHour": 1000},
+        {"cost": {"food": 800, "lumber": 4800, "stone": 2400, "iron": 800, "gold": 0}, "seconds": 480, "perHour": 1500},
+        {"cost": {"food": 1600, "lumber": 9600, "stone": 4800, "iron": 1600, "gold": 0}, "seconds": 960, "perHour": 2100},
+        {"cost": {"food": 3200, "lumber": 19200, "stone": 9600, "iron": 3200, "gold": 0}, "seconds": 1920, "perHour": 2800},
+        {"cost": {"food": 6400, "lumber": 38400, "stone": 19200, "iron": 6400, "gold": 0}, "seconds": 3840, "perHour": 3600},
+        {"cost": {"food": 12800, "lumber": 76800, "stone": 38400, "iron": 12800, "gold": 0}, "seconds": 7680, "perHour": 4500},
+        {"cost": {"food": 25600, "lumber": 153600, "stone": 76800, "iron": 25600, "gold": 0}, "seconds": 15360, "perHour": 5500}
       ]
     },
     "sawmill": {
       "name": "Sawmill",
       "area": "field",
       "multiple": true,
+      "resource": "lumber",
       "requires": {},
       "levels": [
-        {"cost": {"food": 100, "lumber": 100, "stone": 300, "iron": 100, "gold": 0}, "seconds": 30},
-        {"cost": {"food": 200, "lumber": 200, "stone": 600, "iron": 200, "gold": 0}, "seconds": 60},
-        {"cost": {"food": 400, "lumber": 400, "stone": 1200, "iron": 400, "gold": 0}, "seconds": 120},
-        {"cost": {"food": 800, "lumber": 800, "stone": 2400, "iron": 800, "gold": 0}, "seconds": 240},
-        {"cost": {"food": 1600, "lumber": 1600, "stone": 4800, "iron": 1600, "gold": 0}, "seconds": 480},
-        {"cost": {"food": 3200, "lumber": 3200, "stone": 9600, "iron": 3200, "gold": 0}, "seconds": 960},
-        {"cost": {"food": 6400, "lumber": 6400, "stone": 19200, "iron": 6400, "gold": 0}, "seconds": 1920},
-        {"cost": {"food": 12800, "lumber": 12800, "stone": 38400, "iron": 12800, "gold": 0}, "seconds": 3840},
-        {"cost": {"food": 25600, "lumber": 25600, "stone": 76800, "iron": 25600, "gold": 0}, "seconds": 7680},
-        {"cost": {"food": 51200, "lumber": 51200, "stone": 153600, "iron": 51200, "gold": 0}, "seconds": 15360}
+        {"cost": {"food": 100, "lumber": 100, "stone": 300, "iron": 100, "gold": 0}, "seconds": 30, "perHour": 100},
+        {"cost": {"food": 200, "lumber": 200, "stone": 600, "iron": 200, "gold": 0}, "seconds": 60, "perHour": 300},
+        {"cost": {"food": 400, "lumber": 400, "stone": 1200, "iron": 400, "gold": 0}, "seconds": 120, "perHour": 600},
+        {"cost": {"food": 800, "lumber": 800, "stone": 2400, "iron": 800, "gold": 0}, "seconds": 240, "perHour": 1000},
+        {"cost": {"food": 1600, "lumber": 1600, "stone": 4800, "iron": 1600, "gold": 0}, "seconds": 480, "perHour": 1500},
+        {"cost": {"food": 3200, "lumber": 3200, "stone": 9600, "iron": 3200, "gold": 0}, "seconds": 960, "perHour": 2100},
+        {"cost": {"food": 6400, "lumber": 6400, "stone": 19200, "iron": 6400, "gold": 0}, "seconds": 1920, "perHour": 2800},
+        {"cost": {"food": 12800, "lumber": 12800, "stone": 38400, "iron": 12800, "gold": 0}, "seconds": 3840, "perHour": 3600},
+        {"cost": {"food": 25600, "lumber": 25600, "stone": 76800, "iron": 25600, "gold": 0}, "seconds": 7680, "perHour": 4500},
+        {"cost": {"food": 51200, "lumber": 51200, "stone": 153600, "iron": 51200, "gold": 0}, "seconds": 15360, "perHour": 5500}
       ]
     },
     "quarry": {
       "name": "Quarry",
       "area": "field",
       "multiple": true,
+      "resource": "stone",
       "requires": {},
       "levels": [
-        {"cost": {"food": 150, "lumber": 300, "stone": 100, "iron": 150, "gold": 0}, "seconds": 30},
-        {"cost": {"food": 300, "lumber": 600, "stone": 200, "iron": 300, "gold": 0}, "seconds": 60},
-        {"cost": {"food": 600, "lumber": 1200, "stone": 400, "iron": 600, "gold": 0}, "seconds": 120},
-        {"cost": {"food": 1200, "lumber": 2400, "stone": 800, "iron": 1200, "gold": 0}, "seconds": 240},
-        {"cost": {"food": 2400, "lumber": 4800, "stone": 1600, "iron": 2400, "gold": 0}, "seconds": 480},
-        {"cost": {"food": 4800, "lumber": 9600, "stone": 3200, "iron": 4800, "gold": 0}, "seconds": 960},
-        {"cost": {"food": 9600, "lumber": 19200, "stone": 6400, "iron": 9600, "gold": 0}, "seconds": 1920},
-        {"cost": {"food": 19200, "lumber": 38400, "stone": 12800, "iron": 19200, "gold": 0}, "seconds": 3840},
-        {"cost": {"food": 38400, "lumber": 76800, "stone": 25600, "iron": 38400, "gold": 0}, "seconds": 7680},
-        {"cost": {"food": 76800, "lumber": 153600, "stone": 51200, "iron": 76800, "gold": 0}, "seconds": 15360}
+        {"cost": {"food": 150, "lumber": 300, "stone": 100, "iron": 150, "gold": 0}, "seconds": 30, "perHour": 100},
+        {"cost": {"food": 300, "lumber": 600, "stone": 200, "iron": 300, "gold": 0}, "seconds": 60, "perHour": 300},
+        {"cost": {"food": 600, "lumber": 1200, "stone": 400, "iron": 600, "gold": 0}, "seconds": 120, "perHour": 600},
+        {"cost": {"food": 1200, "lumber": 2400, "stone": 800, "iron": 1200, "gold": 0}, "seconds": 240, "perHour": 1000},
+        {"cost": {"food": 2400, "lumber": 4800, "stone": 1600, "iron": 2400, "gold": 0}, "seconds": 480, "perHour": 1500},
+        {"cost": {"food": 4800, "lumber": 9600, "stone": 3200, "iron": 4800, "gold": 0}, "seconds": 960, "perHour": 2100},
+        {"cost": {"food": 9600, "lumber": 19200, "stone": 6400, "iron": 9600, "gold": 0}, "seconds": 1920, "perHour": 2800},
+        {"cost": {"food": 19200, "lumber": 38400, "stone": 12800, "iron": 19200, "gold": 0}, "seconds": 3840, "perHour": 3600},
+        {"cost": {"food": 38400, "lumber": 76800, "stone": 25600, "iron": 38400, "gold": 0}, "seconds": 7680, "perHour": 4500},
+        {"cost": {"food": 76800, "lumber": 153600, "stone": 51200, "iron": 76800, "gold": 0}, "seconds": 15360, "perHour": 5500}
       ]
     },
     "ironmine": {
       "name": "Iron Mine",
       "area": "field",
       "multiple": true,
+      "resource": "iron",
       "requires": {},
       "levels": [
-        {"cost": {"food": 200, "lumber": 400, "stone": 300, "iron": 50, "gold": 0}, "seconds": 40},
-        {"cost": {"food": 400, "lumber": 800, "stone": 600, "iron": 100, "gold": 0}, "seconds": 80},
-        {"cost": {"food": 800, "lumber": 1600, "stone": 1200, "iron": 200, "gold": 0}, "seconds": 160},
-        {"cost": {"food": 1600, "lumber": 3200, "stone": 2400, "iron": 400, "gold": 0}, "seconds": 320},
-        {"cost": {"food": 3200, "lumber": 6400, "stone": 4800, "iron": 800, "gold": 0}, "seconds": 640},
-        {"cost": {"food": 6400, "lumber": 12800, "stone": 9600, "iron": 1600, "gold": 0}, "seconds": 1280},
-        {"cost": {"food": 12800, "lumber": 25600, "stone": 19200, "iron": 3200, "gold": 0}, "seconds": 2560},
-        {"cost": {"food": 25600, "lumber": 51200, "stone": 38400, "iron": 6400, "gold": 0}, "seconds": 5120},
-        {"cost": {"food": 51200, "lumber": 102400, "stone": 76800, "iron": 12800, "gold": 0}, "seconds": 10240},
-        {"cost": {"food": 102400, "lumber": 204800, "stone": 153600, "iron": 25600, "gold": 0}, "seconds": 20480}
+        {"cost": {"food": 200, "lumber": 400, "stone": 300, "iron": 50, "gold": 0}, "seconds": 40, "perHour": 100},
+        {"cost": {"food": 400, "lumber": 800, "stone": 600, "iron": 100, "gold": 0}, "seconds": 80, "perHour": 300},
+        {"cost": {"food": 800, "lumber": 1600, "stone": 1200, "iron": 200, "gold": 0}, "seconds": 160, "perHour": 600},
+        {"cost": {"food": 1600, "lumber": 3200, "stone": 2400, "iron": 400, "gold": 0}, "seconds": 320, "perHour": 1000},
+        {"cost": {"food": 3200, "lumber": 6400, "stone": 4800, "iron": 800, "gold": 0}, "seconds": 640, "perHour": 1500},
+        {"cost": {"food": 6400, "lumber": 12800, "stone": 9600, "iron": 1600, "gold": 0}, "seconds": 1280, "perHour": 2100},
+        {"cost": {"food": 12800, "lumber": 25600, "stone": 19200, "iron": 3200, "gold": 0}, "seconds": 2560, "perHour": 2800},
+        {"cost": {"food": 25600, "lumber": 51200, "stone": 38400, "iron": 6400, "gold": 0}, "seconds": 5120, "perHour": 3600},
+        {"cost": {"food": 51200, "lumber": 102400, "stone": 76800, "iron": 12800, "gold": 0}, "seconds": 10240, "perHour": 4500},
+        {"cost": {"food": 102400, "lumber": 204800, "stone": 153600, "iron": 25600, "gold": 0}, "seconds": 20480, "perHour": 5500}
       ]
     }
   }
