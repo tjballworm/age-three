@@ -34,13 +34,19 @@ defmodule Age3.BuildTest do
     assert {:error, "max_level"} = Build.check(town, rich(), "townhall", nil)
   end
 
-  test "checks what a building needs first, and one-per-city limits" do
+  test "checks what each level needs first, and one-per-city limits" do
     assert {:error, "requirement_not_met"} = Build.check(@town, rich(), "0", "barracks")
     with_rally = [%{slot: "1", type: "rallyspot", level: 1} | @town]
     assert {:ok, _} = Build.check(with_rally, rich(), "0", "barracks")
     assert {:error, "requirement_not_met"} = Build.check(with_rally, rich(), "0", "rallyspot")
     # cottages may repeat
     assert {:ok, _} = Build.check([%{slot: "1", type: "cottage", level: 1} | @town], rich(), "0", "cottage")
+    # upgrades have needs too: Town Hall Lv3 needs walls Lv1
+    th2 = [%{slot: "townhall", type: "townhall", level: 2}]
+    assert {:error, "requirement_not_met"} = Build.check(th2, rich(), "townhall", nil)
+
+    assert {:ok, %{level: 3}} =
+             Build.check([%{slot: "walls", type: "walls", level: 1} | th2], rich(), "townhall", nil)
   end
 
   test "each kind of building goes in its own place" do

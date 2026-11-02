@@ -1,6 +1,7 @@
 // Building costs, build times and requirements, from buildings.json. The game server reads its own copy of
 // that file (apps/server/priv/data/buildings.json), so the build window shows exactly what the server charges.
-// The numbers are placeholders (Lv1 values doubling each level) until we have the real Age II table.
+// The numbers come from the Evony Age II wiki (evony.fandom.com), with a few wiki typos fixed to their table's
+// doubling pattern. Town Hall Lv1 has no wiki cost (every city starts with one), so it keeps the old placeholder.
 
 import type { FieldType, ResourceType, TownBuildingType } from '../types';
 import data from './buildings.json';
@@ -10,6 +11,8 @@ export type BuildingType = TownBuildingType | FieldType;
 export interface BuildingLevel {
   /** Resources spent to build or upgrade to this level. */
   cost: Record<ResourceType, number>;
+  /** Other buildings, and their levels, needed before building or upgrading to this level. */
+  requires?: Partial<Record<BuildingType, number>>;
   /** Build time at normal speed. */
   seconds: number;
   /** Fields only: how much of their resource this level makes each hour. */
@@ -29,8 +32,6 @@ export interface BuildingSpec {
   resource?: ResourceType;
   /** False when a city may have only one. */
   multiple: boolean;
-  /** Other buildings, and their levels, needed before building Lv1. */
-  requires: Partial<Record<BuildingType, number>>;
   /** levels[0] is Lv1. */
   levels: BuildingLevel[];
 }
