@@ -15,7 +15,7 @@
     type TechId,
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
-  import { currentCity, game, openBuild, openTrain, type BuildSlot } from '$state/game.svelte';
+  import { currentCity, game, openBuild, type BuildSlot } from '$state/game.svelte';
   import { command, speedUp } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
   import Icon from '$ui/components/Icon.svelte';
@@ -24,6 +24,7 @@
   import { formatDuration, formatNumber } from '$ui/format';
   import { tooltip } from '$ui/tooltip.svelte';
   import ResearchPanel from './ResearchPanel.svelte';
+  import TrainPanel, { recruitWindow } from './TrainPanel.svelte';
 
   // Build on an empty plot or field, or upgrade the building that stands there. The checks here only grey out
   // buttons and explain why; the server makes the real decision and its error is shown if it refuses.
@@ -125,9 +126,19 @@
           ? 'Empty field'
           : 'Empty plot',
   );
-  const close = () => openBuild(null);
-  /** The Academy gets one window with its upgrade on top and all its research below. */
-  const isAcademy = $derived(standing?.type === 'academy');
+  /** The Academy and the Barracks get one window: the building and its Upgrade on top, what it does below. */
+  const panel = $derived(
+    standing?.type === 'academy' || standing?.type === 'barracks' ? standing.type : null,
+  );
+  /** Escape or ✕ closes the Barracks' Recruit window first, if it is open. */
+  const close = () => (recruitWindow.troop ? (recruitWindow.troop = null) : openBuild(null));
+  const HEAD = {
+    academy: { icon: 'research', text: '' },
+    barracks: {
+      icon: 'train',
+      text: 'Soldier training and dismissal are conducted in the Barracks; the higher its level, the more advanced army branches can be trained.',
+    },
+  } as const;
 </script>
 
 {#snippet costLine(type: BuildingType, level: number)}
@@ -142,25 +153,27 @@
   {/if}
 {/snippet}
 
-<Window {title} width={isAcademy ? 900 : 620} height={isAcademy ? 600 : 440} onclose={close}>
-  {#if isAcademy && standing}
+<Window {title} width={panel ? 900 : 620} height={panel ? 640 : 440} onclose={close}>
+  {#if panel && standing}
     {@const next = options[0]!}
     {@const why = blocker(next.type, next.level) ?? (queueBusy ? 'Already building in this city' : null)}
     {#snippet upgradeTip()}
-      <b class="tip-title">Academy → Lv {next.level}</b>
+      <b class="tip-title">{BUILDINGS[panel].name} → Lv {next.level}</b>
       {@render costLine(next.type, next.level)}
       {#if why}<span class="tip-why">{why}</span>{/if}
     {/snippet}
     <div class="body academy">
       <div class="head">
-        <div class="badge"><Icon name="research" size={40} /></div>
+        <div class="badge"><Icon name={HEAD[panel].icon} size={40} /></div>
         <div class="name">
-          <b>Academy</b>
+          <b>{BUILDINGS[panel].name}</b>
           <span
             >Level <em>{standing.level}</em>{standing.level >= MAX_BUILDING_LEVEL ? ' · Max Level' : ''}</span
           >
           {#if building}
             <span>{building.label} · {formatDuration(remaining(building, clock.now))} left</span>
+          {:else if HEAD[panel].text}
+            <span class="desc">{HEAD[panel].text}</span>
           {/if}
         </div>
         {#if building}
@@ -181,7 +194,11 @@
         {/if}
       </div>
       {#if error}<p class="error" role="alert">{error}</p>{/if}
-      <ResearchPanel />
+      {#if panel === 'academy'}
+        <ResearchPanel />
+      {:else if typeof slot === 'number'}
+        <TrainPanel plot={slot} />
+      {/if}
     </div>
   {:else}
     <div class="body">
@@ -221,16 +238,6 @@
             </Button>
           </div>
         {/each}
-      {/if}
-
-      {#if standing?.type === 'barracks' && typeof slot === 'number'}
-        <div class="row">
-          <div class="what">
-            <b>Train troops</b>
-            <span>Recruit workers, infantry, cavalry and siege engines from your idle population.</span>
-          </div>
-          <Button onclick={() => openTrain(slot as number)}>Open</Button>
-        </div>
       {/if}
 
       {#if error}<p class="error" role="alert">{error}</p>{/if}
@@ -308,9 +315,12 @@
     font-weight: 700;
   }
   .body.academy {
-    display: grid;
-    grid-template-rows: auto auto 1fr;
     overflow: hidden;
+  }
+  /* the research or training panel fills the rest */
+  .body.academy > :global(:last-child) {
+    flex: 1;
+    min-height: 0;
   }
   .head {
     display: flex;
@@ -341,6 +351,9 @@
   }
   .name b {
     font: 800 18px var(--font-display);
+  }
+  .name .desc {
+    color: var(--navy-mid);
   }
   .name em {
     font-style: normal;

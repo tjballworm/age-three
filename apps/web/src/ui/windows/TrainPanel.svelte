@@ -1,6 +1,9 @@
 <script lang="ts" module>
+  import type { TroopType as Troop } from '@age3/core';
   // The two checkboxes stay as the player left them while the game is open, for every Barracks.
   const options = $state({ split: false, idleOnly: false });
+  /** The troop whose Recruit window is open. The Barracks window closes it first on Escape or ✕. */
+  export const recruitWindow = $state({ troop: null as Troop | null });
 </script>
 
 <script lang="ts">
@@ -24,23 +27,21 @@
     type TroopType,
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
-  import { closeWindow, currentCity, game, openBuild, openTrain } from '$state/game.svelte';
+  import { currentCity, game, openBuild } from '$state/game.svelte';
   import { command, speedUp } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
   import Window from '$ui/components/Window.svelte';
   import { formatDuration, formatNumber } from '$ui/format';
 
-  // The Barracks window, laid out like the original: description and Upgrade on top, this Barracks' queue on the
-  // left, every troop on the right, arrows at the bottom to step through the city's Barracks. Recruit opens the
-  // troop's own window (stats, requirements, how many, the two split options). As elsewhere, the checks here only
-  // grey out buttons and explain why; the server decides.
+  // The training half of the Barracks window (the build window puts the Barracks and its Upgrade on top, as for
+  // the Academy): this Barracks' queue on the left, every troop on the right, arrows to step through the city's
+  // Barracks. Recruit opens the troop's own window (stats, requirements, how many, the two split options). As
+  // elsewhere, the checks here only grey out buttons and explain why; the server decides.
+  let { plot }: { plot: number } = $props();
 
   /** One batch can't be bigger than this, whatever the resources (the server's limit too). */
   const MAX_COUNT = 1_000_000;
-
-  const DESCRIPTION =
-    'Soldier training and dismissal are conducted in the Barracks; the higher its level, the more advanced army branches can be trained.';
 
   /** Troop descriptions for the Recruit window. None written yet. */
   const TROOP_DESCRIPTION: Partial<Record<TroopType, string>> = {};
@@ -62,7 +63,7 @@
       .filter((b): b is Barracks => b.type === 'barracks' && typeof b.slot === 'number')
       .sort((a, b) => a.slot - b.slot),
   );
-  const index = $derived(allBarracks.findIndex((b) => b.slot === game.trainSlot));
+  const index = $derived(allBarracks.findIndex((b) => b.slot === plot));
   const barracks = $derived(allBarracks[index]);
 
   const academy = $derived(
@@ -86,7 +87,7 @@
 
   function step(by: number) {
     const n = allBarracks.length;
-    if (n > 1) openTrain(allBarracks[(index + by + n) % n]!.slot);
+    if (n > 1) openBuild(allBarracks[(index + by + n) % n]!.slot);
   }
 
   /** Why this troop can't be trained in this Barracks, or null. Shown as the 🚫 on its card. */
@@ -134,14 +135,14 @@
 
   // ---------- the Recruit window ----------
 
-  let recruiting = $state<TroopType | null>(null);
+  const recruiting = $derived(recruitWindow.troop);
   let count = $state(0);
   const n = $derived(Math.max(0, Math.floor(count || 0)));
   const where = $derived(recruiting ? targets(recruiting) : []);
   const split = $derived(shares(n, where.length));
 
   function recruit(troop: TroopType) {
-    recruiting = troop;
+    recruitWindow.troop = troop;
     count = 0;
     error = '';
   }
@@ -221,7 +222,7 @@
       const orders = where.map((b, i) => ({ slot: b.slot, count: split[i] ?? 0 })).filter((o) => o.count > 0);
       for (const o of orders)
         await command({ type: 'train', payload: { cityId: city.id, slot: o.slot, troop, count: o.count } });
-      recruiting = null;
+      recruitWindow.troop = null;
     });
   const cancel = (taskId: string) =>
     send(() => command({ type: 'cancelTrain', payload: { cityId: city.id, taskId } }));
@@ -237,107 +238,90 @@
     });
   }
 
-  // Escape or the close button on the Barracks closes the Recruit window first, if it is open
-  const close = () => (recruiting ? (recruiting = null) : closeWindow());
+  const closeRecruit = () => (recruitWindow.troop = null);
 
-  const title = $derived(barracks ? `Barracks · Lv ${barracks.level}` : 'Barracks');
+  /**
+   * Shows the Recruit window over the whole screen rather than inside the Barracks window's scrolling content:
+   * moves it next to the Barracks window's own backdrop.
+   */
+  function overlay(node: HTMLElement) {
+    node.closest('.scrim')?.parentElement?.appendChild(node);
+  }
 </script>
 
-<Window {title} width={860} height={600} onclose={close}>
-  {#if !barracks}
-    <p class="note pad">Open a Barracks in the town to train troops there.</p>
-  {:else}
-    <div class="page">
-      <div class="top">
-        <div class="art" aria-hidden="true">⚔</div>
-        <p class="desc">{DESCRIPTION}</p>
-        <Button onclick={() => openBuild(barracks.slot)}>Upgrade</Button>
+{#if barracks}
+  <div class="cols">
+    <aside class="left">
+      <p class="line">
+        Estimated time:
+        <b>{queue.length ? formatDuration(remaining(queue[queue.length - 1]!, clock.now)) : '00s'}</b>
+      </p>
+
+      <div class="caption">Training</div>
+      {#if current}
+        {@const left = remaining(current, clock.now)}
+        <div class="card busy">
+          <div class="grow">
+            <b>{current.label}</b>
+            <span>{formatDuration(left)} left</span>
+          </div>
+          {#if game.fromServer && left <= FREE_SPEEDUP_MS}
+            <Button small disabled={sending} onclick={() => send(() => speedUp(current))}>Speedup</Button>
+          {/if}
+          <Button small variant="red" disabled={sending} onclick={() => cancel(current.id)}>Cancel</Button>
+        </div>
+      {:else}
+        <span class="muted">Nothing. Recruit a troop on the right.</span>
+      {/if}
+
+      <div class="caption">Waiting: {waiting.length}/{barracks.level}</div>
+      <div class="waiting">
+        {#each waiting as task (task.id)}
+          <div class="card">
+            <div class="grow">
+              <b>{task.label}</b>
+              <span>Done in {formatDuration(remaining(task, clock.now))}</span>
+            </div>
+            <Button small variant="red" disabled={sending} onclick={() => cancel(task.id)}>Cancel</Button>
+          </div>
+        {/each}
       </div>
 
-      <div class="cols">
-        <aside class="left">
-          <p class="line">
-            Estimated time:
-            <b>{queue.length ? formatDuration(remaining(queue[queue.length - 1]!, clock.now)) : '00s'}</b>
-          </p>
+      {#if allTraining.length > 0}
+        <Button small variant="red" disabled={sending} onclick={cancelAll}>Cancel all Barracks queues</Button>
+      {/if}
+      {#if error && !recruiting}<p class="error" role="alert">{error}</p>{/if}
+      {#if allBarracks.length > 1}
+        <div class="pager">
+          <button type="button" onclick={() => step(-1)} aria-label="Previous Barracks">◀</button>
+          <span>Barracks {index + 1}/{allBarracks.length}</span>
+          <button type="button" onclick={() => step(1)} aria-label="Next Barracks">▶</button>
+        </div>
+      {/if}
+    </aside>
 
-          <div class="caption">Training</div>
-          {#if current}
-            {@const left = remaining(current, clock.now)}
-            <div class="card busy">
-              <div class="grow">
-                <b>{current.label}</b>
-                <span>{formatDuration(left)} left</span>
-              </div>
-              {#if game.fromServer && left <= FREE_SPEEDUP_MS}
-                <Button small disabled={sending} onclick={() => send(() => speedUp(current))}>Speedup</Button>
-              {/if}
-              <Button small variant="red" disabled={sending} onclick={() => cancel(current.id)}>Cancel</Button
+    <section class="grid">
+      {#each TROOPS as troop (troop)}
+        {@const lock = locked(troop)}
+        <div class="troop" class:locked={lock !== null} title={lock ?? ''}>
+          <div class="tname">{TROOP_DATA[troop].name}</div>
+          <div class="tbody">
+            <div class="portrait" aria-hidden="true">
+              {TROOP_DATA[troop].name.slice(0, 1)}
+              {#if lock}<span class="no">🚫</span>{/if}
+            </div>
+            <div class="side">
+              <span class="have">{formatNumber(city.troops?.[troop] ?? 0)}</span>
+              <button type="button" class="recruit" class:grey={lock !== null} onclick={() => recruit(troop)}
+                >Recruit</button
               >
             </div>
-          {:else}
-            <span class="muted">Nothing. Recruit a troop on the right.</span>
-          {/if}
-
-          <div class="caption">Waiting: {waiting.length}/{barracks.level}</div>
-          <div class="waiting">
-            {#each waiting as task (task.id)}
-              <div class="card">
-                <div class="grow">
-                  <b>{task.label}</b>
-                  <span>Done in {formatDuration(remaining(task, clock.now))}</span>
-                </div>
-                <Button small variant="red" disabled={sending} onclick={() => cancel(task.id)}>Cancel</Button>
-              </div>
-            {/each}
           </div>
-
-          {#if allTraining.length > 0}
-            <Button small variant="red" disabled={sending} onclick={cancelAll}
-              >Cancel all Barracks queues</Button
-            >
-          {/if}
-          {#if error && !recruiting}<p class="error" role="alert">{error}</p>{/if}
-        </aside>
-
-        <section class="grid">
-          {#each TROOPS as troop (troop)}
-            {@const lock = locked(troop)}
-            <div class="troop" class:locked={lock !== null} title={lock ?? ''}>
-              <div class="tname">{TROOP_DATA[troop].name}</div>
-              <div class="tbody">
-                <div class="portrait" aria-hidden="true">
-                  {TROOP_DATA[troop].name.slice(0, 1)}
-                  {#if lock}<span class="no">🚫</span>{/if}
-                </div>
-                <div class="side">
-                  <span class="have">{formatNumber(city.troops?.[troop] ?? 0)}</span>
-                  <button
-                    type="button"
-                    class="recruit"
-                    class:grey={lock !== null}
-                    onclick={() => recruit(troop)}>Recruit</button
-                  >
-                </div>
-              </div>
-            </div>
-          {/each}
-        </section>
-      </div>
-    </div>
-  {/if}
-
-  {#snippet footer()}
-    <div class="pager">
-      {#if allBarracks.length > 1}
-        <button type="button" onclick={() => step(-1)} aria-label="Previous Barracks">◀</button>
-        <span>{index + 1}/{allBarracks.length}</span>
-        <button type="button" onclick={() => step(1)} aria-label="Next Barracks">▶</button>
-      {/if}
-    </div>
-    <Button variant="dark" onclick={closeWindow}>Close</Button>
-  {/snippet}
-</Window>
+        </div>
+      {/each}
+    </section>
+  </div>
+{/if}
 
 {#if recruiting && barracks}
   {@const troop = recruiting}
@@ -345,93 +329,97 @@
   {@const stats = TROOP_STATS[troop]}
   {@const why = blocker(troop)}
   {@const longest = split.length ? Math.max(...split) : Math.max(n, 1)}
-  <Window title={spec.name} width={500} height={640} onclose={() => (recruiting = null)}>
-    <div class="recruit-body">
-      <div class="top">
-        <div class="art small" aria-hidden="true">{spec.name.slice(0, 1)}</div>
-        <p class="desc">{TROOP_DESCRIPTION[troop] ?? ''}</p>
+  <div class="overlay" use:overlay>
+    <Window title={spec.name} width={500} height={640} onclose={closeRecruit}>
+      <div class="recruit-body">
+        <div class="top">
+          <div class="art small" aria-hidden="true">{spec.name.slice(0, 1)}</div>
+          <p class="desc">{TROOP_DESCRIPTION[troop] ?? ''}</p>
+        </div>
+
+        <div class="stats">
+          <span>Attack: <b>{stats.attack}</b></span>
+          <span>Defence: <b>{stats.defence}</b></span>
+          <span>Range: <b>{formatNumber(stats.range)}</b></span>
+          <span>Speed: <b>{formatNumber(stats.speed)}</b></span>
+          <span>Load: <b>{formatNumber(spec.load)}</b></span>
+          <span>Life: <b>{formatNumber(stats.life)}</b></span>
+          <span>Food: <b>{spec.upkeep}/h</b></span>
+          <span>Population: <b>{spec.population}</b></span>
+        </div>
+
+        <table>
+          <thead><tr><th>Requirement</th><th>Needed</th><th>You own</th></tr></thead>
+          <tbody>
+            {#each requirements(troop) as row (row.name)}
+              <tr class:short={row.short}>
+                <td>{row.name}</td>
+                <td>{row.needed}</td>
+                <td>{row.own}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+
+        <div class="form">
+          <div class="fld">You own <output>{formatNumber(city.troops?.[troop] ?? 0)}</output></div>
+          <div class="fld">
+            Train
+            <input
+              type="number"
+              min="0"
+              step="1"
+              placeholder="0"
+              bind:value={count}
+              aria-label="How many to train"
+            />
+          </div>
+          <div class="fld">
+            Maximum
+            <button
+              type="button"
+              class="max"
+              title="Train the most you can"
+              disabled={!game.fromServer}
+              onclick={() => (count = most(troop))}>{formatNumber(most(troop))}</button
+            >
+          </div>
+          <div class="fld">
+            Duration <output>{formatDuration(trainSeconds(troop, longest, research) * 1000)}</output>
+          </div>
+        </div>
+
+        <label class="check"
+          ><input type="checkbox" bind:checked={options.split} /> Split production to all Barracks</label
+        >
+        <label class="check"
+          ><input type="checkbox" bind:checked={options.idleOnly} /> Share production with idle Barracks only</label
+        >
+        {#if split.length > 1}
+          <span class="muted">{split.map(formatNumber).join(' / ')} over {split.length} Barracks</span>
+        {:else if where.length === 1 && where[0]!.slot !== barracks.slot}
+          <span class="muted">Goes to Barracks {allBarracks.indexOf(where[0]!) + 1}</span>
+        {/if}
+
+        {#if why}<p class="error">{why}</p>{/if}
+        {#if error}<p class="error" role="alert">{error}</p>{/if}
+        {#if !game.fromServer}<p class="note">Showing sample data: training needs the game server.</p>{/if}
       </div>
 
-      <div class="stats">
-        <span>Attack: <b>{stats.attack}</b></span>
-        <span>Defence: <b>{stats.defence}</b></span>
-        <span>Range: <b>{formatNumber(stats.range)}</b></span>
-        <span>Speed: <b>{formatNumber(stats.speed)}</b></span>
-        <span>Load: <b>{formatNumber(spec.load)}</b></span>
-        <span>Life: <b>{formatNumber(stats.life)}</b></span>
-        <span>Food: <b>{spec.upkeep}/h</b></span>
-        <span>Population: <b>{spec.population}</b></span>
-      </div>
-
-      <table>
-        <thead><tr><th>Requirement</th><th>Needed</th><th>You own</th></tr></thead>
-        <tbody>
-          {#each requirements(troop) as row (row.name)}
-            <tr class:short={row.short}>
-              <td>{row.name}</td>
-              <td>{row.needed}</td>
-              <td>{row.own}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-
-      <div class="form">
-        <div class="fld">You own <output>{formatNumber(city.troops?.[troop] ?? 0)}</output></div>
-        <div class="fld">
-          Train
-          <input
-            type="number"
-            min="0"
-            step="1"
-            placeholder="0"
-            bind:value={count}
-            aria-label="How many to train"
-          />
-        </div>
-        <div class="fld">
-          Maximum
-          <button
-            type="button"
-            class="max"
-            title="Train the most you can"
-            disabled={!game.fromServer}
-            onclick={() => (count = most(troop))}>{formatNumber(most(troop))}</button
-          >
-        </div>
-        <div class="fld">
-          Duration <output>{formatDuration(trainSeconds(troop, longest, research) * 1000)}</output>
-        </div>
-      </div>
-
-      <label class="check"
-        ><input type="checkbox" bind:checked={options.split} /> Split production to all Barracks</label
-      >
-      <label class="check"
-        ><input type="checkbox" bind:checked={options.idleOnly} /> Share production with idle Barracks only</label
-      >
-      {#if split.length > 1}
-        <span class="muted">{split.map(formatNumber).join(' / ')} over {split.length} Barracks</span>
-      {:else if where.length === 1 && where[0]!.slot !== barracks.slot}
-        <span class="muted">Goes to Barracks {allBarracks.indexOf(where[0]!) + 1}</span>
-      {/if}
-
-      {#if why}<p class="error">{why}</p>{/if}
-      {#if error}<p class="error" role="alert">{error}</p>{/if}
-      {#if !game.fromServer}<p class="note">Showing sample data: training needs the game server.</p>{/if}
-    </div>
-
-    {#snippet footer()}
-      <Button variant="dark" onclick={() => (recruiting = null)}>Cancel</Button>
-      <Button disabled={!game.fromServer || sending || n === 0 || why !== null} onclick={() => train(troop)}
-        >OK</Button
-      >
-    {/snippet}
-  </Window>
+      {#snippet footer()}
+        <Button variant="dark" onclick={closeRecruit}>Cancel</Button>
+        <Button disabled={!game.fromServer || sending || n === 0 || why !== null} onclick={() => train(troop)}
+          >OK</Button
+        >
+      {/snippet}
+    </Window>
+  </div>
 {/if}
 
 <style>
-  .page,
+  .overlay {
+    display: contents;
+  }
   .recruit-body {
     display: flex;
     flex-direction: column;
@@ -447,8 +435,6 @@
   }
   .art {
     flex: 0 0 auto;
-    width: 96px;
-    height: 72px;
     display: grid;
     place-items: center;
     border: 2px solid var(--bronze);
@@ -459,7 +445,7 @@
   }
   .art.small {
     width: 64px;
-    height: 64px;
+    height: 56px;
   }
   .desc {
     flex: 1;
@@ -473,7 +459,6 @@
     min-height: 40px;
   }
   .cols {
-    flex: 1;
     min-height: 0;
     display: grid;
     grid-template-columns: 290px 1fr;
@@ -674,18 +659,19 @@
     cursor: pointer;
   }
   .pager {
-    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    color: var(--title);
+    padding-top: 6px;
+    border-top: 1px solid #6d8aa8;
+    font-size: 12px;
     font-weight: 700;
   }
   .pager button {
     border: 0;
     background: none;
-    color: var(--gold);
+    color: #b07a10;
     font-size: 18px;
     cursor: pointer;
   }
@@ -697,9 +683,6 @@
     margin: 0;
     font-size: 11px;
     color: var(--navy-mid);
-  }
-  .pad {
-    padding: 12px;
   }
   .error {
     margin: 0;
