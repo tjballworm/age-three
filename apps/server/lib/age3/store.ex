@@ -13,9 +13,33 @@ defmodule Age3.Store do
   @doc "The player a login token belongs to, if it's still valid."
   @callback player_for_token(token :: String.t()) :: {:ok, player_id :: String.t()} | :error
 
-  @doc "The player and all their cities with buildings, shaped as the client's JSON, resources as at now_ms."
+  @doc """
+  The player, all their cities with buildings and fields, and their cities' running tasks, shaped as the client's
+  JSON, with resources as at now_ms. Tasks already due are finished first.
+  """
   @callback state(player_id :: String.t(), now_ms :: integer) ::
-              {:ok, player :: map, cities :: [map]} | {:error, :not_found}
+              {:ok, player :: map, cities :: [map], tasks :: [map]} | {:error, :not_found}
+
+  @doc """
+  Starts building type on slot in one of the player's cities, or upgrading what stands there (type nil), paying
+  the cost now. Returns when it will finish.
+  """
+  @callback build(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              slot :: String.t(),
+              type :: String.t() | nil,
+              now_ms :: integer
+            ) :: {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
+
+  @doc "Stops a construction that hasn't finished and refunds its whole cost."
+  @callback cancel_build(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              task_id :: String.t(),
+              now_ms :: integer
+            ) ::
+              :ok | {:error, code :: String.t()}
 end
 
 defmodule Age3.Store.Pg do
@@ -24,7 +48,7 @@ defmodule Age3.Store.Pg do
   @behaviour Age3.Store
 
   import Ecto.Query
-  alias Age3.{Accounts, Building, City, Economy, Game, Player, Repo}
+  alias Age3.{Accounts, Build, Building, City, Data, Economy, Game, Player, Repo, Task}
 
   @impl true
   defdelegate authenticate(name, password), to: Accounts
@@ -98,6 +122,10 @@ defmodule Age3.Store.Pg do
   def state(player_id, now_ms) do
     with {:ok, _} <- Ecto.UUID.cast(player_id),
          %Player{} = player <- Repo.get(Player, player_id) do
+      now = to_datetime(now_ms)
+      city_ids = Repo.all(from c in City, where: c.player_id == ^player_id, select: c.id)
+      Enum.each(city_ids, &finish_due_in_city(&1, now))
+
       buildings = from(b in Building, order_by: b.slot)
 
       cities =
@@ -105,11 +133,164 @@ defmodule Age3.Store.Pg do
           from c in City, where: c.player_id == ^player_id, order_by: c.id, preload: [buildings: ^buildings]
         )
 
-      {:ok, player_json(player), Enum.map(cities, &city_json(&1, now_ms))}
+      tasks = Repo.all(from t in Task, where: t.city_id in ^city_ids, order_by: t.ends_at)
+
+      {:ok, player_json(player), Enum.map(cities, &city_json(&1, tasks, now_ms)),
+       Enum.map(tasks, &task_json/1)}
     else
       _ -> {:error, :not_found}
     end
   end
+
+  # Construction. Each command locks the city row first (SELECT ... FOR UPDATE), so two clicks at once can't
+  # both pay from the same resources or both start a build; the second waits for the first to commit.
+
+  @impl true
+  def build(player_id, city_id, slot, type, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      complete_due(city.id, now)
+
+      if Repo.exists?(from t in Task, where: t.city_id == ^city.id and t.kind == "build"),
+        do: Repo.rollback("queue_busy")
+
+      buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+
+      case Build.check(buildings, resources, slot, type) do
+        {:ok, plan} ->
+          save_resources(city.id, Build.spend(resources, plan.cost), now)
+
+          Repo.insert!(%Task{
+            city_id: city.id,
+            kind: "build",
+            label: "#{Data.building(plan.type)["name"]} → Lv #{plan.level}",
+            slot: slot,
+            target_type: plan.type,
+            target_level: plan.level,
+            cost: plan.cost,
+            started_at: now,
+            ends_at: to_datetime(now_ms + plan.seconds * 1000)
+          })
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> case do
+      {:ok, task} -> {:ok, to_ms(task.ends_at)}
+      {:error, code} -> {:error, code}
+    end
+  end
+
+  @impl true
+  def cancel_build(player_id, city_id, task_id, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      # a build that has already finished can't be cancelled
+      complete_due(city.id, now)
+
+      task =
+        case Ecto.UUID.cast(task_id) do
+          {:ok, id} ->
+            Repo.one(from t in Task, where: t.id == ^id and t.city_id == ^city.id and t.kind == "build")
+
+          :error ->
+            nil
+        end
+
+      task || Repo.rollback("bad_message")
+      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+      save_resources(city.id, Build.spend(resources, task.cost, -1), now)
+      Repo.delete!(task)
+    end)
+    |> case do
+      {:ok, _task} -> :ok
+      {:error, code} -> {:error, code}
+    end
+  end
+
+  @doc """
+  Finishes every task that is due by now_ms, in every city. For Age3.TaskRunner, which tells the players.
+  Returns {player_id, task JSON} for each finished task.
+  """
+  def finish_due(now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.all(
+      from t in Task,
+        join: c in City,
+        on: c.id == t.city_id,
+        where: t.ends_at <= ^now,
+        distinct: true,
+        select: {c.id, c.player_id}
+    )
+    |> Enum.flat_map(fn {city_id, player_id} ->
+      done = finish_due_in_city(city_id, now)
+      Enum.map(done, &{player_id, task_json(&1)})
+    end)
+  end
+
+  @doc "When the next task is due, in epoch milliseconds, or nil when nothing is running."
+  def next_due do
+    case Repo.one(from t in Task, select: min(t.ends_at)) do
+      nil -> nil
+      ends_at -> to_ms(ends_at)
+    end
+  end
+
+  defp finish_due_in_city(city_id, now) do
+    if Repo.exists?(from t in Task, where: t.city_id == ^city_id and t.ends_at <= ^now) do
+      {:ok, done} =
+        Repo.transaction(fn ->
+          Repo.one(from c in City, where: c.id == ^city_id, lock: "FOR UPDATE", select: c.id)
+          complete_due(city_id, now)
+        end)
+
+      done
+    else
+      []
+    end
+  end
+
+  # Inside a transaction holding the city's lock: applies each finished build to its building and drops the task.
+  defp complete_due(city_id, now) do
+    tasks = Repo.all(from t in Task, where: t.city_id == ^city_id and t.ends_at <= ^now)
+
+    for t <- tasks do
+      Repo.insert!(%Building{city_id: city_id, slot: t.slot, type: t.target_type, level: t.target_level},
+        on_conflict: [set: [type: t.target_type, level: t.target_level]],
+        conflict_target: [:city_id, :slot]
+      )
+
+      Repo.delete!(t)
+    end
+
+    tasks
+  end
+
+  defp lock_city(player_id, city_id) do
+    case Ecto.UUID.cast(city_id) do
+      {:ok, id} ->
+        Repo.one(from c in City, where: c.id == ^id and c.player_id == ^player_id, lock: "FOR UPDATE")
+
+      :error ->
+        nil
+    end
+  end
+
+  # A new snapshot: the settled amounts as of now, which is where Economy.settle starts next time.
+  defp save_resources(city_id, resources, now) do
+    Repo.update_all(from(c in City, where: c.id == ^city_id), set: [resources: resources, synced_at: now])
+  end
+
+  # Times are epoch milliseconds in messages and microseconds (timestamptz) in the database.
+  defp to_datetime(ms), do: DateTime.from_unix!(ms * 1000, :microsecond)
+  defp to_ms(datetime), do: DateTime.to_unix(datetime, :millisecond)
 
   # The JSON shapes match packages/core/src/types, so the client can use them as-is.
 
@@ -127,8 +308,11 @@ defmodule Age3.Store.Pg do
   end
 
   # Resources are settled to now_ms on the way out; the stored snapshot only changes when something spends.
-  defp city_json(c, now_ms) do
-    since_ms = DateTime.to_unix(c.synced_at, :millisecond)
+  # Town buildings and outskirts fields share the buildings table; fields have slots "f0".."f12".
+  defp city_json(c, tasks, now_ms) do
+    since_ms = to_ms(c.synced_at)
+    busy = for t <- tasks, t.city_id == c.id, into: MapSet.new(), do: t.slot
+    {fields, town} = Enum.split_with(c.buildings, &String.starts_with?(&1.slot, "f"))
 
     %{
       id: c.id,
@@ -140,16 +324,33 @@ defmodule Age3.Store.Pg do
       population: c.population,
       loyalty: c.loyalty,
       taxRate: c.tax_rate,
-      buildings: Enum.map(c.buildings, &building_json/1)
+      buildings: Enum.map(town, &building_json(&1, busy)),
+      fields: Enum.map(fields, &building_json(&1, busy))
     }
   end
 
-  defp building_json(b) do
+  defp building_json(b, busy) do
     json = %{type: b.type, level: b.level, slot: slot_json(b.slot)}
-    if b.upgrading, do: Map.put(json, :upgrading, true), else: json
+    if MapSet.member?(busy, b.slot), do: Map.put(json, :upgrading, true), else: json
   end
 
-  # plots go to the client as numbers, the Town Hall and walls as names
+  defp task_json(t) do
+    %{
+      id: t.id,
+      cityId: t.city_id,
+      kind: t.kind,
+      label: t.label,
+      startedAt: to_ms(t.started_at),
+      endsAt: to_ms(t.ends_at),
+      slot: t.slot,
+      targetType: t.target_type,
+      targetLevel: t.target_level
+    }
+  end
+
+  # Town plots and fields go to the client as numbers, the Town Hall and walls as names.
+  defp slot_json("f" <> n), do: String.to_integer(n)
+
   defp slot_json(slot) do
     case Integer.parse(slot) do
       {n, ""} -> n

@@ -6,17 +6,26 @@ defmodule Age3.Application do
 
   @impl true
   def start(_type, _args) do
-    children =
+    database =
       if Application.get_env(:age3, :start_repo, true) do
         [
           # the database connection pool
           Age3.Repo,
           # applies any migrations not yet run, then steps aside; startup waits for it
-          {Ecto.Migrator, repos: [Age3.Repo]}
+          {Ecto.Migrator, repos: [Age3.Repo]},
+          # finishes builds (and later training, research, marches) when they end
+          Age3.TaskRunner
         ]
       else
         []
-      end ++
+      end
+
+    children =
+      [
+        # open sockets by player id, so finished tasks can be pushed to their owners
+        {Registry, keys: :duplicate, name: Age3.Players}
+      ] ++
+        database ++
         [
           # HTTP: /health and the WebSocket at /ws
           Age3Web.Endpoint

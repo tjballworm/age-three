@@ -15,7 +15,7 @@ defmodule Age3.Store.PgTest do
     {:ok, id} = Pg.find_or_create_player("Test Lord")
     assert {:ok, ^id} = Pg.find_or_create_player("Test Lord")
 
-    {:ok, player, [city]} = Pg.state(id, System.system_time(:millisecond))
+    {:ok, player, [city], []} = Pg.state(id, System.system_time(:millisecond))
     assert %{name: "Test Lord", title: "Civilian", alliance: nil, rank: 0} = player
     assert city.name == "Test Lord's Town"
     assert city.x in 0..799 and city.y in 0..799
@@ -27,6 +27,40 @@ defmodule Age3.Store.PgTest do
              %{type: "townhall", level: 1, slot: "townhall"},
              %{type: "walls", level: 1, slot: "walls"}
            ]
+
+    assert city.fields == []
+  end
+
+  test "build pays now, finishes when due, and one build at a time" do
+    {:ok, id} = Pg.find_or_create_player("Builder")
+    now = System.system_time(:millisecond)
+    {:ok, _, [city], []} = Pg.state(id, now)
+
+    assert {:ok, ends_at} = Pg.build(id, city.id, "3", "cottage", now)
+    assert ends_at == now + Age3.Data.level("cottage", 1)["seconds"] * 1000
+    assert {:error, "queue_busy"} = Pg.build(id, city.id, "f0", "farm", now)
+
+    {:ok, _, [city], [task]} = Pg.state(id, now)
+    assert %{targetType: "cottage", targetLevel: 1, slot: "3", endsAt: ^ends_at} = task
+    lumber = Age3.Data.level("cottage", 1)["cost"]["lumber"]
+    assert_in_delta city.resources["lumber"]["amount"], 10_000 - lumber, 1
+
+    # once due, reading the state finishes it
+    {:ok, _, [city], []} = Pg.state(id, ends_at)
+    assert %{type: "cottage", level: 1, slot: 3} in city.buildings
+  end
+
+  test "cancel refunds the cost" do
+    {:ok, id} = Pg.find_or_create_player("Canceller")
+    now = System.system_time(:millisecond)
+    {:ok, _, [city], []} = Pg.state(id, now)
+    {:ok, _} = Pg.build(id, city.id, "f0", "farm", now)
+    {:ok, _, _, [task]} = Pg.state(id, now)
+
+    assert :ok = Pg.cancel_build(id, city.id, task.id, now)
+    {:ok, _, [city], []} = Pg.state(id, now)
+    assert_in_delta city.resources["lumber"]["amount"], 10_000, 1
+    assert city.fields == []
   end
 
   test "state for an unknown player" do

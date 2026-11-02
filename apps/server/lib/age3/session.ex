@@ -9,7 +9,8 @@ defmodule Age3.Session do
 
   @version 1
 
-  defstruct store: Age3.Store.Pg, player_id: nil, now: &__MODULE__.millis/0
+  # wake is told when a new task will end, so the task runner can finish it on time
+  defstruct store: Age3.Store.Pg, player_id: nil, now: &__MODULE__.millis/0, wake: &Age3.TaskRunner.wake/1
 
   def version, do: @version
   def millis, do: System.system_time(:millisecond)
@@ -70,24 +71,89 @@ defmodule Age3.Session do
   defp handle("ping", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid ping."), session}
 
-  defp handle("getState", _payload, id, %{player_id: nil} = session),
-    do: {error(id, "not_logged_in", "Log in first."), session}
+  defp handle(type, _payload, id, %{player_id: nil} = session)
+       when type in ["getState", "build", "cancelBuild"],
+       do: {error(id, "not_logged_in", "Log in first."), session}
 
-  defp handle("getState", _payload, id, session) do
-    # one clock reading: resources are settled to exactly the serverTime the client projects from
+  defp handle("getState", _payload, id, session), do: state_reply(id, session, session.now.())
+
+  # Build on a slot, or upgrade what stands there: {cityId, slot, type?}. Town plots are numbers 0-31, the
+  # Town Hall and walls "townhall" and "walls", and outskirts fields "f0".."f12". Replies with the new state.
+  defp handle("build", %{"cityId" => city_id, "slot" => slot} = payload, id, session)
+       when is_binary(city_id) do
+    now = session.now.()
+
+    case session.store.build(session.player_id, city_id, slot_key(slot), payload["type"], now) do
+      {:ok, ends_at} ->
+        session.wake.(ends_at)
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("build", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid build."), session}
+
+  # Stop a construction and get its cost back: {cityId, taskId}.
+  defp handle("cancelBuild", %{"cityId" => city_id, "taskId" => task_id}, id, session)
+       when is_binary(city_id) and is_binary(task_id) do
+    now = session.now.()
+
+    case session.store.cancel_build(session.player_id, city_id, task_id, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("cancelBuild", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid cancel."), session}
+
+  defp handle(_type, _payload, id, session),
+    do: {error(id, "bad_message", "Unknown message type."), session}
+
+  @doc """
+  The push for a finished task: the task plus the player's whole new state. nil if the state can't be read.
+  GameSocket sends it when Age3.TaskRunner reports one of this player's tasks done.
+  """
+  def task_done(session, task) do
     now = session.now.()
 
     case session.store.state(session.player_id, now) do
-      {:ok, player, cities} ->
-        {reply(id, "state", %{player: player, cities: cities, serverTime: now}), session}
+      {:ok, player, cities, tasks} ->
+        %{
+          type: "taskDone",
+          payload: %{task: task, player: player, cities: cities, tasks: tasks, serverTime: now}
+        }
+
+      {:error, _} ->
+        nil
+    end
+  end
+
+  # One clock reading: resources are settled to exactly the serverTime the client projects from.
+  defp state_reply(id, session, now) do
+    case session.store.state(session.player_id, now) do
+      {:ok, player, cities, tasks} ->
+        payload = %{player: player, cities: cities, tasks: tasks, serverTime: now}
+        {reply(id, "state", payload), session}
 
       {:error, :not_found} ->
         {error(id, "not_logged_in", "Player not found."), session}
     end
   end
 
-  defp handle(_type, _payload, id, session),
-    do: {error(id, "bad_message", "Unknown message type."), session}
+  defp slot_key(slot) when is_integer(slot), do: Integer.to_string(slot)
+  defp slot_key(slot) when is_binary(slot), do: slot
+  defp slot_key(_slot), do: nil
+
+  defp message("not_enough_resources"), do: "Not enough resources."
+  defp message("queue_busy"), do: "Something is already being built in this city."
+  defp message("requirement_not_met"), do: "Requirements not met."
+  defp message("bad_slot"), do: "That can't be built there."
+  defp message("max_level"), do: "Already at the highest level."
+  defp message(_code), do: "Not a valid request."
 
   defp welcome(id, player_id, token, session) do
     payload = %{version: @version, playerId: player_id, serverTime: session.now.()}
