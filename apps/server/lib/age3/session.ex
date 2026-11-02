@@ -8,7 +8,6 @@ defmodule Age3.Session do
   require Logger
 
   @version 1
-  @valid_name ~r/^[A-Za-z0-9 _'-]{3,24}$/
 
   defstruct store: Age3.Store.Pg, player_id: nil, now: &__MODULE__.millis/0
 
@@ -38,31 +37,32 @@ defmodule Age3.Session do
 
   # One clause per message type. Elixir picks the first clause whose pattern matches the arguments.
 
-  defp handle("hello", %{"version" => version, "name" => name}, id, session)
-       when is_integer(version) and is_binary(name) do
-    name = String.trim(name)
+  # Logging in: "login" with a username and password, or "hello" with the token from an earlier login.
+  # Both answer "welcome"; only "login" includes a new token.
 
-    cond do
-      version != @version ->
-        {error(id, "version_mismatch", "Server speaks a different protocol version."), session}
+  defp handle(type, %{"version" => version}, id, session)
+       when type in ["login", "hello"] and version != @version do
+    {error(id, "version_mismatch", "Server speaks a different protocol version."), session}
+  end
 
-      not Regex.match?(@valid_name, name) ->
-        {error(id, "bad_message", "Name must be 3–24 letters, numbers or spaces."), session}
-
-      true ->
-        case session.store.login(name) do
-          {:ok, player_id} ->
-            payload = %{version: @version, playerId: player_id, serverTime: session.now.()}
-            {reply(id, "welcome", payload), %{session | player_id: player_id}}
-
-          {:error, reason} ->
-            raise "login failed: #{inspect(reason)}"
-        end
+  defp handle("login", %{"version" => @version, "username" => name, "password" => password}, id, session)
+       when is_binary(name) and is_binary(password) do
+    case session.store.authenticate(String.trim(name), password) do
+      {:ok, player_id} -> welcome(id, player_id, session.store.new_token(player_id), session)
+      :error -> {error(id, "bad_login", "Wrong username or password."), session}
     end
   end
 
-  defp handle("hello", _payload, id, session),
-    do: {error(id, "bad_message", "Not a valid hello."), session}
+  defp handle("hello", %{"version" => @version, "token" => token}, id, session) when is_binary(token) do
+    case session.store.player_for_token(token) do
+      {:ok, player_id} -> welcome(id, player_id, nil, session)
+      :error -> {error(id, "session_expired", "Please log in again."), session}
+    end
+  end
+
+  defp handle(type, _payload, id, session) when type in ["login", "hello"] do
+    {error(id, "bad_message", "Not a valid #{type}."), session}
+  end
 
   defp handle("ping", %{"at" => at}, id, session) when is_integer(at),
     do: {reply(id, "pong", %{at: at, serverTime: session.now.()}), session}
@@ -71,7 +71,7 @@ defmodule Age3.Session do
     do: {error(id, "bad_message", "Not a valid ping."), session}
 
   defp handle("getState", _payload, id, %{player_id: nil} = session),
-    do: {error(id, "not_logged_in", "Say hello first."), session}
+    do: {error(id, "not_logged_in", "Log in first."), session}
 
   defp handle("getState", _payload, id, session) do
     # one clock reading: resources are settled to exactly the serverTime the client projects from
@@ -88,6 +88,12 @@ defmodule Age3.Session do
 
   defp handle(_type, _payload, id, session),
     do: {error(id, "bad_message", "Unknown message type."), session}
+
+  defp welcome(id, player_id, token, session) do
+    payload = %{version: @version, playerId: player_id, serverTime: session.now.()}
+    payload = if token, do: Map.put(payload, :token, token), else: payload
+    {reply(id, "welcome", payload), %{session | player_id: player_id}}
+  end
 
   # Replies carry the request's id so the client can match them up; id is left out when there was none.
   defp reply(id, type, payload) do
