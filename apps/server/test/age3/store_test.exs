@@ -97,6 +97,37 @@ defmodule Age3.Store.PgTest do
     assert {:error, "bad_message"} = Pg.speed_up(id, city.id, task.id, late)
   end
 
+  test "set_tax changes gold per hour from now on" do
+    {:ok, id} = Pg.find_or_create_player("Taxman")
+    now = System.system_time(:millisecond)
+    {:ok, _, [city], []} = Pg.state(id, now)
+
+    assert :ok = Pg.set_tax(id, city.id, 50, now)
+    {:ok, _, [city], []} = Pg.state(id, now)
+    assert city.taxRate == 50
+    assert city.resources["gold"]["perHour"] == 100 + div(city.population["current"] * 50, 100)
+  end
+
+  test "a city with old rates gets the new ones on its next state" do
+    {:ok, id} = Pg.find_or_create_player("Oldtimer")
+    now = System.system_time(:millisecond)
+    {:ok, _, [city], []} = Pg.state(id, now)
+
+    old = Map.new(city.resources, fn {k, v} -> {k, %{v | "perHour" => 200, "cap" => 5}} end)
+    old_population = %{"current" => 100, "max" => 500, "idle" => 100}
+
+    Age3.Repo.query!("UPDATE cities SET resources = $1, population = $2 WHERE id = $3", [
+      old,
+      old_population,
+      Ecto.UUID.dump!(city.id)
+    ])
+
+    {:ok, _, [city], []} = Pg.state(id, now)
+    assert city.resources["food"]["perHour"] == 100
+    assert city.resources["food"]["cap"] == 100_000
+    assert city.population["max"] == 100
+  end
+
   test "state for an unknown player" do
     assert {:error, :not_found} = Pg.state(Ecto.UUID.generate(), 0)
     assert {:error, :not_found} = Pg.state("not-a-uuid", 0)

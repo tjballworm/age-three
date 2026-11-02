@@ -34,7 +34,8 @@ defmodule Age3.Game do
   """
   def starter_resources do
     rates = Age3.Economy.rates([], 10)
-    stock = fn name, amount -> %{"amount" => amount, "perHour" => rates[name], "cap" => 100_000} end
+    cap = Age3.Economy.cap([])
+    stock = fn name, amount -> %{"amount" => amount, "perHour" => rates[name], "cap" => cap} end
 
     %{
       "gold" => stock.("gold", 5_000),

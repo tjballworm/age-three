@@ -2,10 +2,32 @@
   import { RESOURCE_TYPES, stockAt } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game } from '$state/game.svelte';
+  import { command } from '$state/sync';
+  import Button from '$ui/components/Button.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
   import { formatNumber, formatRate } from '$ui/format';
 
   const city = $derived(currentCity());
+
+  // The tax slider starts at the city's rate and goes back to it whenever the server sends a new one.
+  let rate = $state(0);
+  $effect(() => {
+    rate = city.taxRate;
+  });
+  let sending = $state(false);
+  let error = $state('');
+
+  async function setTax() {
+    error = '';
+    sending = true;
+    try {
+      await command({ type: 'setTax', payload: { cityId: city.id, taxRate: rate } });
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      sending = false;
+    }
+  }
 </script>
 
 <table>
@@ -27,6 +49,19 @@
     {/each}
   </tbody>
 </table>
+
+<div class="tax">
+  <label>
+    <span>Tax rate</span>
+    <input type="range" min="0" max="100" step="1" bind:value={rate} disabled={!game.fromServer} />
+    <b>{rate}%</b>
+  </label>
+  <span class="gold">Taxes: +{formatNumber(Math.floor((city.population.current * rate) / 100))} gold/h</span>
+  <Button small disabled={!game.fromServer || sending || rate === city.taxRate} onclick={setTax}
+    >Set tax</Button
+  >
+</div>
+{#if error}<p class="error" role="alert">{error}</p>{/if}
 
 <style>
   table {
@@ -64,6 +99,35 @@
   }
   .pos {
     color: var(--ok);
+    font-weight: 700;
+  }
+  .tax {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    padding: 10px;
+    color: #06263f;
+    font-size: 12px;
+  }
+  .tax label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+  }
+  .tax b {
+    min-width: 36px;
+    font-variant-numeric: tabular-nums;
+  }
+  .gold {
+    color: #5a3a00;
+    font-weight: 700;
+  }
+  .error {
+    margin: 0 10px;
+    color: var(--err);
+    font-size: 12px;
     font-weight: 700;
   }
   .neg {

@@ -72,7 +72,7 @@ defmodule Age3.Session do
     do: {error(id, "bad_message", "Not a valid ping."), session}
 
   defp handle(type, _payload, id, %{player_id: nil} = session)
-       when type in ["getState", "build", "cancelBuild", "speedUp"],
+       when type in ["getState", "build", "cancelBuild", "speedUp", "setTax"],
        do: {error(id, "not_logged_in", "Log in first."), session}
 
   defp handle("getState", _payload, id, session), do: state_reply(id, session, session.now.())
@@ -123,6 +123,20 @@ defmodule Age3.Session do
 
   defp handle("speedUp", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid speedup."), session}
+
+  # Change a city's tax rate: {cityId, taxRate} with taxRate a whole number from 0 to 100.
+  defp handle("setTax", %{"cityId" => city_id, "taxRate" => rate}, id, session)
+       when is_binary(city_id) and is_integer(rate) and rate in 0..100 do
+    now = session.now.()
+
+    case session.store.set_tax(session.player_id, city_id, rate, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("setTax", _payload, id, session),
+    do: {error(id, "bad_message", "The tax rate must be a whole number from 0 to 100."), session}
 
   defp handle(_type, _payload, id, session),
     do: {error(id, "bad_message", "Unknown message type."), session}

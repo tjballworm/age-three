@@ -34,6 +34,8 @@ export type BuildMessage = Envelope<
 export type CancelBuildMessage = Envelope<'cancelBuild', { cityId: string; taskId: string }>;
 /** Finishes a build for free when it has FREE_SPEEDUP_MS (5 minutes) or less left. Replies with state. */
 export type SpeedUpMessage = Envelope<'speedUp', { cityId: string; taskId: string }>;
+/** Sets a city's tax rate, a whole number from 0 to 100. Gold per hour changes from now on. Replies with state. */
+export type SetTaxMessage = Envelope<'setTax', { cityId: string; taxRate: number }>;
 
 export type ClientMessage =
   | LoginMessage
@@ -42,7 +44,8 @@ export type ClientMessage =
   | GetStateMessage
   | BuildMessage
   | CancelBuildMessage
-  | SpeedUpMessage;
+  | SpeedUpMessage
+  | SetTaxMessage;
 
 // ---------- server -> client ----------
 

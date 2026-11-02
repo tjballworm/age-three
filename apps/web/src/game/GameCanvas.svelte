@@ -72,6 +72,19 @@
     outskirtsScene?.setCity(city.fields ?? [], hall);
   });
 
+  // Scaffolding on every plot and field the current city is building on.
+  $effect(() => {
+    const slots = game.queue
+      .filter((t) => t.cityId === game.cityId && t.kind === 'build' && t.slot !== undefined)
+      .map((t) => t.slot!);
+    const fields = slots.filter((s) => s.startsWith('f')).map((s) => Number(s.slice(1)));
+    const town = slots
+      .filter((s) => !s.startsWith('f'))
+      .map((s) => (s === 'townhall' || s === 'walls' ? s : Number(s)));
+    townScene?.setConstruction(town);
+    outskirtsScene?.setConstruction(fields);
+  });
+
   $effect(() => {
     const target = game.mapTarget;
     if (target) worldScene?.goTo(target.x, target.y);
