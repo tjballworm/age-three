@@ -1,7 +1,7 @@
 defmodule Age3.Data do
-  # Building and research costs, times and requirements. priv/data/buildings.json and research.json are copies
-  # of the files in packages/core/src/data: npm run sync-data at the repo root keeps them equal, and a web test
-  # fails if they differ. So the client shows exactly what the server charges.
+  # Building, research and troop costs, times and requirements. priv/data/buildings.json, research.json and
+  # troops.json are copies of the files in packages/core/src/data: npm run sync-data at the repo root keeps them
+  # equal, and a web test fails if they differ. So the client shows exactly what the server charges.
   #
   # The files are read once at compile time and baked into this module; @external_resource makes mix recompile
   # the module whenever they change.
@@ -14,6 +14,10 @@ defmodule Age3.Data do
   @research_path Path.expand("../../priv/data/research.json", __DIR__)
   @external_resource @research_path
   @research @research_path |> File.read!() |> Jason.decode!()
+
+  @troops_path Path.expand("../../priv/data/troops.json", __DIR__)
+  @external_resource @troops_path
+  @troops @troops_path |> File.read!() |> Jason.decode!()
 
   @doc "The highest level any building can reach."
   def max_level, do: @data["maxLevel"]
@@ -55,4 +59,10 @@ defmodule Age3.Data do
   end
 
   def tech_level(_id, _level), do: nil
+
+  @doc ~s(Every troop type, e.g. "warrior" or "cavalry". The same ids as TROOPS in packages/core/src/combat.)
+  def troop_ids, do: Map.keys(@troops["troops"])
+
+  @doc ~s(One troop's spec: "name", "cost", "seconds", "population", "upkeep", "requires", "research", or nil.)
+  def troop(id), do: @troops["troops"][id]
 end

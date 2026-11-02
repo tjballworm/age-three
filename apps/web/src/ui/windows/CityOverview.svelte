@@ -56,7 +56,7 @@
     <input type="range" min="0" max="100" step="1" bind:value={rate} disabled={!game.fromServer} />
     <b>{rate}%</b>
   </label>
-  <span class="gold">Taxes: +{formatNumber(Math.floor((city.population.current * rate) / 100))} gold/h</span>
+  <span class="gold">Taxes: +{formatNumber(Math.floor((city.population.max * rate) / 100))} gold/h</span>
   <Button small disabled={!game.fromServer || sending || rate === city.taxRate} onclick={setTax}
     >Set tax</Button
   >

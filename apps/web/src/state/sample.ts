@@ -102,6 +102,7 @@ export function sampleCities(): City[] {
       taxRate: 20,
       buildings: sampleTown(9),
       fields: sampleFields(9),
+      troops: { worker: 500, warrior: 2_400, pike: 1_200, archer: 1_500, cavalry: 300 },
     },
     {
       id: 'c2',
@@ -151,7 +152,7 @@ export function sampleQueue(now: number): TimedTask[] {
   return [
     task('t1', 'build', 'Farm → Lv 7', 0.7, 14 * MIN),
     task('t2', 'build', 'Cottage → Lv 9', 0.2, 48 * MIN),
-    task('t3', 'train', 'Archer × 500', 0.35, 34 * MIN),
+    task('t3', 'train', '500 × Archer', 0.35, 34 * MIN),
     task('t4', 'research', 'Military Science Lv 4', 0.12, 1.2 * HOUR),
     task('t5', 'march', 'Attack → Valley Lv 6 (48,53)', 0.9, 8 * MIN),
     task('t6', 'build', 'Barracks → Lv 5', 0.6, 25 * MIN, 'c2'),

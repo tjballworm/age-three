@@ -39,6 +39,15 @@ defmodule Age3.FakeStore do
   def cancel_research(_player_id, _city_id, "t1", _now_ms), do: :ok
   def cancel_research(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
 
+  # 10 warriors in the Barracks on plot 4 can always be trained; anything else needs a bigger Barracks
+  @impl true
+  def train(_player_id, _city_id, "4", "warrior", 10, now_ms), do: {:ok, now_ms + 250_000}
+  def train(_player_id, _city_id, _slot, _troop, _count, _now_ms), do: {:error, "requirement_not_met"}
+
+  @impl true
+  def cancel_train(_player_id, _city_id, "t1", _now_ms), do: :ok
+  def cancel_train(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
+
   # task "t1" has under 5 minutes left; "t2" has more
   @impl true
   def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok

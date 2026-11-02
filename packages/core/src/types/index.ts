@@ -1,5 +1,7 @@
 // Core domain types shared by client and server.
 
+import type { TroopType } from '../combat/units';
+
 export type ResourceType = 'gold' | 'food' | 'lumber' | 'stone' | 'iron';
 
 export const RESOURCE_TYPES: readonly ResourceType[] = ['gold', 'food', 'lumber', 'stone', 'iron'];
@@ -21,8 +23,11 @@ export interface ResourceStock {
 }
 
 export interface Population {
+  /** People living in the city now. Training troops takes them; they move back in over time (populationAt). */
   current: number;
+  /** The limit, from the base and cottages. */
   max: number;
+  /** People free to become troops. Everyone for now, as nobody works the fields yet. */
   idle: number;
 }
 
@@ -40,6 +45,8 @@ export interface City extends Coord {
   buildings: TownBuilding[];
   /** Resource fields in the outskirts, up to FIELD_SLOTS. Missing until the server sends them. */
   fields?: Field[];
+  /** Trained troops in the city, by type (troops still training are tasks). Missing from older servers. */
+  troops?: Partial<Record<TroopType, number>>;
 }
 
 /** Buildings that stand inside the walls (Evony age 2 names). */
@@ -130,10 +137,16 @@ export interface TimedTask {
   startedAt: number;
   /** Epoch milliseconds */
   endsAt: number;
-  /** Construction only: where, as the server names slots ("0".."31", "townhall", "walls", "f0".."f12"). */
+  /**
+   * Construction: where, as the server names slots ("0".."31", "townhall", "walls", "f0".."f12"). Training: the
+   * Barracks' slot.
+   */
   slot?: string;
-  /** Construction: the building and the level it will reach. Research: the tech and its new level. */
-  targetType?: TownBuildingType | FieldType | TechId;
+  /**
+   * Construction: the building and the level it will reach. Research: the tech and its new level. Training: the
+   * troop and how many (targetLevel is the count).
+   */
+  targetType?: TownBuildingType | FieldType | TechId | TroopType;
   targetLevel?: number;
 }
 

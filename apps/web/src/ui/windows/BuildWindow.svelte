@@ -15,7 +15,7 @@
     type TechId,
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
-  import { currentCity, game, openBuild, openWindow, type BuildSlot } from '$state/game.svelte';
+  import { currentCity, game, openBuild, openTrain, openWindow, type BuildSlot } from '$state/game.svelte';
   import { command, speedUp } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
@@ -41,6 +41,9 @@
   );
   const queueBusy = $derived(game.queue.some((t) => t.cityId === city.id && t.kind === 'build'));
   const researching = $derived(game.queue.some((t) => t.cityId === city.id && t.kind === 'research'));
+  const training = $derived(
+    game.queue.some((t) => t.cityId === city.id && t.kind === 'train' && t.slot === key),
+  );
 
   const allTypes = Object.keys(BUILDINGS) as BuildingType[];
   const levelOf = (type: BuildingType) =>
@@ -74,6 +77,7 @@
       if (techLevel(research, tech as TechId) < lv!)
         return `Needs ${TECHS[tech as TechId].name} Lv ${lv} research`;
     if (type === 'academy' && researching) return 'The Academy is researching';
+    if (type === 'barracks' && training) return 'The Barracks is training troops';
     if (level === 1 && !spec.multiple && levelOf(type) > 0) return 'Only one per city';
     for (const r of RESOURCE_TYPES)
       if (stockAt(city.resources[r], game.syncedAt, clock.now) < cost[r]) return 'Not enough resources';
@@ -180,6 +184,16 @@
           <span>Improve production, storage, building speed and your army.</span>
         </div>
         <Button onclick={() => openWindow('tech')}>Open</Button>
+      </div>
+    {/if}
+
+    {#if standing?.type === 'barracks' && typeof slot === 'number'}
+      <div class="row">
+        <div class="what">
+          <b>Train troops</b>
+          <span>Recruit workers, infantry, cavalry and siege engines from your idle population.</span>
+        </div>
+        <Button onclick={() => openTrain(slot as number)}>Open</Button>
       </div>
     {/if}
 

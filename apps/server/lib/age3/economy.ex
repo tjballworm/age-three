@@ -3,7 +3,7 @@ defmodule Age3.Economy do
   # the server works out the amounts at any later moment from that, so nothing has to tick every second.
   @moduledoc false
 
-  alias Age3.{Data, Research}
+  alias Age3.{Data, Research, Train}
 
   @hour 3_600_000
 
@@ -24,12 +24,14 @@ defmodule Age3.Economy do
   at its level (farms food, sawmills lumber, quarries stone, iron mines iron) with the player's research bonus
   on top (Agriculture, Lumbering, Masonry, Mining: +10% of the fields' production per level, rounded down; only
   up to the city's Academy level),
-  plus gold from taxes, which is population x tax rate %. buildings is a list of %{type, level}.
+  plus gold from taxes, which is the population limit x tax rate % (the wiki's tax formula uses the limit, and
+  it keeps gold steady while people move back in after training), minus the food the city's troops eat.
+  buildings is a list of %{type, level}; troops is %{"warrior" => 100, ...}.
   """
-  def rates(buildings, tax_rate, research \\ %{}) do
+  def rates(buildings, tax_rate, research \\ %{}, troops \\ %{}) do
     research = Research.in_city(research, buildings)
     base = Data.base()["perHour"]
-    gold = div(population(buildings)["current"] * tax_rate, 100)
+    gold = div(max_population(buildings) * tax_rate, 100)
 
     made =
       for b <- buildings, resource = Data.building(b.type)["resource"], reduce: %{"gold" => gold} do
@@ -38,14 +40,38 @@ defmodule Age3.Economy do
 
     Map.new(base, fn {name, n} ->
       fields = Map.get(made, name, 0)
-      {name, n + div(fields * (100 + Research.production_bonus(research, name)), 100)}
+      upkeep = if name == "food", do: Train.upkeep(troops), else: 0
+      {name, n + div(fields * (100 + Research.production_bonus(research, name)), 100) - upkeep}
     end)
   end
 
-  @doc "Population: the base plus what each cottage houses at its level. Everyone counts as idle for now."
+  @doc "The population limit: the base plus what each cottage houses at its level."
+  def max_population(buildings), do: Data.base()["population"] + total(buildings, "population")
+
+  @doc "A full city's population, for a new city. Everyone counts as idle for now (nobody works the fields)."
   def population(buildings) do
-    max = Data.base()["population"] + total(buildings, "population")
+    max = max_population(buildings)
     %{"current" => max, "max" => max, "idle" => max}
+  end
+
+  @doc """
+  Population as it stands at now_ms, given the one saved at since_ms. Training troops takes people out of the
+  city; they move back in until it is full, each hour (100 - tax rate)% / 2 of the limit (the wiki: 4.5% of the
+  limit every 6-minute tick at 10% tax, 0% at 100% tax). Loyalty isn't modelled yet, so a city always fills up.
+  "current" is a float, like resource amounts, so no growth is lost between settles. Matches populationAt in
+  packages/core/src/rules/timing.ts.
+  """
+  def settle_population(%{"current" => current, "max" => max} = pop, tax_rate, since_ms, now_ms) do
+    elapsed = max(0, now_ms - since_ms)
+    grown = current + max * (100 - tax_rate) / 200 * elapsed / @hour
+    current = max(current, min(grown, max))
+    %{pop | "current" => current, "idle" => current}
+  end
+
+  @doc "Takes n people out of the population (or, with a negative n, gives them back)."
+  def take_population(pop, n) do
+    current = pop["current"] - n
+    %{pop | "current" => current, "idle" => current}
   end
 
   @doc """
@@ -58,11 +84,11 @@ defmodule Age3.Economy do
   end
 
   @doc """
-  Resources with the perHour and cap the city's buildings, tax rate and the player's research give. Amounts are
+  Resources with the perHour and cap the city's buildings, tax rate, troops and the player's research give. Amounts are
   kept, so settle them first: the new rates only apply from the moment this snapshot is saved.
   """
-  def recalc(resources, buildings, tax_rate, research \\ %{}) do
-    rates = rates(buildings, tax_rate, research)
+  def recalc(resources, buildings, tax_rate, research \\ %{}, troops \\ %{}) do
+    rates = rates(buildings, tax_rate, research, troops)
     cap = cap(buildings, research)
 
     Map.new(resources, fn {name, stock} ->

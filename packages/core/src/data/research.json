@@ -127,7 +127,7 @@
       "effect": "Faster troop training (time x0.9 per level)",
       "bonus": [10, 19, 27, 34, 41, 47, 52, 57, 61, 65],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 600, "lumber": 100, "stone": 100, "iron": 150, "gold": 2500}, "seconds": 900, "requires": {"academy": 1, "forge": 1}},
         {"cost": {"food": 1200, "lumber": 200, "stone": 200, "iron": 300, "gold": 5000}, "seconds": 1800, "requires": {"academy": 2, "forge": 2}},
@@ -284,10 +284,10 @@
     "metalCasting": {
       "name": "Metal Casting",
       "group": "military",
-      "effect": "Faster mechanics building",
-      "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      "effect": "Faster siege engine training (time x0.9 per level)",
+      "bonus": [10, 19, 27, 34, 41, 47, 52, 57, 61, 65],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 0, "lumber": 500, "stone": 0, "iron": 500, "gold": 5000}, "seconds": 900, "requires": {"academy": 3, "workshop": 1}, "research": {"mining": 2}},
         {"cost": {"food": 0, "lumber": 1000, "stone": 0, "iron": 1000, "gold": 10000}, "seconds": 1800, "requires": {"academy": 3, "workshop": 2}, "research": {"mining": 2}},

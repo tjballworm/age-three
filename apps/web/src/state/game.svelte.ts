@@ -26,7 +26,8 @@ export type WindowId =
   | 'market'
   | 'events'
   | 'settings'
-  | 'city';
+  | 'city'
+  | 'train';
 
 const startedAt = Date.now();
 
@@ -47,6 +48,8 @@ export const game = $state({
   hoverTile: null as { tile: WorldTile; sx: number; sy: number } | null,
   /** Town plot, building or field whose build window is open. */
   buildSlot: null as BuildSlot | null,
+  /** Town plot of the Barracks whose Train window is open. */
+  trainSlot: null as number | null,
   /** World-map tile whose window is open. */
   selectedTile: null as WorldTile | null,
   /** Game server connection. While not online the game shows sample data. */
@@ -90,6 +93,12 @@ export function selectCity(id: string) {
 export function openWindow(id: WindowId) {
   game.openWindow = id;
   game.buildSlot = null;
+}
+
+/** Opens the Train window for the Barracks on a town plot. */
+export function openTrain(slot: number) {
+  game.trainSlot = slot;
+  openWindow('train');
 }
 
 export function closeWindow() {
