@@ -6,7 +6,11 @@ defmodule Age3.Player do
   @primary_key {:id, :binary_id, autogenerate: true}
   schema "players" do
     field :name, :string
-    field :title, :string, default: "Civilian"
+    # rank and title ids from priv/data/titles.json ("civilian", "knight"); Age3.Titles
+    field :title, :string, default: "civilian"
+    field :military_rank, :string, default: "civilian"
+    # medals held, e.g. %{"cross" => 3}; medals they have none of are missing
+    field :medals, :map, default: %{}
     field :alliance, :string
     field :prestige, :integer, default: 0
     field :honor, :integer, default: 0

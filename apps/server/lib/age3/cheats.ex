@@ -45,6 +45,8 @@ defmodule Age3.Cheats do
       gear stars (0-15), set
       straight (only the fields sent change; a new level starts with 0 exp). The hero has to be in the target's
       cities.
+    * "addMedals" {medals: {cross: 10, ...}}: adds medals to the player (negative takes away, not below 0)
+    * "setTitle" {rank?, title?}: the player's rank and/or title, set straight with nothing paid
     * "resetCity": back to a new city (Town Hall and walls Lv1, starting resources, no troops, heroes or tasks)
   """
   def parse("addResources", %{"amounts" => %{} = amounts}) do
@@ -100,6 +102,23 @@ defmodule Age3.Cheats do
 
   def parse("researchAll", %{"level" => level}) when is_integer(level) do
     if level in 0..Data.max_tech_level(), do: {:ok, %{level: level}}, else: bad()
+  end
+
+  def parse("addMedals", %{"medals" => %{} = medals}) do
+    if medals != %{} and Enum.all?(medals, fn {k, v} -> k in Data.medal_ids() and amount?(v) end),
+      do: {:ok, %{medals: medals}},
+      else: bad()
+  end
+
+  def parse("setTitle", p) do
+    changes =
+      for {key, field, ladder} <- [{"rank", :military_rank, :rank}, {"title", :title, :title}],
+          Map.has_key?(p, key),
+          do: {field, ladder, p[key]}
+
+    if changes != [] and Enum.all?(changes, fn {_f, ladder, id} -> Age3.Titles.spec(ladder, id) != nil end),
+      do: {:ok, %{changes: for({field, _l, id} <- changes, do: {field, id})}},
+      else: bad()
   end
 
   def parse("instantMarch", %{"on" => on}) when is_boolean(on), do: {:ok, %{on: on}}

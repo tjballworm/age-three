@@ -259,6 +259,21 @@ defmodule Age3.SessionTest do
              ])
   end
 
+  test "promote goes up the rank or title ladder" do
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"payload" => %{"code" => "not_enough_medals", "message" => "Not enough medals."}},
+             %{"payload" => %{"code" => "bad_message"}}
+           ] =
+             run([
+               login("secret123"),
+               ~s({"type":"promote","id":2,"payload":{"cityId":"c1","ladder":"title"}}),
+               ~s({"type":"promote","id":3,"payload":{"cityId":"c2","ladder":"rank"}}),
+               ~s({"type":"promote","id":4,"payload":{"cityId":"c1","ladder":"emperor"}})
+             ])
+  end
+
   test "cheats work on your own city or any player by name, with no permission check" do
     cheat = fn payload -> Jason.encode!(%{type: "cheat", id: 2, payload: payload}) end
 

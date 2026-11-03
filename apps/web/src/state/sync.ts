@@ -1,7 +1,7 @@
 // Keeps the client state in step with the game server. With no server configured (or while it can't be
 // reached) the game keeps showing the sample data, so the client still works on its own.
 
-import type { TimedTask } from '@age3/core';
+import { medalName, type TimedTask } from '@age3/core';
 import { PROTOCOL_VERSION, type ServerMessage } from '@age3/protocol';
 import { connect, ServerError, type GameClient, type Request } from '$net/client';
 import { auth, forgetToken, savedToken, saveToken } from './auth.svelte';
@@ -103,8 +103,12 @@ export function startServerSync(): () => void {
 /** The chat line for a finished task. A march arriving says how the battle went; one coming home, what it brought. */
 function doneText(task: TimedTask, cityName: string | undefined): string {
   const m = task.march;
-  if (m?.phase === 'out')
-    return `Battle at (${m.x},${m.y}): ${m.won ? 'Victory!' : 'Defeat.'} See Reports for the details.`;
+  if (m?.phase === 'out') {
+    const won = Object.entries(m.medals ?? {}).map(
+      ([id, n]) => `${n && n > 1 ? `${n} ` : ''}${medalName(id)}`,
+    );
+    return `Battle at (${m.x},${m.y}): ${m.won ? 'Victory!' : 'Defeat.'}${won.length ? ` Won ${won.join(', ')}.` : ''} See Reports for the details.`;
+  }
   if (m?.phase === 'back') {
     const loot = Object.values(m.loot).reduce((n, v) => n + (v ?? 0), 0);
     return `${m.heroName}'s march is back${cityName ? ` in ${cityName}` : ''}${loot ? ` with ${loot.toLocaleString('en-US')} resources` : ''}.`;

@@ -7,6 +7,8 @@
   import CityOverview from './CityOverview.svelte';
   import HeroesOverview from './HeroesOverview.svelte';
   import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
+  import LordMedals from './LordMedals.svelte';
+  import LordProfile from './LordProfile.svelte';
   import ReportsWindow from './ReportsWindow.svelte';
   import TroopsOverview from './TroopsOverview.svelte';
 
@@ -47,6 +49,10 @@
       <CityOverview />
     {:else if game.openWindow === 'city' && tab === 'Troops'}
       <TroopsOverview />
+    {:else if game.openWindow === 'hero' && tab === 'Profile'}
+      <LordProfile />
+    {:else if game.openWindow === 'hero' && tab === 'Medals'}
+      <LordMedals />
     {:else if game.openWindow === 'hero' && tab === 'Heroes'}
       <HeroesOverview />
     {:else if game.openWindow === 'cheats'}

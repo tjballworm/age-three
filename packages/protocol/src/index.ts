@@ -4,6 +4,8 @@ import type {
   BattleResult,
   BuildingType,
   City,
+  Ladder,
+  MedalCounts,
   Player,
   ReportSummary,
   ResourceType,
@@ -89,6 +91,11 @@ export type RecallMessage = Envelope<'recall', { cityId: string; taskId: string 
 export type GetReportsMessage = Envelope<'getReports', Record<string, never>>;
 /** One report with the whole battle; marks it read. Replies with `report`. */
 export type GetReportMessage = Envelope<'getReport', { reportId: string }>;
+/**
+ * One step up the rank or title ladder (nextPromotion in core shows what it needs). The gold comes from the city
+ * (whose Town Hall counts for ranks), the medals from the player. Replies with state.
+ */
+export type PromoteMessage = Envelope<'promote', { cityId: string; ladder: Ladder }>;
 /** Sets a city's tax rate, a whole number from 0 to 100. Gold per hour changes from now on. Replies with state. */
 export type SetTaxMessage = Envelope<'setTax', { cityId: string; taxRate: number }>;
 
@@ -142,7 +149,11 @@ export type CheatAction =
   /** Back to a new city: Town Hall and walls Lv1, starting resources, no troops, heroes or tasks. */
   | { action: 'resetCity' }
   /** The player's marches take a second each way (on) or the normal time (off). */
-  | { action: 'instantMarch'; on: boolean };
+  | { action: 'instantMarch'; on: boolean }
+  /** Adds medals to the player (negative takes away, never below 0). */
+  | { action: 'addMedals'; medals: MedalCounts }
+  /** The player's rank and/or title (ids from RANKS / TITLES), set straight with nothing paid. */
+  | { action: 'setTitle'; rank?: string; title?: string };
 
 export type ClientMessage =
   | LoginMessage
@@ -165,6 +176,7 @@ export type ClientMessage =
   | RecallMessage
   | GetReportsMessage
   | GetReportMessage
+  | PromoteMessage
   | CheatMessage;
 
 // ---------- server -> client ----------
@@ -254,4 +266,8 @@ export type ErrorCode =
   /** only NPC cities can be attacked for now */
   | 'bad_target'
   /** recall on a march already coming home */
-  | 'already_returning';
+  | 'already_returning'
+  /** a promotion without the medals it needs */
+  | 'not_enough_medals'
+  /** a title whose rank the player hasn't reached */
+  | 'rank_too_low';

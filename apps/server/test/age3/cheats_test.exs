@@ -27,6 +27,13 @@ defmodule Age3.CheatsTest do
 
     assert {:error, _} = Cheats.parse("setResearch", %{"tech" => "archery", "level" => 11})
     assert {:ok, %{}} = Cheats.parse("finishAll", %{})
+    assert {:ok, %{medals: %{"cross" => 5}}} = Cheats.parse("addMedals", %{"medals" => %{"cross" => 5}})
+    assert {:error, _} = Cheats.parse("addMedals", %{"medals" => %{"gold" => 5}})
+
+    assert {:ok, %{changes: [military_rank: "major", title: "earl"]}} =
+             Cheats.parse("setTitle", %{"rank" => "major", "title" => "earl"})
+
+    assert {:error, _} = Cheats.parse("setTitle", %{"title" => "emperor"})
 
     # setHero: only the fields sent; a new level starts at 0 exp
     assert {:ok, %{hero_id: "h", changes: [attack: 300]}} =

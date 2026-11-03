@@ -1,7 +1,8 @@
 defmodule Age3.Data do
-  # Building, research and troop costs, times and requirements. priv/data/buildings.json, research.json and
-  # troops.json (and npcs.json) are copies of the files in packages/core/src/data: npm run sync-data at the repo root keeps them
-  # equal, and a web test fails if they differ. So the client shows exactly what the server charges.
+  # Building, research and troop costs, times and requirements. priv/data/buildings.json, research.json,
+  # troops.json, npcs.json, medals.json and titles.json are copies of the files in packages/core/src/data: npm run
+  # sync-data at the repo root keeps them equal, and a web test fails if they differ. So the client shows exactly
+  # what the server charges.
   #
   # The files are read once at compile time and baked into this module; @external_resource makes mix recompile
   # the module whenever they change.
@@ -22,6 +23,32 @@ defmodule Age3.Data do
   @npcs_path Path.expand("../../priv/data/npcs.json", __DIR__)
   @external_resource @npcs_path
   @npcs @npcs_path |> File.read!() |> Jason.decode!()
+
+  @medals_path Path.expand("../../priv/data/medals.json", __DIR__)
+  @external_resource @medals_path
+  @medals @medals_path |> File.read!() |> Jason.decode!()
+
+  @titles_path Path.expand("../../priv/data/titles.json", __DIR__)
+  @external_resource @titles_path
+  @titles @titles_path |> File.read!() |> Jason.decode!()
+
+  @doc "The nine medal ids, lowest first: cross ... nation."
+  def medal_ids, do: Enum.map(@medals["medals"], & &1["id"])
+
+  @doc "Chance of each medal for a full clear of an NPC of this level, e.g. %{\"cross\" => 0.225}; %{} outside 1-10."
+  def npc_medal_drops(level) when is_integer(level) and level in 1..10,
+    do: Enum.at(@medals["drops"]["npc"], level - 1)
+
+  def npc_medal_drops(_level), do: %{}
+
+  @doc "Ranks, lowest (civilian) first: maps with id, name, gold, townHall, medals and prestigeAward."
+  def ranks, do: @titles["ranks"]
+
+  @doc "Titles, lowest (civilian) first: maps with id, name, rank, gold, prestige, medals, prestigeAward, cities."
+  def titles, do: @titles["titles"]
+
+  @doc "Whether promoting to a title checks its prestige need (off while nothing earns prestige)."
+  def title_checks_prestige?, do: @titles["checkPrestige"]
 
   @doc ~s(A full NPC city of this level: %{"troops", "forts", "resources"}, or nil.)
   def npc(level) when is_integer(level) and level in 1..10 do

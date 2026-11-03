@@ -5,12 +5,16 @@
     FIELD_SLOTS,
     MAX_BUILDING_LEVEL,
     MAX_TECH_LEVEL,
+    MEDALS,
+    RANKS,
     RESOURCE_TYPES,
     TECHS,
+    TITLES,
     TOWN_SLOTS,
     TROOPS,
     TROOP_DATA,
     type BuildingType,
+    type MedalId,
     type ResourceType,
     type TechId,
     type TroopType,
@@ -19,6 +23,7 @@
   import { currentCity, game, postChat } from '$state/game.svelte';
   import { command } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
+  import MedalBadge from '$ui/components/MedalBadge.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
   import { formatNumber } from '$ui/format';
 
@@ -52,6 +57,19 @@
   }
 
   const whole = (n: number | null | undefined) => Math.trunc(Number(n) || 0);
+
+  // Medals and titles (for the player, not one city)
+  let medals = $state<Partial<Record<MedalId, number>>>({});
+  function giveMedals() {
+    const m = Object.fromEntries(
+      Object.entries(medals)
+        .map(([k, v]) => [k, whole(v)])
+        .filter(([, v]) => v !== 0),
+    );
+    if (Object.keys(m).length) cheat({ action: 'addMedals', medals: m }, 'medals given');
+  }
+  let rank = $state(untrack(() => game.player.rankId ?? 'civilian'));
+  let title = $state(untrack(() => game.player.titleId ?? 'civilian'));
 
   // Resources & troops
   let amounts = $state<Partial<Record<ResourceType, number>>>({});
@@ -270,6 +288,50 @@
           variant="blue"
           disabled={!game.fromServer || sending}
           onclick={() => cheat({ action: 'setPopulation', amount: 0 }, 'population emptied')}>Empty</Button
+        >
+      </div>
+    </section>
+
+    <section>
+      <h3>Medals <span class="note">for the player; negative takes away</span></h3>
+      <div class="grid medals">
+        {#each MEDALS as m (m.id)}
+          <label>
+            <span><MedalBadge id={m.id} size={16} /> {m.name.replace(' Medal', '')}</span>
+            <input
+              type="number"
+              step="1"
+              placeholder="0"
+              aria-label="{m.name} to add"
+              bind:value={medals[m.id]}
+            />
+          </label>
+        {/each}
+      </div>
+      <div class="row">
+        <Button small variant="blue" onclick={() => MEDALS.forEach((m) => (medals[m.id] = 10))}
+          >10 each</Button
+        >
+        <Button small variant="blue" onclick={() => MEDALS.forEach((m) => (medals[m.id] = 50))}
+          >50 each</Button
+        >
+        <Button small variant="blue" onclick={() => (medals = {})}>Clear</Button>
+        <Button disabled={!game.fromServer || sending} onclick={giveMedals}>Give medals</Button>
+      </div>
+    </section>
+
+    <section>
+      <h3>Rank and title <span class="note">set straight, nothing paid</span></h3>
+      <div class="row">
+        <select aria-label="Rank" bind:value={rank}>
+          {#each RANKS as r (r.id)}<option value={r.id}>{r.name}</option>{/each}
+        </select>
+        <select aria-label="Title" bind:value={title}>
+          {#each TITLES as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+        </select>
+        <Button
+          disabled={!game.fromServer || sending}
+          onclick={() => cheat({ action: 'setTitle', rank, title }, 'rank and title set')}>Set</Button
         >
       </div>
     </section>

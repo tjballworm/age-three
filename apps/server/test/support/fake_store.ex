@@ -26,6 +26,11 @@ defmodule Age3.FakeStore do
   def cancel_build(_player_id, _city_id, "t1", _now_ms), do: :ok
   def cancel_build(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
 
+  # city "c1" can always be promoted; anything else lacks medals
+  @impl true
+  def promote(_player_id, "c1", _ladder, _now_ms), do: :ok
+  def promote(_player_id, _city_id, _ladder, _now_ms), do: {:error, "not_enough_medals"}
+
   @impl true
   def set_tax(_player_id, "c1", _tax_rate, _now_ms), do: :ok
   def set_tax(_player_id, _city_id, _tax_rate, _now_ms), do: {:error, "bad_message"}
