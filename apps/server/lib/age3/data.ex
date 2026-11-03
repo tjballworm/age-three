@@ -28,6 +28,7 @@ defmodule Age3.Data do
     n = Enum.at(@npcs["npcs"], level - 1)
     %{"troops" => n["troops"], "forts" => n["fortifications"], "resources" => n["resources"]}
   end
+
   def npc(_level), do: nil
 
   @doc "Seconds an NPC takes to refill its garrison and fortifications, and its resources, from empty."
