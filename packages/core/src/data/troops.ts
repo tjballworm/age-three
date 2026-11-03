@@ -49,9 +49,13 @@ export function trainSeconds(
   return Math.max(1, Math.round(spec.seconds * count * Math.pow(0.9, levels)));
 }
 
-/** Food all these troops eat each hour. */
+/**
+ * Food all these troops eat each hour, rounded up to whole food. One troop's upkeep can be a tenth (a warrior
+ * eats 0.1), so this adds up in tenths to keep float error out. Matches Train.upkeep on the server.
+ */
 export function upkeep(troops: TroopCounts | undefined): number {
-  let total = 0;
-  for (const [t, n] of Object.entries(troops ?? {})) total += TROOP_DATA[t as TroopType].upkeep * (n ?? 0);
-  return total;
+  let tenths = 0;
+  for (const [t, n] of Object.entries(troops ?? {}))
+    tenths += Math.round(TROOP_DATA[t as TroopType].upkeep * 10) * (n ?? 0);
+  return Math.ceil(tenths / 10);
 }

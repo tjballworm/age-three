@@ -52,9 +52,13 @@ defmodule Age3.Train do
     max(1, round(spec["seconds"] * count * :math.pow(0.9, levels)))
   end
 
-  @doc "Food these troops (%{\"warrior\" => 100, ...}) eat each hour."
+  @doc """
+  Food these troops (%{"warrior" => 100, ...}) eat each hour, rounded up to whole food. One troop's upkeep can be a
+  tenth (a warrior eats 0.1), so this adds up in tenths to keep float error out. Matches upkeep in packages/core.
+  """
   def upkeep(troops) do
-    Enum.sum(for {troop, n} <- troops || %{}, do: Data.troop(troop)["upkeep"] * n)
+    tenths = Enum.sum(for {troop, n} <- troops || %{}, do: round(Data.troop(troop)["upkeep"] * 10) * n)
+    div(tenths + 9, 10)
   end
 
   @doc "Adds count troops of a type to a city's troops."
