@@ -5,9 +5,15 @@
   // One battle in the game's own window style: who won, each side's troops (sent, lost, survived), the NPC's
   // fortifications and wall, and the battle round by round (hidden until asked for).
 
-  let { result, attacker, defender }: { result: BattleResult; attacker: string; defender: string } = $props();
+  // defending: the report of a battle at your own city, so Victory means the attacker lost
+  let {
+    result,
+    attacker,
+    defender,
+    defending = false,
+  }: { result: BattleResult; attacker: string; defender: string; defending?: boolean } = $props();
 
-  const won = $derived(result.winner === 'attacker');
+  const won = $derived((result.winner === 'attacker') !== defending);
   const sides = $derived([
     { title: attacker, side: result.attacker, rows: result.attacker.troops.filter((t) => t.initial > 0) },
     { title: defender, side: result.defender, rows: result.defender.troops.filter((t) => t.initial > 0) },

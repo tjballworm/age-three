@@ -44,6 +44,10 @@ export interface City extends Coord {
   grievance?: number;
   /** When the city last comforted its people (epoch ms), null if never. Missing from older servers. */
   comfortAt?: number | null;
+  /** The Rally Spot's "open gate to fight": closed, the troops stay out of battles (it opens by itself at loyalty 5). */
+  gateOpen?: boolean;
+  /** The hero who leads the city's defence, chosen apart from the mayor; null for nobody. */
+  defenderHeroId?: string | null;
   /** Percent, 0–100 */
   taxRate: number;
   /** Buildings inside the walls: the Town Hall, the walls and up to TOWN_SLOTS others. */
@@ -58,8 +62,22 @@ export interface City extends Coord {
   inn?: Inn | null;
 }
 
-/** idle heroes can be hired out to marches, made mayor or dismissed; a mayor stays home. */
-export type HeroStatus = 'idle' | 'mayor' | 'marching';
+/**
+ * idle heroes can be hired out to marches, made mayor or dismissed; a mayor stays home. A captive came with a
+ * captured city: persuade them to join (their hiring fee in gold) or release them.
+ */
+export type HeroStatus = 'idle' | 'mayor' | 'marching' | 'captive';
+
+/** Another player's city, as the world map shows it. */
+export interface LordCity extends Coord {
+  id: string;
+  name: string;
+  /** Town Hall level. */
+  level: number;
+  owner: string;
+  ownerId: string;
+  alliance?: string | null;
+}
 
 export interface HeroStats {
   name: string;
@@ -251,6 +269,10 @@ export interface ReportSummary {
   medals?: MedalCounts;
   /** The hero who led it: exp gained and the level they reached. */
   hero: { name: string; exp: number; level: number; levelsGained: number } | null;
+  /** "attack" for your attacks, "defence" for battles at your cities. Missing from older servers. */
+  side?: 'attack' | 'defence';
+  /** A player city's loyalty before and after the battle, and whether it was captured; null for NPC battles. */
+  loyalty?: { before: number; after: number; captured: boolean } | null;
   read: boolean;
   /** Epoch milliseconds */
   foughtAt: number;

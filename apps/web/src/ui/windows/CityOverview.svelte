@@ -41,6 +41,18 @@
     }
   }
 
+  async function setGate(open: boolean) {
+    error = '';
+    sending = true;
+    try {
+      await command({ type: 'setGate', payload: { cityId: city.id, open } });
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      sending = false;
+    }
+  }
+
   async function setTax() {
     error = '';
     sending = true;
@@ -113,6 +125,19 @@
     {/each}
     {#if cooldown > 0}<span class="note">Ready again in {Math.ceil(cooldown / 60_000)} min</span>{/if}
   </div>
+  <label class="gate">
+    <input
+      type="checkbox"
+      checked={city.gateOpen ?? false}
+      disabled={!game.fromServer || sending}
+      onchange={(e) => setGate(e.currentTarget.checked)}
+    />
+    Open gate to fight
+    <span class="note"
+      >Closed, your troops stay out of battles and only the walls defend. The gate opens by itself at loyalty
+      5. Choose the defending hero in the Feasting Hall.</span
+    >
+  </label>
 </div>
 {#if error}<p class="error" role="alert">{error}</p>{/if}
 
@@ -207,6 +232,13 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+  }
+  .gate {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
   }
   .cost {
     display: inline-flex;

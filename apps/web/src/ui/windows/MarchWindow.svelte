@@ -20,14 +20,17 @@
   import Window from '$ui/components/Window.svelte';
   import { formatDuration, formatNumber } from '$ui/format';
 
-  // Sends an attack from the city on screen to an NPC city: pick the troops and an idle hero, see how long it
+  // Sends an attack from the city on screen to an NPC city or another lord's city: pick the troops and an idle hero, see how long it
   // takes, the food it eats and what it can carry back, then March. The numbers come from the same rules the
   // server uses (rules/march.ts); the server checks everything again and decides the battle when it arrives.
 
   let { target }: { target: WorldTile } = $props();
 
   const city = $derived(currentCity());
-  const npc = $derived(npcSpec(target.level));
+  /** Another player's city: no garrison to show, as there is no scouting yet. */
+  const lord = $derived(target.kind === 'city');
+  const npc = $derived(lord ? null : npcSpec(target.level));
+  const what = $derived(lord ? `${target.name} (${target.owner})` : `the Lv ${target.level} NPC`);
   const rally = $derived(city.buildings.find((b) => b.type === 'rallyspot')?.level ?? 0);
   const academy = $derived(city.buildings.find((b) => b.type === 'academy')?.level ?? 0);
   const research = $derived(researchInCity(game.player.research, academy));
@@ -99,7 +102,7 @@
       postChat(
         'system',
         null,
-        `${formatNumber(sent)} troops set off for the Lv ${target.level} NPC at (${target.x},${target.y}).`,
+        `${formatNumber(sent)} troops set off for ${what} at (${target.x},${target.y}).`,
       );
       close();
     } catch (e) {
@@ -110,7 +113,14 @@
   }
 </script>
 
-<Window title="Attack Lv {target.level} NPC ({target.x},{target.y})" width={760} height={540} onclose={close}>
+<Window
+  title={lord
+    ? `Attack ${target.name} (${target.x},${target.y})`
+    : `Attack Lv ${target.level} NPC (${target.x},${target.y})`}
+  width={760}
+  height={540}
+  onclose={close}
+>
   <div class="march">
     <div class="side">
       <h3>From {city.name}</h3>
@@ -179,7 +189,16 @@
     </div>
 
     <div class="side enemy">
-      <h3>Lv {target.level} NPC garrison <span class="note">when full</span></h3>
+      {#if lord}
+        <h3>{target.name} <span class="note">Lv {target.level} · {target.owner}</span></h3>
+        <p class="note">
+          Scouting isn't built yet, so you can't see this lord's troops. With the gate closed only the walls
+          defend; open, the whole garrison fights. A win plunders what the warehouses don't protect and takes
+          3 loyalty. A win when loyalty is already 0 captures the city.
+        </p>
+      {:else}
+        <h3>Lv {target.level} NPC garrison <span class="note">when full</span></h3>
+      {/if}
       {#if npc}
         <table>
           <tbody>

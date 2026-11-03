@@ -21,9 +21,13 @@ defmodule Age3.March do
   the city's troops, hero the hero sent (a map with :status, or nil), from the city's {x, y}, to the target
   {x, y}, food the city's settled food, send the troops to send (%{"warrior" => 100}).
 
-  Returns {:ok, %{troops, seconds, food, level}} (level of the NPC attacked) or {:error, code}.
+  target is what stands at `to` (Age3.Pvp.target/3): {:npc, level}, {:city, city} or {:error, code}; left out,
+  only an NPC will do.
+
+  Returns {:ok, %{troops, seconds, food, level}} (level of the NPC attacked, nil for a player city) or
+  {:error, code}.
   """
-  def check(buildings, research, troops, hero, from, to, food, send) do
+  def check(buildings, research, troops, hero, from, to, food, send, target \\ nil) do
     rally = level_of(buildings, "rallyspot")
     send = for {t, n} <- send || %{}, n > 0, into: %{}, do: {t, n}
 
@@ -37,7 +41,7 @@ defmodule Age3.March do
              else: {:error, "not_enough_troops"}
            ),
          :ok <- hero_ready(hero),
-         {:ok, level} <- npc_at(to) do
+         {:ok, level} <- target_level(target, to) do
       seconds = seconds(from, to, send, research)
       cost = food(send, seconds)
 
@@ -58,6 +62,11 @@ defmodule Age3.March do
   defp hero_ready(nil), do: {:error, "no_hero"}
   defp hero_ready(%{status: "idle"}), do: :ok
   defp hero_ready(_hero), do: {:error, "hero_busy"}
+
+  defp target_level(nil, to), do: npc_at(to)
+  defp target_level({:npc, level}, _to), do: {:ok, level}
+  defp target_level({:city, _city}, _to), do: {:ok, nil}
+  defp target_level({:error, code}, _to), do: {:error, code}
 
   defp npc_at({x, y}) do
     case World.tile_at(x, y) do

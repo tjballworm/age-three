@@ -14,6 +14,10 @@ defmodule Age3.Report do
     field :loot, :map, default: %{}
     # medals the battle dropped, e.g. %{"rose" => 1}
     field :medals, :map, default: %{}
+    # "attack" or "defence": each side of a battle with a player gets its own report
+    field :side, :string, default: "attack"
+    # a player city's loyalty: %{"before", "after", "captured"}; nil for NPC battles
+    field :loyalty, :map
     field :hero, :map
     field :result, :map
     field :read, :boolean, default: false

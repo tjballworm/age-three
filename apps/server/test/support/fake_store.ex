@@ -37,6 +37,21 @@ defmodule Age3.FakeStore do
   def comfort(_player_id, _city_id, _kind, _now_ms), do: {:error, "comfort_cooldown"}
 
   @impl true
+  def set_gate(_player_id, "c1", open, _now_ms) when is_boolean(open), do: :ok
+  def set_gate(_player_id, _city_id, _open, _now_ms), do: {:error, "bad_message"}
+
+  @impl true
+  def set_defender(_player_id, "c1", hero_id, _now_ms) when hero_id in ["h1", nil], do: :ok
+  def set_defender(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "bad_message"}
+
+  @impl true
+  def persuade(_player_id, "c1", "h1", _now_ms), do: :ok
+  def persuade(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "not_enough_resources"}
+
+  @impl true
+  def lords(_player_id), do: [%{id: "c9", name: "Other's Town", x: 5, y: 6, level: 1, owner: "Other"}]
+
+  @impl true
   def set_tax(_player_id, "c1", _tax_rate, _now_ms), do: :ok
   def set_tax(_player_id, _city_id, _tax_rate, _now_ms), do: {:error, "bad_message"}
 

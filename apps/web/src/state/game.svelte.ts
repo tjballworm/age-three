@@ -1,7 +1,15 @@
 // Client-side game state (Svelte 5 runes). The Pixi scenes and the Svelte UI both read from here.
 // For now it is seeded with sample data; later it mirrors what the server sends.
 
-import { isFinished, wrapCoord, type ChatChannel, type City, type Coord, type Player, type WorldTile } from '@age3/core';
+import {
+  isFinished,
+  wrapCoord,
+  type ChatChannel,
+  type City,
+  type Coord,
+  type Player,
+  type WorldTile,
+} from '@age3/core';
 import type { GameState } from '@age3/protocol';
 import type { ConnectionStatus } from '$net/client';
 import { syncClock } from './clock.svelte';
@@ -76,7 +84,7 @@ export function applyServerState(s: GameState) {
   }
   game.fromServer = true;
   game.loading = false;
-  placeMyCities(s.cities, s.player);
+  placeMyCities(s.cities, s.player, s.lords ?? []);
   game.worldVersion++;
 }
 

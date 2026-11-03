@@ -45,6 +45,12 @@ function showLogin() {
   game.loading = false;
 }
 
+const PUSH_TEXT = {
+  cheat: 'Your city was changed by a tester (cheat).',
+  attacked: 'One of your cities was attacked! See Reports for the details.',
+  march: 'Your march reached its target. See Reports for the details.',
+} as const;
+
 export function startServerSync(): () => void {
   if (!SERVER_URL) return () => {};
   game.loading = true;
@@ -79,11 +85,11 @@ export function startServerSync(): () => void {
       }
     },
   }));
-  // a build, research or training finished on the server, or someone cheated on this account
+  // a build, research or training finished on the server, someone attacked this player, or cheated on this account
   const offPush = client.onMessage((m) => {
     if (m.type === 'state' && m.id === undefined) {
       applyServerState(m.payload);
-      postChat('system', null, 'Your city was changed by a tester (cheat).', m.payload.serverTime);
+      postChat('system', null, PUSH_TEXT[m.payload.reason ?? 'cheat'], m.payload.serverTime);
       return;
     }
     if (m.type !== 'taskDone') return;

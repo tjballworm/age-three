@@ -84,6 +84,9 @@ defmodule Age3.Session do
               "speedUp",
               "setTax",
               "comfort",
+              "setGate",
+              "setDefender",
+              "persuade",
               "research",
               "cancelResearch",
               "train",
@@ -371,6 +374,51 @@ defmodule Age3.Session do
   defp handle("comfort", _payload, id, session),
     do: {error(id, "bad_message", "Comfort with Disaster Relief or Praying."), session}
 
+  # The Rally Spot's gate: {cityId, open}. Closed, the troops stay out of battles.
+  defp handle("setGate", %{"cityId" => city_id, "open" => open}, id, session)
+       when is_binary(city_id) and is_boolean(open) do
+    now = session.now.()
+
+    case session.store.set_gate(session.player_id, city_id, open, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("setGate", _payload, id, session),
+    do: {error(id, "bad_message", "Open or close the gate with true or false."), session}
+
+  # The hero who leads a city's defence: {cityId, heroId} (null for nobody).
+  defp handle("setDefender", %{"cityId" => city_id} = payload, id, session) when is_binary(city_id) do
+    hero_id = payload["heroId"]
+    now = session.now.()
+
+    with true <- is_nil(hero_id) or is_binary(hero_id),
+         :ok <- session.store.set_defender(session.player_id, city_id, hero_id, now) do
+      state_reply(id, session, now)
+    else
+      false -> {error(id, "bad_message", "Not a valid hero."), session}
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("setDefender", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid hero."), session}
+
+  # Persuade a captive hero to join: {cityId, heroId}. Release one with dismiss.
+  defp handle("persuade", %{"cityId" => city_id, "heroId" => hero_id}, id, session)
+       when is_binary(city_id) and is_binary(hero_id) do
+    now = session.now.()
+
+    case session.store.persuade(session.player_id, city_id, hero_id, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("persuade", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid hero."), session}
+
   # One step up the rank or title ladder: {cityId, ladder: "rank" | "title"}. The gold comes from that city.
   defp handle("promote", %{"cityId" => city_id, "ladder" => ladder}, id, session)
        when is_binary(city_id) and ladder in ["rank", "title"] do
@@ -414,18 +462,25 @@ defmodule Age3.Session do
   defp cheat_target(%{"cityId" => city_id}) when is_binary(city_id), do: {:ok, {:city, city_id}}
   defp cheat_target(_payload), do: {:error, "bad_message"}
 
-  @doc "Tells a player's open sockets that their game changed (Age3Web.GameSocket pushes them the new state)."
-  def notify(player_id) do
+  @doc """
+  Tells a player's open sockets that their game changed (Age3Web.GameSocket pushes them the new state). reason is
+  "cheat" (someone cheated on this account), "attacked" (an attack on one of their cities arrived) or "march" (their
+  march reached another player's city while they weren't the one looking).
+  """
+  def notify(player_id, reason \\ "cheat") do
     Registry.dispatch(Age3.Players, player_id, fn sockets ->
-      for {pid, _} <- sockets, do: send(pid, :refresh)
+      for {pid, _} <- sockets, do: send(pid, {:refresh, reason})
     end)
   end
 
-  @doc "The push for a change made by someone else (a cheat): the player's whole state, with no id. nil if unreadable."
-  def refresh(session) do
+  @doc "The push for a change made by someone else: the player's whole state and the reason, with no id. nil if unreadable."
+  def refresh(session, reason \\ "cheat") do
     case state_reply(nil, session, session.now.()) do
-      {%{type: "state"} = push, _session} -> push
-      _ -> nil
+      {%{type: "state", payload: payload} = push, _session} ->
+        %{push | payload: Map.put(payload, :reason, reason)}
+
+      _ ->
+        nil
     end
   end
 
@@ -452,7 +507,14 @@ defmodule Age3.Session do
   defp state_reply(id, session, now) do
     case session.store.state(session.player_id, now) do
       {:ok, player, cities, tasks} ->
-        payload = %{player: player, cities: cities, tasks: tasks, serverTime: now}
+        payload = %{
+          player: player,
+          cities: cities,
+          tasks: tasks,
+          lords: session.store.lords(session.player_id),
+          serverTime: now
+        }
+
         {reply(id, "state", payload), session}
 
       {:error, :not_found} ->
@@ -466,6 +528,7 @@ defmodule Age3.Session do
 
   defp message("not_enough_resources"), do: "Not enough resources."
   defp message("comfort_cooldown"), do: "The people were comforted less than 15 minutes ago."
+  defp message("own_city"), do: "That city is already yours."
   defp message("queue_busy"), do: "Something is already being built in this city."
   defp message("research_busy"), do: "This Academy is already researching something."
   defp message("no_academy"), do: "This city has no Academy."
@@ -495,7 +558,7 @@ defmodule Age3.Session do
   defp message("no_troops"), do: "Choose some troops to send."
   defp message("no_hero"), do: "Choose a hero to lead the march."
   defp message("hero_not_found"), do: "That hero isn't in those cities any more."
-  defp message("bad_target"), do: "Only NPC cities can be attacked for now."
+  defp message("bad_target"), do: "Only NPC and player cities can be attacked for now."
   defp message("already_returning"), do: "That march is already on its way back."
   defp message("not_enough_medals"), do: "Not enough medals."
   defp message("rank_too_low"), do: "Your rank is too low for that title."

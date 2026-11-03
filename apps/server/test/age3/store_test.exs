@@ -650,7 +650,7 @@ defmodule Age3.Store.PgTest do
     test "instant march cheat: a second each way; errors" do
       {id, city_id, hero_id, {x, y}, now} = warlord("Flash")
       {:ok, _, [home], _} = Pg.state(id, now)
-      assert {:error, "bad_target"} = Pg.march(id, city_id, home.x, home.y, hero_id, %{"cavalry" => 1}, now)
+      assert {:error, "own_city"} = Pg.march(id, city_id, home.x, home.y, hero_id, %{"cavalry" => 1}, now)
       assert {:error, "no_hero"} = Pg.march(id, city_id, x, y, Ecto.UUID.generate(), %{"cavalry" => 1}, now)
       {:ok, ^id} = Pg.cheat(id, {:city, city_id}, "instantMarch", %{on: true}, now)
       {:ok, player, _, _} = Pg.state(id, now)
@@ -801,6 +801,179 @@ defmodule Age3.Store.PgTest do
              ]
 
       assert city.troops == %{}
+    end
+  end
+
+  describe "attacking player cities" do
+    # an attacker (5,000 cavalry, a hero, instant marches) and a defender's city with 1,000,000 of everything
+    defp rivals(a, b) do
+      {att, att_city, hero_id, _npc, now} = warlord(a)
+      {:ok, ^att} = Pg.cheat(att, {:city, att_city}, "instantMarch", %{on: true}, now)
+      {def, def_city, _now} = general(b)
+      target = Age3.Repo.get!(Age3.City, def_city)
+
+      %{
+        att: att,
+        att_city: att_city,
+        hero: hero_id,
+        def: def,
+        def_city: def_city,
+        x: target.x,
+        y: target.y,
+        now: now
+      }
+    end
+
+    defp attack(r, troops \\ %{"cavalry" => 1000}, at \\ nil) do
+      at = at || r.now
+      assert {:ok, arrives} = Pg.march(r.att, r.att_city, r.x, r.y, r.hero, troops, at)
+      arrives
+    end
+
+    defp city_of(player, now) do
+      {:ok, _, cities, _} = Pg.state(player, now)
+      cities
+    end
+
+    test "a win plunders what the warehouses don't protect, takes 3 loyalty and leaves both sides a report" do
+      r = rivals("Raider", "Victim")
+      [before] = city_of(r.def, r.now)
+      arrives = attack(r)
+      assert arrives == r.now + 1000
+
+      # the defender's own game finishes the attack when it next looks
+      [after_raid] = city_of(r.def, arrives)
+      assert after_raid.loyalty == before.loyalty - 3
+      assert after_raid.grievance == 2
+      assert after_raid.resources["gold"]["amount"] < before.resources["gold"]["amount"]
+
+      assert [
+               %{side: "defence", won: false, loyalty: %{"before" => l, "after" => l3, "captured" => false}} =
+                 d
+             ] =
+               Pg.reports(r.def)
+
+      assert l3 == l - 3
+      assert d.title =~ "lost to Raider"
+
+      assert [%{side: "attack", won: true, loot: loot}] = Pg.reports(r.att)
+      assert Enum.sum(Map.values(loot)) > 0
+
+      # survivors and loot come home a second later
+      {:ok, _, [home], []} = Pg.state(r.att, arrives + 1000)
+      assert home.troops["cavalry"] > 4000
+      assert [%{status: "idle"}] = home.heroes
+    end
+
+    test "a closed gate keeps the troops out of the battle; an open one sends them in, led by the defending hero" do
+      r = rivals("Sieger", "Turtle")
+      {:ok, _} = Pg.cheat(r.def, {:city, r.def_city}, "addTroops", %{troops: %{"warrior" => 200}}, r.now)
+
+      guard =
+        Age3.Repo.insert!(%Age3.Hero{
+          city_id: r.def_city,
+          name: "Guard",
+          level: 3,
+          politics: 1,
+          attack: 1,
+          intelligence: 1
+        })
+
+      arrives = attack(r)
+      [city] = city_of(r.def, arrives)
+      assert city.troops["warrior"] == 200
+
+      assert :ok = Pg.set_gate(r.def, r.def_city, true, arrives)
+      assert :ok = Pg.set_defender(r.def, r.def_city, guard.id, arrives)
+      [city] = city_of(r.def, arrives)
+      assert %{gateOpen: true, defenderHeroId: guard_id} = city
+      assert guard_id == guard.id
+
+      # the hero is home again after two seconds
+      arrives = attack(r, %{"cavalry" => 1000}, arrives + 1000)
+      [city] = city_of(r.def, arrives)
+      assert city.troops["warrior"] < 200
+      assert [%{side: "defence", hero: %{"name" => "Guard"}} | _] = Pg.reports(r.def)
+    end
+
+    test "a win at loyalty 0 captures the city: its heroes become captives and the loser gets a new city" do
+      r = rivals("Conqueror", "Loser")
+
+      {:ok, _} =
+        Pg.cheat(r.def, {:city, r.def_city}, "setLoyalty", %{changes: [loyalty: 0, grievance: 90]}, r.now)
+
+      {:ok, _} = Pg.cheat(r.def, {:city, r.def_city}, "addTroops", %{troops: %{"warrior" => 50}}, r.now)
+
+      Age3.Repo.insert!(%Age3.Hero{
+        city_id: r.def_city,
+        name: "Mayor",
+        level: 2,
+        politics: 1,
+        attack: 1,
+        intelligence: 1
+      })
+
+      {:ok, _} = Pg.train(r.def, r.def_city, "4", "warrior", 10, r.now)
+
+      arrives = attack(r)
+      {:ok, _, cities, _tasks} = Pg.state(r.att, arrives)
+      assert length(cities) == 2
+      taken = Enum.find(cities, &(&1.id == r.def_city))
+      assert %{loyalty: 10, grievance: 0, troops: %{}} = taken
+      assert [%{name: "Mayor", status: "captive"} = captive] = taken.heroes
+
+      # the loser starts again with a new empty city; what they had queued there is gone
+      {:ok, _, [fresh], tasks} = Pg.state(r.def, arrives)
+      assert fresh.id != r.def_city
+      assert tasks == []
+      assert [%{type: "townhall", level: 1} | _] = fresh.buildings |> Enum.filter(&(&1.type == "townhall"))
+      assert [%{side: "defence", loyalty: %{"captured" => true}}] = Pg.reports(r.def)
+      assert [%{side: "attack", title: "Captured " <> _}] = Pg.reports(r.att)
+
+      # captives can be persuaded for level x 1,000 gold, and aren't paid until then
+      assert :ok = Pg.persuade(r.att, r.def_city, captive.id, arrives)
+      {:ok, _, cities, _} = Pg.state(r.att, arrives)
+      assert [%{status: "idle"}] = Enum.find(cities, &(&1.id == r.def_city)).heroes
+
+      # the old owner sees it on the map as someone else's now
+      assert Enum.any?(Pg.lords(r.def), &(&1.id == r.def_city and &1.owner == "Conqueror"))
+    end
+
+    test "a march out of a captured city goes home to its owner's new city" do
+      r = rivals("Taker", "Wanderer")
+
+      {:ok, _} =
+        Pg.cheat(r.def, {:city, r.def_city}, "setLoyalty", %{changes: [loyalty: 0, grievance: 90]}, r.now)
+
+      {:ok, _} = Pg.cheat(r.def, {:city, r.def_city}, "addTroops", %{troops: %{"cavalry" => 10}}, r.now)
+
+      scout =
+        Age3.Repo.insert!(%Age3.Hero{
+          city_id: r.def_city,
+          name: "Away",
+          level: 1,
+          politics: 1,
+          attack: 1,
+          intelligence: 1
+        })
+
+      # the defender marches off to the attacker's city (slowly: no instant marches for them)
+      home = Age3.Repo.get!(Age3.City, r.att_city)
+      assert {:ok, back_at} = Pg.march(r.def, r.def_city, home.x, home.y, scout.id, %{"cavalry" => 10}, r.now)
+      assert back_at > r.now + 1000
+
+      arrives = attack(r)
+      {:ok, _, [fresh], [march]} = Pg.state(r.def, arrives)
+      assert march.cityId == fresh.id
+      assert [%{name: "Away", status: "marching"}] = fresh.heroes
+    end
+
+    test "your own city can't be attacked" do
+      r = rivals("Selfish", "Bystander")
+      home = Age3.Repo.get!(Age3.City, r.att_city)
+
+      assert {:error, "own_city"} =
+               Pg.march(r.att, r.att_city, home.x, home.y, r.hero, %{"cavalry" => 1}, r.now)
     end
   end
 end

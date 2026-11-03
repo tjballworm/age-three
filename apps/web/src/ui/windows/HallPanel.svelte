@@ -8,15 +8,22 @@
 
   // The Feasting Hall half of its window: the city's heroes, with Appoint Mayor and Dismiss. A mayor stays home
   // (mayor bonuses come later); only idle heroes can be dismissed or appointed. Dismissing can't be undone, so it
-  // asks once more first.
+  // asks once more first. Any free hero can also be the city's defender, who leads its troops when it is attacked.
+  // Captives come with a captured city: persuade them for their hiring fee, or release them.
 
   const city = $derived(currentCity());
   const hall = $derived(city.buildings.find((b) => b.type === 'feastinghall')?.level ?? 0);
   const heroes = $derived(city.heroes ?? []);
   const salaries = $derived(heroes.reduce((n, h) => n + h.salary, 0));
   const mayor = $derived(heroes.find((h) => h.status === 'mayor'));
+  const defender = $derived(heroes.find((h) => h.id === city.defenderHeroId));
 
-  const STATUS: Record<CityHero['status'], string> = { idle: 'Idle', mayor: 'Mayor', marching: 'Marching' };
+  const STATUS: Record<CityHero['status'], string> = {
+    idle: 'Idle',
+    mayor: 'Mayor',
+    marching: 'Marching',
+    captive: 'Captive',
+  };
 
   let confirming = $state<string | null>(null);
   let error = $state('');
@@ -39,12 +46,17 @@
     send(() => command({ type: 'setMayor', payload: { cityId: city.id, heroId } }));
   const dismiss = (heroId: string) =>
     send(() => command({ type: 'dismiss', payload: { cityId: city.id, heroId } }));
+  const defend = (heroId: string | null) =>
+    send(() => command({ type: 'setDefender', payload: { cityId: city.id, heroId } }));
+  const persuade = (heroId: string) =>
+    send(() => command({ type: 'persuade', payload: { cityId: city.id, heroId } }));
 </script>
 
 <div class="hall">
   <div class="summary">
     <span>Heroes <b>{heroes.length} / {hall}</b></span>
     <span>Mayor <b>{mayor?.name ?? 'none'}</b></span>
+    <span>Defender <b>{defender?.name ?? 'none'}</b></span>
     <span>Salaries <b>{formatNumber(salaries)} gold/h</b></span>
   </div>
   {#if !game.fromServer}<p class="note">Showing sample data: managing heroes needs the game server.</p>{/if}
@@ -70,11 +82,41 @@
         </div>
         <div class="stats"><HeroStatsRow {hero} /></div>
         <div class="info">
-          <span class="status {hero.status}">{STATUS[hero.status]}</span>
+          <span class="status {hero.status}"
+            >{STATUS[hero.status]}{hero.id === city.defenderHeroId ? ' · Defender' : ''}</span
+          >
           <span>{formatNumber(hero.salary)} gold/h</span>
         </div>
         <div class="actions">
-          {#if hero.status === 'mayor'}
+          {#if hero.status === 'captive'}
+            <Button
+              small
+              disabled={!game.fromServer || sending}
+              title="Pay {formatNumber(hero.level * 1000)} gold to win them over"
+              onclick={() => persuade(hero.id)}>Persuade ({formatNumber(hero.level * 1000)})</Button
+            >
+            <Button
+              small
+              variant="red"
+              disabled={!game.fromServer || sending}
+              onclick={() => dismiss(hero.id)}>Release</Button
+            >
+          {:else if hero.id === city.defenderHeroId}
+            <Button small variant="blue" disabled={!game.fromServer || sending} onclick={() => defend(null)}
+              >Stand down</Button
+            >
+          {:else}
+            <Button
+              small
+              variant="blue"
+              disabled={!game.fromServer || sending}
+              title="Lead the city's troops when it is attacked"
+              onclick={() => defend(hero.id)}>Defend city</Button
+            >
+          {/if}
+          {#if hero.status === 'captive'}
+            <!-- captives can't be mayor or dismissed -->
+          {:else if hero.status === 'mayor'}
             <Button small variant="blue" disabled={!game.fromServer || sending} onclick={() => appoint(null)}
               >Remove Mayor</Button
             >
@@ -86,7 +128,9 @@
               onclick={() => appoint(hero.id)}>Appoint Mayor</Button
             >
           {/if}
-          {#if confirming === hero.id}
+          {#if hero.status === 'captive'}
+            <!-- released above -->
+          {:else if confirming === hero.id}
             <Button small variant="red" disabled={sending} onclick={() => dismiss(hero.id)}
               >Really dismiss?</Button
             >
@@ -202,6 +246,9 @@
   }
   .status.marching {
     color: #2f6fae;
+  }
+  .status.captive {
+    color: var(--err);
   }
   .actions {
     display: flex;

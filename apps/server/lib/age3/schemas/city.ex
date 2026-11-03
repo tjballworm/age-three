@@ -16,6 +16,12 @@ defmodule Age3.City do
     field :grievance, :integer, default: 0
     # the last Disaster Relief or Praying (Age3.Loyalty, 15 minute cooldown)
     field :comfort_at, :utc_datetime_usec
+
+    # the Rally Spot's "open gate to fight": closed keeps the troops out of battles (they open by themselves at
+    # loyalty 5 or less)
+    field :gate_open, :boolean, default: false
+    # the hero who leads the city's defence, chosen apart from the mayor (TJ, 2026-11-03)
+    field :defender_hero_id, :binary_id
     field :tax_rate, :integer, default: 10
     field :resources, :map
     field :population, :map

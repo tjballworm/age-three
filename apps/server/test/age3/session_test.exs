@@ -274,6 +274,25 @@ defmodule Age3.SessionTest do
              ])
   end
 
+  test "setGate, setDefender and persuade; state lists other lords' cities" do
+    assert [
+             %{"type" => "welcome"},
+             %{"type" => "state", "payload" => %{"lords" => [%{"owner" => "Other"}]}},
+             %{"type" => "state"},
+             %{"payload" => %{"code" => "bad_message"}},
+             %{"type" => "state"},
+             %{"payload" => %{"code" => "not_enough_resources"}}
+           ] =
+             run([
+               login("secret123"),
+               ~s({"type":"setGate","id":2,"payload":{"cityId":"c1","open":true}}),
+               ~s({"type":"setDefender","id":3,"payload":{"cityId":"c1","heroId":null}}),
+               ~s({"type":"setDefender","id":4,"payload":{"cityId":"c1","heroId":7}}),
+               ~s({"type":"persuade","id":5,"payload":{"cityId":"c1","heroId":"h1"}}),
+               ~s({"type":"persuade","id":6,"payload":{"cityId":"c1","heroId":"h2"}})
+             ])
+  end
+
   test "promote goes up the rank or title ladder" do
     assert [
              _,
@@ -319,8 +338,9 @@ defmodule Age3.SessionTest do
 
   test "refresh pushes the whole state with no id" do
     session = Session.new(store: Age3.FakeStore, player_id: "p1", now: fn -> 7 end)
-    assert %{type: "state", payload: %{serverTime: 7}} = push = Session.refresh(session)
+    assert %{type: "state", payload: %{serverTime: 7, reason: "cheat"}} = push = Session.refresh(session)
     refute Map.has_key?(push, :id)
+    assert %{payload: %{reason: "attacked"}} = Session.refresh(session, "attacked")
   end
 
   test "commands need a login first" do

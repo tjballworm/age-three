@@ -78,7 +78,8 @@
         <b>{r.title.replace(/^(Victory|Defeat) against /, '')}</b>
         <span class="meta">
           {when(r.foughtAt)}{#if lootTotal(r)}
-            · {formatNumber(lootTotal(r))} loot{/if}{#if medalCount(r)}
+            · {formatNumber(lootTotal(r))}
+            {r.side === 'defence' ? 'plundered' : 'loot'}{/if}{#if medalCount(r)}
             · {medalCount(r)} {medalCount(r) === 1 ? 'medal' : 'medals'}{/if}
         </span>
       </button>
@@ -105,9 +106,15 @@
               <b>Lv {open.hero.level}</b>{/if}
           </span>
         {/if}
+        {#if open.loyalty}
+          <span class:lost={open.loyalty.captured}>
+            Loyalty <b>{open.loyalty.before} → {open.loyalty.after}</b>{#if open.loyalty.captured}
+              · <b>City captured!</b>{/if}
+          </span>
+        {/if}
         {#if lootTotal(open)}
           <span class="loot">
-            Loot
+            {open.side === 'defence' ? 'Plundered' : 'Loot'}
             {#each RESOURCE_TYPES as res (res)}
               {#if open.loot[res]}<ResourceIcon type={res} size={14} />
                 <b>{formatNumber(open.loot[res] ?? 0)}</b>{/if}
@@ -126,11 +133,15 @@
           </span>
         {/if}
       </div>
-      <BattleReport
-        result={open.result}
-        attacker="Your army"
-        defender={open.title.replace(/^(Victory|Defeat) against /, '')}
-      />
+      {#if open.side === 'defence'}
+        <BattleReport result={open.result} attacker="Enemy army" defender="Your city" defending />
+      {:else}
+        <BattleReport
+          result={open.result}
+          attacker="Your army"
+          defender={open.title.replace(/^(Victory|Defeat) against |^Captured /, '')}
+        />
+      {/if}
     {:else}
       <p class="note pick">Choose a report to see the battle.</p>
     {/if}
@@ -215,6 +226,9 @@
   }
   .facts b {
     color: #b07a10;
+  }
+  .facts .lost b {
+    color: var(--err);
   }
   .loot {
     display: inline-flex;
