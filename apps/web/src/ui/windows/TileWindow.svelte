@@ -2,17 +2,10 @@
   import { distance, stateAt, type WorldTile } from '@age3/core';
   import { currentCity, game, openMarch, selectTile } from '$state/game.svelte';
   import Button from '$ui/components/Button.svelte';
-  import Tabs from '$ui/components/Tabs.svelte';
   import Window from '$ui/components/Window.svelte';
   import { KIND_LABEL, tileTitle } from '$ui/tile';
 
   let { tile }: { tile: WorldTile } = $props();
-
-  const TABS = [
-    { id: 'info', label: 'Info' },
-    { id: 'actions', label: 'Actions' },
-  ] as const;
-  let tab = $state<'info' | 'actions'>('info');
 
   const from = $derived(currentCity());
   const here = $derived(tile.x === from.x && tile.y === from.y);
@@ -59,11 +52,7 @@
 </script>
 
 <Window title={tileTitle(tile)} width={620} height={440} onclose={close}>
-  {#snippet tabs()}
-    <Tabs tabs={TABS} bind:active={tab} />
-  {/snippet}
-
-  {#if tab === 'info'}
+  <div class="layout">
     <table>
       <tbody>
         <tr><th>Type</th><td>{KIND_LABEL[tile.kind]}</td></tr>
@@ -77,8 +66,9 @@
         <tr><th>Distance</th><td>{distanceText}</td></tr>
       </tbody>
     </table>
-  {:else}
-    <div class="actions">
+
+    <section class="actions">
+      <h3>Actions</h3>
       {#each actions as a (a.label)}
         <div class="action">
           <div>
@@ -96,8 +86,8 @@
           {/if}
         </div>
       {/each}
-    </div>
-  {/if}
+    </section>
+  </div>
 
   {#snippet footer()}
     <Button variant="dark" onclick={close}>Close</Button>
@@ -105,13 +95,19 @@
 </Window>
 
 <style>
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 12px;
+    align-items: start;
+  }
   table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
   }
   th {
-    width: 140px;
+    width: 110px;
     padding: 8px 12px;
     text-align: left;
     font: 800 12px var(--font-display);
@@ -124,11 +120,16 @@
     font-weight: 700;
     border-bottom: 1px solid rgba(0, 60, 110, 0.14);
   }
+  h3 {
+    margin: 0;
+    font: 800 13px var(--font-display);
+    color: #7a4a12;
+  }
   .actions {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 12px;
+    padding: 8px 12px 12px 0;
   }
   .action {
     display: flex;
