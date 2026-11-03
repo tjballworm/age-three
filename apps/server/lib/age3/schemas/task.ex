@@ -18,6 +18,8 @@ defmodule Age3.Task do
     field :cost, :map
     # marches only: troops, hero, target, loot and phase (Age3.March)
     field :data, :map
+    # the player city a march is heading for; nil for NPC attacks and the way home
+    field :target_city_id, :binary_id
     field :started_at, :utc_datetime_usec
     field :ends_at, :utc_datetime_usec
   end

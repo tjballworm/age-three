@@ -5,7 +5,7 @@
   // Lord > Heroes: every hero in every city, to look at. Hiring and managing them is at each city's Inn and
   // Feasting Hall.
   const rows = $derived(game.cities.flatMap((c) => (c.heroes ?? []).map((h) => ({ city: c.name, ...h }))));
-  const STATUS = { idle: 'Idle', mayor: 'Mayor', marching: 'Marching' } as const;
+  const STATUS = { idle: 'Idle', mayor: 'Mayor', marching: 'Marching', captive: 'Captive' } as const;
 </script>
 
 <div class="wrap">

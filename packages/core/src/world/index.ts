@@ -21,6 +21,8 @@ export interface WorldTile extends Coord {
   alliance?: string | null;
   /** True for the current player's own cities. */
   mine?: boolean;
+  /** A real player city's id (made-up towns on the generated map have none). */
+  cityId?: string;
 }
 
 export interface World {

@@ -36,7 +36,12 @@
       case 'city':
         return [
           { label: 'Scout', hint: "See this lord's troops and resources" },
-          { label: 'Attack', hint: 'Send troops against this city' },
+          {
+            label: 'Attack',
+            hint: tile.cityId
+              ? 'Plunder it and lower its loyalty; at loyalty 0 a win captures it'
+              : 'This town is only scenery for now',
+          },
         ];
     }
   });
@@ -77,7 +82,7 @@
           </div>
           {#if a.label === 'Enter City'}
             <Button onclick={enterCity}>{a.label}</Button>
-          {:else if a.label === 'Attack' && tile.kind === 'npc'}
+          {:else if a.label === 'Attack' && (tile.kind === 'npc' || (tile.kind === 'city' && tile.cityId))}
             <Button variant="red" disabled={!game.fromServer} onclick={() => openMarch(tile)}
               >{a.label}</Button
             >

@@ -46,9 +46,9 @@ defmodule Age3Web.GameSocket do
     end
   end
 
-  # Someone else changed this player's game (a cheat on their account): push the new state.
-  def handle_info(:refresh, session) do
-    case Age3.Session.refresh(session) do
+  # Someone else changed this player's game (a cheat on their account, an attack): push the new state.
+  def handle_info({:refresh, reason}, session) do
+    case Age3.Session.refresh(session, reason) do
       nil -> {:ok, session}
       push -> {:push, {:text, Jason.encode!(push)}, session}
     end

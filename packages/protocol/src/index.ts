@@ -5,6 +5,7 @@ import type {
   BuildingType,
   City,
   Ladder,
+  LordCity,
   MedalCounts,
   Player,
   ReportSummary,
@@ -76,6 +77,12 @@ export type RefreshInnMessage = Envelope<'refreshInn', { cityId: string }>;
 export type DismissMessage = Envelope<'dismiss', { cityId: string; heroId: string }>;
 /** Make an idle hero the city's mayor (the old one goes back to idle), or `heroId: null` for none. Replies with state. */
 export type SetMayorMessage = Envelope<'setMayor', { cityId: string; heroId: string | null }>;
+/** Chooses the hero who leads the city's defence (any free hero, the mayor too), or nobody. Replies with state. */
+export type SetDefenderMessage = Envelope<'setDefender', { cityId: string; heroId: string | null }>;
+/** Persuades a captive hero (from a captured city) to join for their hiring fee in gold. Release one with dismiss. */
+export type PersuadeMessage = Envelope<'persuade', { cityId: string; heroId: string }>;
+/** Opens or closes the Rally Spot's gate. Closed, the troops stay out of battles. Replies with state. */
+export type SetGateMessage = Envelope<'setGate', { cityId: string; open: boolean }>;
 /**
  * Attack the NPC city at x, y with an idle hero and troops from the city. The troops, hero and the trip's food
  * (marchFood) leave now; the battle is fought when the march arrives (a taskDone with `march.won`), then it comes
@@ -180,6 +187,9 @@ export type ClientMessage =
   | RefreshInnMessage
   | DismissMessage
   | SetMayorMessage
+  | SetDefenderMessage
+  | PersuadeMessage
+  | SetGateMessage
   | MarchMessage
   | RecallMessage
   | GetReportsMessage
@@ -200,9 +210,16 @@ export interface GameState {
   cities: City[];
   /** Running tasks in all the player's cities. */
   tasks: TimedTask[];
+  /** Every other player's city, for the world map. Missing from older servers. */
+  lords?: LordCity[];
   serverTime: number;
+  /**
+   * Only on a push with no id: why the game changed. 'cheat' (someone cheated on this account), 'attacked' (an
+   * attack on one of the player's cities arrived), 'march' (the player's march reached another player's city).
+   */
+  reason?: 'cheat' | 'attacked' | 'march';
 }
-/** The reply to getState and commands; also pushed with no id when a cheat on another account changed this game. */
+/** The reply to getState and commands; also pushed with no id when someone else changed this game (see reason). */
 export type StateMessage = Envelope<'state', GameState>;
 /** Pushed (no id) when one of the player's tasks finishes, with the whole new state. */
 export type TaskDoneMessage = Envelope<'taskDone', GameState & { task: TimedTask }>;
@@ -282,4 +299,6 @@ export type ErrorCode =
   /** a title whose rank the player hasn't reached */
   | 'rank_too_low'
   /** comfort less than 15 minutes after the last one in that city */
-  | 'comfort_cooldown';
+  | 'comfort_cooldown'
+  /** a march to one of your own cities */
+  | 'own_city';
