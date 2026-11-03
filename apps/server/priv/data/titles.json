@@ -1,0 +1,24 @@
+{
+  "_source": "Evony Age II wiki, Ranks and Titles pages (design/age2-wiki). The Guidelines item rewards are left out (no items yet). prestige is the prestige needed; checkPrestige false skips that check until prestige can be earned (TJ question 1).",
+  "checkPrestige": false,
+  "ranks": [
+    {"id": "civilian", "name": "Civilian"},
+    {"id": "lieutenant", "name": "Lieutenant", "gold": 10000, "townHall": 2, "medals": {}, "prestigeAward": 100},
+    {"id": "captain", "name": "Captain", "gold": 20000, "townHall": 4, "medals": {"cross": 5}, "prestigeAward": 200},
+    {"id": "major", "name": "Major", "gold": 30000, "townHall": 6, "medals": {"rose": 5}, "prestigeAward": 300},
+    {"id": "colonel", "name": "Colonel", "gold": 40000, "townHall": 8, "medals": {"lion": 5}, "prestigeAward": 400},
+    {"id": "general", "name": "General", "gold": 50000, "townHall": 10, "medals": {"honor": 5}, "prestigeAward": 500}
+  ],
+  "titles": [
+    {"id": "civilian", "name": "Civilian", "cities": 1},
+    {"id": "knight", "name": "Knight", "rank": "lieutenant", "gold": 20000, "prestige": 1000, "medals": {"cross": 10, "rose": 5}, "prestigeAward": 100, "cities": 2},
+    {"id": "baronet", "name": "Baronet", "rank": "captain", "gold": 40000, "prestige": 2000, "medals": {"rose": 10, "lion": 5}, "prestigeAward": 200, "cities": 3},
+    {"id": "baron", "name": "Baron", "rank": "major", "gold": 60000, "prestige": 4000, "medals": {"lion": 10, "honor": 5}, "prestigeAward": 600, "cities": 4},
+    {"id": "viscount", "name": "Viscount", "rank": "colonel", "gold": 80000, "prestige": 8000, "medals": {"honor": 10, "courage": 5}, "prestigeAward": 800, "cities": 5},
+    {"id": "earl", "name": "Earl", "rank": "general", "gold": 100000, "prestige": 16000, "medals": {"courage": 10, "wisdom": 5}, "prestigeAward": 1000, "cities": 6},
+    {"id": "marquis", "name": "Marquis", "rank": "general", "gold": 200000, "prestige": 32000, "medals": {"wisdom": 10, "freedom": 5}, "prestigeAward": 2000, "cities": 7},
+    {"id": "duke", "name": "Duke", "rank": "general", "gold": 300000, "prestige": 64000, "medals": {"freedom": 10, "justice": 5}, "prestigeAward": 1400, "cities": 8},
+    {"id": "furstin", "name": "Furstin", "rank": "general", "gold": 400000, "prestige": 128000, "medals": {"justice": 10, "nation": 5}, "prestigeAward": 1600, "cities": 9},
+    {"id": "prinzessin", "name": "Prinzessin", "rank": "general", "gold": 500000, "prestige": 256000, "medals": {"justice": 30, "nation": 15}, "prestigeAward": 5000, "cities": 10}
+  ]
+}

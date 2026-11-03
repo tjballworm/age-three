@@ -1,6 +1,7 @@
 // Core domain types shared by client and server.
 
 import type { TroopType } from '../combat/units';
+import type { MedalCounts } from '../data/titles';
 
 export type ResourceType = 'gold' | 'food' | 'lumber' | 'stone' | 'iron';
 
@@ -165,7 +166,17 @@ export type TechId =
 export interface Player {
   id: string;
   name: string;
+  /** Title name, e.g. "Knight". */
   title: string;
+  /** Title id from TITLES, e.g. "knight". Missing in sample data (Civilian). */
+  titleId?: string;
+  /** Military rank name, e.g. "Captain", and its id from RANKS. */
+  militaryRank?: string;
+  rankId?: string;
+  /** Medals held. Types they have none of are missing. */
+  medals?: MedalCounts;
+  /** Cities the title allows (Civilian 1 ... Prinzessin 10). */
+  cityCap?: number;
   alliance: string | null;
   prestige: number;
   honor: number;
@@ -216,6 +227,8 @@ export interface MarchInfo {
   troops: Partial<Record<TroopType, number>>;
   /** What it carries home; empty on the way out. */
   loot: Partial<Record<ResourceType, number>>;
+  /** Medals won in the battle (already the player's). */
+  medals?: MedalCounts;
   /** Only on the task that just arrived (in taskDone): how the battle went and its report. */
   won?: boolean;
   reportId?: string;
@@ -230,6 +243,8 @@ export interface ReportSummary {
   y: number;
   won: boolean;
   loot: Partial<Record<ResourceType, number>>;
+  /** Medals the battle dropped (a full clear of a full-strength NPC). */
+  medals?: MedalCounts;
   /** The hero who led it: exp gained and the level they reached. */
   hero: { name: string; exp: number; level: number; levelsGained: number } | null;
   read: boolean;

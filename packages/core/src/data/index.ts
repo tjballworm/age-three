@@ -41,3 +41,4 @@ export * from './buildings';
 export * from './research';
 export * from './troops';
 export * from './npcs';
+export * from './titles';

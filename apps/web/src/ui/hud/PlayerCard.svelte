@@ -6,6 +6,12 @@
   import { formatClock, formatNumber } from '$ui/format';
 
   const p = $derived(game.player);
+  // e.g. "Captain · Knight · Alliance"; a Civilian rank is left out
+  const standing = $derived(
+    [p.militaryRank && p.militaryRank !== 'Civilian' ? p.militaryRank : null, p.title, p.alliance]
+      .filter(Boolean)
+      .join(' · '),
+  );
 </script>
 
 <section class="player" aria-label="Player">
@@ -20,7 +26,9 @@
   </button>
   <div class="who">
     <div class="caption name">{p.name}</div>
-    <div class="muted">{p.title}{p.alliance ? ` · ${p.alliance}` : ''}</div>
+    <button class="muted rank" type="button" onclick={() => openWindow('hero')} title="Rank and title">
+      {standing}
+    </button>
     <div class="net {game.connection}" title={game.fromServer ? 'Playing on the game server' : 'Showing sample data'}>
       {game.connection === 'online' ? 'Online' : game.connection === 'connecting' ? 'Connecting…' : game.fromServer ? 'Offline · reconnecting' : 'Offline · sample data'}
     </div>
@@ -95,6 +103,21 @@
   }
   .who .muted {
     font-size: 11px;
+  }
+  .rank {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .rank:hover {
+    color: var(--gold-light);
+    text-decoration: underline;
   }
   .net {
     font-size: 10px;

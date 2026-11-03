@@ -78,6 +78,18 @@ defmodule Age3.Store do
   @callback speed_up(player_id :: String.t(), city_id :: String.t(), task_id :: String.t(), now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
 
+  @doc """
+  Promotes the player one step up the rank (ladder :rank) or title (:title) ladder, paying the gold from city_id
+  (whose Town Hall level counts for ranks) and the medals now. Adds the step's prestige award.
+  """
+  @callback promote(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              ladder :: :rank | :title,
+              now_ms :: integer
+            ) ::
+              :ok | {:error, code :: String.t()}
+
   @doc "Sets a city's tax rate (0-100). Gold from taxes changes from now on."
   @callback set_tax(player_id :: String.t(), city_id :: String.t(), tax_rate :: integer, now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
@@ -180,6 +192,7 @@ defmodule Age3.Store.Pg do
     Repo,
     Research,
     Task,
+    Titles,
     Train
   }
 
@@ -725,7 +738,7 @@ defmodule Age3.Store.Pg do
             where: r.player_id == ^id,
             order_by: [desc: r.fought_at],
             limit: @reports,
-            select: struct(r, [:id, :city_id, :title, :x, :y, :won, :loot, :hero, :read, :fought_at])
+            select: struct(r, [:id, :city_id, :title, :x, :y, :won, :loot, :medals, :hero, :read, :fought_at])
         )
         |> Enum.map(&report_json/1)
 
@@ -748,6 +761,40 @@ defmodule Age3.Store.Pg do
   defp unread_reports(player_id),
     do: Repo.aggregate(from(r in Report, where: r.player_id == ^player_id and not r.read), :count)
 
+  # Promotions: one step up the rank or title ladder (Age3.Titles), paid with gold from city_id (whose Town Hall
+  # counts for ranks) and the player's medals. Locks the city, then the player, like research.
+
+  @impl true
+  def promote(player_id, city_id, ladder, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
+      player = Repo.one!(from p in Player, where: p.id == ^player_id, lock: "FOR UPDATE")
+
+      town_hall =
+        Repo.one(from b in Building, where: b.city_id == ^city.id and b.slot == "townhall", select: b.level)
+
+      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+
+      case Titles.check(ladder, player, resources["gold"]["amount"], town_hall || 0) do
+        {:ok, step} ->
+          save_resources(city, Build.spend(resources, %{"gold" => step["gold"]}), now_ms)
+          field = if ladder == :rank, do: :military_rank, else: :title
+
+          Repo.update_all(from(p in Player, where: p.id == ^player_id),
+            set: [{field, step["id"]}, {:medals, Titles.spend(player.medals, step)}],
+            inc: [prestige: step["prestigeAward"]]
+          )
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> ok()
+  end
+
   # Cheats (testing commands). Locks the target cities in id order and then the player, like research does, so
   # they can't deadlock with other commands. Anything already due finishes first.
 
@@ -767,6 +814,12 @@ defmodule Age3.Store.Pg do
 
         action == "setHero" ->
           cheat_hero(city_ids, args, now)
+
+        action == "addMedals" ->
+          add_medals(target_id, args.medals)
+
+        action == "setTitle" ->
+          Repo.update_all(from(p in Player, where: p.id == ^target_id), set: args.changes)
 
         Cheats.research?(action) ->
           research =
@@ -1131,6 +1184,8 @@ defmodule Age3.Store.Pg do
     )
 
     hero_report = hero && gain_hero_exp(hero, March.hero_exp(result))
+    medals = if Titles.full_clear?(won, npc, Npc.full(level), result), do: Titles.roll_npc(level), else: %{}
+    if medals != %{}, do: add_medals(city.player_id, medals)
 
     report =
       Repo.insert!(%Report{
@@ -1141,6 +1196,7 @@ defmodule Age3.Store.Pg do
         y: y,
         won: won,
         loot: loot,
+        medals: medals,
         hero: hero_report,
         result: Combat.to_json(result),
         fought_at: t.ends_at
@@ -1160,7 +1216,7 @@ defmodule Age3.Store.Pg do
       ends_at: to_datetime(at_ms + d["seconds"] * 1000)
     })
 
-    %{t | data: Map.merge(d, %{"won" => won, "reportId" => report.id, "loot" => loot})}
+    %{t | data: Map.merge(d, %{"won" => won, "reportId" => report.id, "loot" => loot, "medals" => medals})}
   end
 
   # A march home: the troops rejoin the city, the hero is free again and the loot goes into storage (it can go
@@ -1175,6 +1231,13 @@ defmodule Age3.Store.Pg do
     Repo.update_all(from(h in Hero, where: h.id == ^d["heroId"] and h.status == "marching"),
       set: [status: "idle"]
     )
+  end
+
+  # Medals go to the player the moment the battle is won (not when the march gets home). The player is locked after
+  # the city, as research does.
+  defp add_medals(player_id, more) do
+    medals = Repo.one!(from p in Player, where: p.id == ^player_id, lock: "FOR UPDATE", select: p.medals)
+    Repo.update_all(from(p in Player, where: p.id == ^player_id), set: [medals: Titles.add(medals, more)])
   end
 
   # The NPC at x, y as it stands at at_ms, locked for this transaction. An NPC never attacked gets its row now
@@ -1326,7 +1389,12 @@ defmodule Age3.Store.Pg do
     %{
       id: p.id,
       name: p.name,
-      title: p.title,
+      title: Titles.name(:title, p.title),
+      titleId: p.title,
+      militaryRank: Titles.name(:rank, p.military_rank),
+      rankId: p.military_rank,
+      medals: p.medals,
+      cityCap: Titles.city_cap(p.title),
       alliance: p.alliance,
       prestige: p.prestige,
       honor: p.honor,
@@ -1432,6 +1500,7 @@ defmodule Age3.Store.Pg do
       heroName: d["heroName"],
       troops: d["troops"],
       loot: d["loot"] || %{},
+      medals: d["medals"] || %{},
       won: d["won"],
       reportId: d["reportId"]
     }
@@ -1446,6 +1515,7 @@ defmodule Age3.Store.Pg do
       y: r.y,
       won: r.won,
       loot: r.loot,
+      medals: r.medals || %{},
       hero: r.hero,
       read: r.read,
       foughtAt: to_ms(r.fought_at)
