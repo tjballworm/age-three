@@ -170,6 +170,10 @@ export interface Player {
   rank: number;
   /** Research levels, shared by all the player's cities. Techs never researched are missing. */
   research?: Partial<Record<TechId, number>>;
+  /** Tester cheat: this player's marches take a second each way. */
+  instantMarch?: boolean;
+  /** Battle reports not opened yet. */
+  unreadReports?: number;
 }
 
 export type TaskKind = 'build' | 'train' | 'research' | 'march';
@@ -193,8 +197,42 @@ export interface TimedTask {
    * Construction: the building and the level it will reach. Research: the tech and its new level. Training: the
    * troop and how many (targetLevel is the count).
    */
-  targetType?: TownBuildingType | FieldType | TechId | TroopType;
+  targetType?: TownBuildingType | FieldType | TechId | TroopType | 'attack';
   targetLevel?: number;
+  /** Marches only (targetType 'attack', targetLevel the NPC's level). */
+  march?: MarchInfo;
+}
+
+/** What a march carries. Phase 'out' is on its way to the target; 'back' is coming home. */
+export interface MarchInfo {
+  phase: 'out' | 'back';
+  x: number;
+  y: number;
+  heroId: string;
+  heroName: string;
+  /** Troops sent (out) or the survivors (back). */
+  troops: Partial<Record<TroopType, number>>;
+  /** What it carries home; empty on the way out. */
+  loot: Partial<Record<ResourceType, number>>;
+  /** Only on the task that just arrived (in taskDone): how the battle went and its report. */
+  won?: boolean;
+  reportId?: string;
+}
+
+/** A battle report in the Reports list. The whole battle comes with getReport. */
+export interface ReportSummary {
+  id: string;
+  cityId: string | null;
+  title: string;
+  x: number;
+  y: number;
+  won: boolean;
+  loot: Partial<Record<ResourceType, number>>;
+  /** The hero who led it: exp gained and the level they reached. */
+  hero: { name: string; exp: number; level: number; levelsGained: number } | null;
+  read: boolean;
+  /** Epoch milliseconds */
+  foughtAt: number;
 }
 
 export type ChatChannel = 'world' | 'alliance' | 'system';

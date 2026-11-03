@@ -181,6 +181,38 @@ defmodule Age3.SessionTest do
     assert gone =~ "left the Inn"
   end
 
+  test "march and recall wake the task runner; reports come without and with the battle" do
+    msg = fn type, payload -> Jason.encode!(%{type: type, id: 2, payload: payload}) end
+    send = %{cityId: "c1", x: 10, y: 20, heroId: "h1", troops: %{warrior: 100}}
+
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "bad_target", "message" => target}},
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}},
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "already_returning"}},
+             %{"type" => "reports", "payload" => %{"reports" => [%{"id" => "r1"}]}},
+             %{"type" => "report", "payload" => %{"report" => %{"result" => %{"winner" => "attacker"}}}},
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}}
+           ] =
+             run([
+               login("secret123"),
+               msg.("march", send),
+               msg.("march", %{send | x: 11}),
+               msg.("march", Map.delete(send, :heroId)),
+               msg.("recall", %{cityId: "c1", taskId: "m1"}),
+               msg.("recall", %{cityId: "c1", taskId: "m2"}),
+               msg.("getReports", %{}),
+               msg.("getReport", %{reportId: "r1"}),
+               msg.("getReport", %{reportId: "r2"})
+             ])
+
+    assert target =~ "NPC"
+    assert_received {:wake, 61_000}
+    assert_received {:wake, 31_000}
+  end
+
   test "refreshInn replies with the new state" do
     msg = fn payload -> Jason.encode!(%{type: "refreshInn", id: 2, payload: payload}) end
 

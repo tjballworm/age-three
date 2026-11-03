@@ -1,6 +1,6 @@
 <script lang="ts">
   import { distance, stateAt, type WorldTile } from '@age3/core';
-  import { currentCity, game, selectTile } from '$state/game.svelte';
+  import { currentCity, game, openMarch, selectTile } from '$state/game.svelte';
   import Button from '$ui/components/Button.svelte';
   import Tabs from '$ui/components/Tabs.svelte';
   import Window from '$ui/components/Window.svelte';
@@ -20,7 +20,7 @@
     here ? 'This is your current city' : `${distance(from, tile).toFixed(1)} tiles from ${from.name}`,
   );
 
-  // Placeholder actions per tile type. None of them do anything yet.
+  // Actions per tile type. Entering your city and attacking an NPC work; the rest are placeholders.
   const actions = $derived.by((): { label: string; hint: string }[] => {
     if (tile.mine) return [{ label: 'Enter City', hint: 'Open this city in Town view' }];
     switch (tile.kind) {
@@ -35,7 +35,10 @@
       case 'historic':
         return [
           { label: 'Scout', hint: 'See the NPC garrison' },
-          { label: 'Attack', hint: 'Send troops to plunder the NPC city' },
+          {
+            label: 'Attack',
+            hint: tile.kind === 'npc' ? 'Send troops to plunder the NPC city' : 'Historic cities come later',
+          },
         ];
       case 'city':
         return [
@@ -84,6 +87,10 @@
           </div>
           {#if a.label === 'Enter City'}
             <Button onclick={enterCity}>{a.label}</Button>
+          {:else if a.label === 'Attack' && tile.kind === 'npc'}
+            <Button variant="red" disabled={!game.fromServer} onclick={() => openMarch(tile)}
+              >{a.label}</Button
+            >
           {:else}
             <Button disabled title="Coming soon">{a.label}</Button>
           {/if}
