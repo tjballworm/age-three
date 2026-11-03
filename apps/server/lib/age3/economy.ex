@@ -3,7 +3,7 @@ defmodule Age3.Economy do
   # the server works out the amounts at any later moment from that, so nothing has to tick every second.
   @moduledoc false
 
-  alias Age3.{Data, Research, Train}
+  alias Age3.{Data, Loyalty, Research, Train}
 
   @hour 3_600_000
 
@@ -24,15 +24,15 @@ defmodule Age3.Economy do
   at its level (farms food, sawmills lumber, quarries stone, iron mines iron) with the player's research bonus
   on top (Agriculture, Lumbering, Masonry, Mining: +10% of the fields' production per level, rounded down; only
   up to the city's Academy level),
-  plus gold from taxes, which is the population limit x tax rate % (the wiki's tax formula uses the limit, and
-  it keeps gold steady while people move back in after training), minus the food the city's troops eat and
-  the gold its heroes are paid (salary, gold per hour: Heroes.salaries/1).
-  buildings is a list of %{type, level}; troops is %{"warrior" => 100, ...}.
+  plus gold from taxes, which is the people living in the city now x tax rate % (TJ, 2026-11-03; Loyalty.tax_gold),
+  minus the food the city's troops eat and the gold its heroes are paid (salary, gold per hour:
+  Heroes.salaries/1). buildings is a list of %{type, level}; troops is %{"warrior" => 100, ...}; people is the
+  population now (%{"current" => ...}), a full city when left out.
   """
-  def rates(buildings, tax_rate, research \\ %{}, troops \\ %{}, salary \\ 0) do
+  def rates(buildings, tax_rate, research \\ %{}, troops \\ %{}, salary \\ 0, people \\ nil) do
     research = Research.in_city(research, buildings)
     base = Data.base()["perHour"]
-    gold = div(max_population(buildings) * tax_rate, 100)
+    gold = Loyalty.tax_gold(people || population(buildings), tax_rate)
 
     made =
       for b <- buildings, resource = Data.building(b.type)["resource"], reduce: %{"gold" => gold} do
@@ -63,18 +63,48 @@ defmodule Age3.Economy do
   end
 
   @doc """
-  Population as it stands at now_ms, given the one saved at since_ms. Training troops takes people out of the
-  city; they move back in until it is full, each hour (100 - tax rate)% / 2 of the limit (the wiki: 4.5% of the
-  limit every 6-minute tick at 10% tax, 0% at 100% tax). Loyalty isn't modelled yet, so a city always fills up.
-  "current" is a float, like resource amounts, so no growth is lost between settles. Matches populationAt in
-  packages/core/src/rules/timing.ts.
+  The city as it stands at now_ms, given the snapshot taken at since_ms: %{resources, population, loyalty}.
+  city has :resources, :population, :loyalty, :grievance and :tax_rate (a City row will do).
+
+  Resources grow at their snapshot rates between ticks. At each 6-minute tick (Age3.Loyalty) loyalty and the
+  population move, and the gold rate follows the population, as taxes come from the people living there now.
+  Once a tick changes nothing, nothing will change until the next snapshot, so the rest is one straight settle.
+  Matches settleCity in packages/core/src/rules/loyalty.ts.
   """
-  def settle_population(%{"current" => current, "max" => max} = pop, tax_rate, since_ms, now_ms) do
-    elapsed = max(0, now_ms - since_ms)
-    grown = current + max * (100 - tax_rate) / 200 * elapsed / @hour
-    current = max(current, min(grown, max))
-    %{pop | "current" => current, "idle" => current}
+  def settle_city(city, since_ms, now_ms) do
+    walk(
+      %{resources: city.resources, population: city.population, loyalty: city.loyalty},
+      since_ms,
+      now_ms,
+      city.tax_rate,
+      city.grievance
+    )
   end
+
+  defp walk(state, t, now_ms, tax_rate, grievance) do
+    next = Loyalty.next_tick(t)
+
+    if next > now_ms do
+      %{state | resources: settle(state.resources, t, now_ms)}
+    else
+      resources = settle(state.resources, t, next)
+      {loyalty, population} = Loyalty.tick(state.loyalty, state.population, tax_rate, grievance)
+      resources = regold(resources, state.population, population, tax_rate)
+      ticked = %{resources: resources, population: population, loyalty: loyalty}
+
+      if loyalty == state.loyalty and population == state.population,
+        do: %{ticked | resources: settle(resources, next, now_ms)},
+        else: walk(ticked, next, now_ms, tax_rate, grievance)
+    end
+  end
+
+  # The gold rate with taxes from the new population instead of the old one.
+  defp regold(%{"gold" => gold} = resources, old_pop, new_pop, tax_rate) do
+    change = Loyalty.tax_gold(new_pop, tax_rate) - Loyalty.tax_gold(old_pop, tax_rate)
+    %{resources | "gold" => %{gold | "perHour" => gold["perHour"] + change}}
+  end
+
+  defp regold(resources, _old_pop, _new_pop, _tax_rate), do: resources
 
   @doc "Takes n people out of the population (or, with a negative n, gives them back)."
   def take_population(pop, n) do
@@ -92,12 +122,12 @@ defmodule Age3.Economy do
   end
 
   @doc """
-  Resources with the perHour and cap the city's buildings, tax rate, troops, heroes' salary and the player's
-  research give. Amounts are kept, so settle them first: the new rates only apply from the moment this snapshot
-  is saved.
+  Resources with the perHour and cap the city's buildings, tax rate, troops, heroes' salary, the player's
+  research and the people living there now give. Amounts are kept, so settle them first: the new rates only
+  apply from the moment this snapshot is saved.
   """
-  def recalc(resources, buildings, tax_rate, research \\ %{}, troops \\ %{}, salary \\ 0) do
-    rates = rates(buildings, tax_rate, research, troops, salary)
+  def recalc(resources, buildings, tax_rate, research \\ %{}, troops \\ %{}, salary \\ 0, people \\ nil) do
+    rates = rates(buildings, tax_rate, research, troops, salary, people)
     cap = cap(buildings, research)
 
     Map.new(resources, fn {name, stock} ->

@@ -24,7 +24,7 @@ export interface ResourceStock {
 }
 
 export interface Population {
-  /** People living in the city now. Training troops takes them; they move back in over time (populationAt). */
+  /** People living in the city now. They move towards loyalty% of the limit every 6 minutes (settleCity). */
   current: number;
   /** The limit, from the base and cottages. */
   max: number;
@@ -38,8 +38,12 @@ export interface City extends Coord {
   level: number;
   resources: Record<ResourceType, ResourceStock>;
   population: Population;
-  /** 0–100 */
+  /** 0–100, as of the state's syncedAt; it moves every 6 minutes (settleCity). */
   loyalty: number;
+  /** Public grievance, 0–100: loyalty heads for 100 - tax - grievance. Missing from older servers. */
+  grievance?: number;
+  /** When the city last comforted its people (epoch ms), null if never. Missing from older servers. */
+  comfortAt?: number | null;
   /** Percent, 0–100 */
   taxRate: number;
   /** Buildings inside the walls: the Town Hall, the walls and up to TOWN_SLOTS others. */

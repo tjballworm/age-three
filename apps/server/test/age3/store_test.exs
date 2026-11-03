@@ -97,6 +97,31 @@ defmodule Age3.Store.PgTest do
     assert {:error, "bad_message"} = Pg.speed_up(id, city.id, task.id, late)
   end
 
+  test "comfort pays the population limit and lifts loyalty, once every 15 minutes" do
+    {id, city_id, now} = general("Comforter")
+
+    assert {:ok, ^id} =
+             Pg.cheat(id, {:city, city_id}, "setLoyalty", %{changes: [loyalty: 40, grievance: 30]}, now)
+
+    {:ok, _, [city], _} = Pg.state(id, now)
+    assert %{loyalty: 40, grievance: 30} = city
+    gold = city.resources["gold"]["amount"]
+    food = city.resources["food"]["amount"]
+
+    assert :ok = Pg.comfort(id, city_id, "pray", now)
+    {:ok, _, [city], _} = Pg.state(id, now)
+    assert %{loyalty: 65, grievance: 25, comfortAt: ^now} = city
+    assert_in_delta city.resources["gold"]["amount"], gold - 1000, 0.01
+
+    assert {:error, "comfort_cooldown"} = Pg.comfort(id, city_id, "relief", now + 899_999)
+    assert :ok = Pg.comfort(id, city_id, "relief", now + 900_000)
+    {:ok, _, [city], _} = Pg.state(id, now + 900_000)
+    # loyalty was already where it heads (100 - 10% tax - 25 grievance), so the ticks left it; then +5
+    assert city.grievance == 10
+    assert city.loyalty == 70
+    assert_in_delta city.resources["food"]["amount"], food - 1000, 50
+  end
+
   test "set_tax changes gold per hour from now on" do
     {:ok, id} = Pg.find_or_create_player("Taxman")
     now = System.system_time(:millisecond)
@@ -220,9 +245,13 @@ defmodule Age3.Store.PgTest do
 
     rich = Map.new(city.resources, fn {k, v} -> {k, %{v | "amount" => 1_000_000}} end)
 
-    Age3.Repo.query!("UPDATE cities SET resources = $1, population = $2 WHERE id = $3", [
+    # just after a loyalty tick (Age3.Loyalty), so the tests know when the next ones come: 6, 12, ... minutes on
+    now = div(now, Age3.Loyalty.tick_ms()) * Age3.Loyalty.tick_ms() + 1
+
+    Age3.Repo.query!("UPDATE cities SET resources = $1, population = $2, synced_at = $3 WHERE id = $4", [
       rich,
       %{"current" => 1000, "max" => 1000, "idle" => 1000},
+      DateTime.from_unix!(now, :millisecond),
       Ecto.UUID.dump!(city.id)
     ])
 
@@ -265,11 +294,21 @@ defmodule Age3.Store.PgTest do
     {:ok, _, [city], _} = Pg.state(id, now)
     assert_in_delta city.population["current"], 900, 1
 
-    # at 10% tax: 45% of the limit an hour, so full again within the hour
-    {:ok, _, [city], _} = Pg.state(id, now + 600_000)
-    assert_in_delta city.population["current"], 900 + 1000 * 0.45 / 6, 1
-    {:ok, _, [city], _} = Pg.state(id, now + 3_600_000)
-    assert city.population["current"] == 1000
+    # every 6 minutes loyalty takes a step towards 100 - 10% tax = 90, and at 10% tax people move back in at
+    # 4.5% of the limit, up to loyalty% of it
+    {:ok, _, [city], _} = Pg.state(id, now + 360_000)
+    assert city.loyalty == 99
+    assert city.population["current"] == 945
+    {:ok, _, [city], _} = Pg.state(id, now + 720_000)
+    assert city.loyalty == 98
+    assert city.population["current"] == 980
+
+    # after 10 ticks loyalty is 90; above the line people leave at 0.5% of the limit a tick, down to 900
+    {:ok, _, [city], _} = Pg.state(id, now + 3 * 3_600_000)
+    assert city.loyalty == 90
+    assert city.population["current"] == 900
+    # and gold comes from them: 10% of 900
+    assert city.resources["gold"]["perHour"] == 100 + 90
   end
 
   test "not enough people" do
@@ -295,8 +334,8 @@ defmodule Age3.Store.PgTest do
     assert %{startedAt: ^half, targetLevel: 20} = b
     assert b.endsAt == half + 480_000
     assert_in_delta city.resources["food"]["amount"], food - 20 * 80, 2
-    # 30 went in, 10 came back, and people moved back in for 120 s at 45% of 1000 an hour
-    assert_in_delta city.population["current"], 980 + 1000 * 0.45 * 120 / 3600, 1
+    # 30 went in and 10 came back; no loyalty tick yet, so nobody moved back in
+    assert city.population["current"] == 980
     assert first > half
   end
 

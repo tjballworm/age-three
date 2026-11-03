@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { RESOURCE_TYPES, populationAt, stockAt, type ResourceType } from '@age3/core';
+  import { RESOURCE_TYPES, settleCity, type ResourceType } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game, openWindow } from '$state/game.svelte';
   import Button from '$ui/components/Button.svelte';
@@ -15,13 +15,14 @@
   };
 
   const city = $derived(currentCity());
-  const pop = $derived(populationAt(city.population, city.taxRate, game.syncedAt, clock.now));
+  const now = $derived(settleCity(city, game.syncedAt, clock.now));
+  const pop = $derived(now.population);
 </script>
 
 <div class="resbar">
   {#each RESOURCE_TYPES as type (type)}
-    {@const s = city.resources[type]}
-    {@const amount = stockAt(s, game.syncedAt, clock.now)}
+    {@const s = now.resources[type]}
+    {@const amount = s.amount}
     <div
       class="res"
       class:full={s.perHour > 0 && amount >= s.cap}
