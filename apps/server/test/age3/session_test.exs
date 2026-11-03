@@ -259,6 +259,21 @@ defmodule Age3.SessionTest do
              ])
   end
 
+  test "comfort takes Disaster Relief or Praying" do
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"payload" => %{"code" => "comfort_cooldown"}},
+             %{"payload" => %{"code" => "bad_message"}}
+           ] =
+             run([
+               login("secret123"),
+               ~s({"type":"comfort","id":2,"payload":{"cityId":"c1","kind":"pray"}}),
+               ~s({"type":"comfort","id":3,"payload":{"cityId":"c2","kind":"relief"}}),
+               ~s({"type":"comfort","id":4,"payload":{"cityId":"c1","kind":"feast"}})
+             ])
+  end
+
   test "promote goes up the rank or title ladder" do
     assert [
              _,

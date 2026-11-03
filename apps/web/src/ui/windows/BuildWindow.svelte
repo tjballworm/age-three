@@ -9,7 +9,7 @@
     canFreeSpeedUp,
     researchInCity,
     remaining,
-    stockAt,
+    settleCity,
     techLevel,
     type BuildingType,
     type TechId,
@@ -82,7 +82,8 @@
     if (type === 'academy' && researching) return 'The Academy is researching';
     if (level === 1 && !spec.multiple && levelOf(type) > 0) return 'Only one per city';
     for (const r of RESOURCE_TYPES)
-      if (stockAt(city.resources[r], game.syncedAt, clock.now) < cost[r]) return 'Not enough resources';
+      if (settleCity(city, game.syncedAt, clock.now).resources[r].amount < cost[r])
+        return 'Not enough resources';
     return null;
   }
 

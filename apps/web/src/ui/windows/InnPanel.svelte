@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { stockAt, type InnOffer } from '@age3/core';
+  import { settleCity, type InnOffer } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game } from '$state/game.svelte';
   import { command } from '$state/sync';
@@ -19,7 +19,7 @@
   const hall = $derived(levelOf('feastinghall'));
   const heroes = $derived(city.heroes ?? []);
   const inn = $derived(city.inn ?? null);
-  const gold = $derived(stockAt(city.resources.gold, game.syncedAt, clock.now));
+  const gold = $derived(settleCity(city, game.syncedAt, clock.now).resources.gold.amount);
 
   function blocker(offer: InnOffer): string | null {
     if (hall === 0) return 'Needs a Feasting Hall';

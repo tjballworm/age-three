@@ -88,6 +88,15 @@
   }
 
   let population = $state<number | null>(null);
+  let loyalty = $state<number | null>(null);
+  let grievance = $state<number | null>(null);
+  const pct = (n: number | null) => Math.min(100, Math.max(0, whole(n)));
+  function setLoyalty() {
+    const a: { action: 'setLoyalty'; loyalty?: number; grievance?: number } = { action: 'setLoyalty' };
+    if (loyalty !== null) a.loyalty = pct(loyalty);
+    if (grievance !== null) a.grievance = pct(grievance);
+    cheat(a, 'loyalty set');
+  }
 
   // Buildings & research
   type Slot = number | 'townhall' | 'walls' | `f${number}`;
@@ -288,6 +297,43 @@
           variant="blue"
           disabled={!game.fromServer || sending}
           onclick={() => cheat({ action: 'setPopulation', amount: 0 }, 'population emptied')}>Empty</Button
+        >
+      </div>
+    </section>
+
+    <section>
+      <h3>
+        Loyalty <span class="note"
+          >now {city.loyalty} loyalty, {city.grievance ?? 0} grievance; 0-100 each, blank keeps it</span
+        >
+      </h3>
+      <div class="row">
+        <input
+          type="number"
+          min="0"
+          max="100"
+          step="1"
+          placeholder="Loyalty"
+          aria-label="Loyalty"
+          bind:value={loyalty}
+        />
+        <input
+          type="number"
+          min="0"
+          max="100"
+          step="1"
+          placeholder="Grievance"
+          aria-label="Grievance"
+          bind:value={grievance}
+        />
+        <Button
+          disabled={!game.fromServer || sending || (loyalty === null && grievance === null)}
+          onclick={setLoyalty}>Set loyalty</Button
+        >
+        <Button
+          variant="blue"
+          disabled={!game.fromServer || sending}
+          onclick={() => cheat({ action: 'setLoyalty', loyalty: 0 }, 'loyalty at 0')}>Loyalty 0</Button
         >
       </div>
     </section>

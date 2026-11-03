@@ -83,6 +83,7 @@ defmodule Age3.Session do
               "cancelBuild",
               "speedUp",
               "setTax",
+              "comfort",
               "research",
               "cancelResearch",
               "train",
@@ -356,6 +357,20 @@ defmodule Age3.Session do
   defp handle("setTax", _payload, id, session),
     do: {error(id, "bad_message", "The tax rate must be a whole number from 0 to 100."), session}
 
+  # Comfort a city's people: {cityId, kind: "relief" | "pray"} (Age3.Loyalty).
+  defp handle("comfort", %{"cityId" => city_id, "kind" => kind}, id, session)
+       when is_binary(city_id) and kind in ["relief", "pray"] do
+    now = session.now.()
+
+    case session.store.comfort(session.player_id, city_id, kind, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("comfort", _payload, id, session),
+    do: {error(id, "bad_message", "Comfort with Disaster Relief or Praying."), session}
+
   # One step up the rank or title ladder: {cityId, ladder: "rank" | "title"}. The gold comes from that city.
   defp handle("promote", %{"cityId" => city_id, "ladder" => ladder}, id, session)
        when is_binary(city_id) and ladder in ["rank", "title"] do
@@ -450,6 +465,7 @@ defmodule Age3.Session do
   defp slot_key(_slot), do: nil
 
   defp message("not_enough_resources"), do: "Not enough resources."
+  defp message("comfort_cooldown"), do: "The people were comforted less than 15 minutes ago."
   defp message("queue_busy"), do: "Something is already being built in this city."
   defp message("research_busy"), do: "This Academy is already researching something."
   defp message("no_academy"), do: "This city has no Academy."

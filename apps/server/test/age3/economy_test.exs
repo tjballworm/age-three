@@ -100,10 +100,12 @@ defmodule Age3.EconomyTest do
       assert Economy.cap([], %{"stockpile" => 3}) == 100_000
     end
 
-    test "troops eat food every hour, and taxes come from the population limit" do
+    test "troops eat food every hour, and taxes come from the people living there" do
       rates = Economy.rates([b("cottage", 1)], 10, %{}, %{"warrior" => 10_000, "cavalry" => 1_000})
       assert rates["food"] == 100 - 10 - 9
+      # a full city when the population isn't given
       assert rates["gold"] == 100 + div(Economy.max_population([b("cottage", 1)]) * 10, 100)
+      assert Economy.rates([], 10, %{}, %{}, 0, %{"current" => 555.9})["gold"] == 100 + 55
     end
 
     test "recalc changes perHour and cap, and keeps amounts" do
@@ -113,16 +115,39 @@ defmodule Age3.EconomyTest do
   end
 
   describe "population" do
-    test "people move back in at (100 - tax)% / 2 of the limit per hour, up to the limit" do
-      pop = %{"current" => 100, "max" => 1000, "idle" => 100}
-      # 10% tax: 45% of 1000 an hour
-      assert %{"current" => 550.0, "idle" => 550.0, "max" => 1000} =
-               Economy.settle_population(pop, 10, 0, 3_600_000)
+    test "settle_city walks the 6-minute loyalty ticks and the gold rate follows the people" do
+      tick = Age3.Loyalty.tick_ms()
+      gold = %{"amount" => 0, "perHour" => 100 + 50, "cap" => 100_000}
 
-      assert %{"current" => 1000} = Economy.settle_population(pop, 10, 0, 10 * 3_600_000)
-      # nobody comes back at 100% tax, and time going backwards changes nothing
-      assert %{"current" => 100} = Economy.settle_population(pop, 100, 0, 3_600_000)
-      assert %{"current" => 100} = Economy.settle_population(pop, 10, 1000, 0)
+      city = %{
+        resources: %{"gold" => gold},
+        population: %{"current" => 500, "max" => 1000, "idle" => 500},
+        loyalty: 100,
+        grievance: 0,
+        tax_rate: 10
+      }
+
+      # no tick between 1 ms and 5 minutes past one
+      out = Economy.settle_city(city, tick + 1, tick + 300_001)
+      assert out.loyalty == 100 and out.population["current"] == 500
+      assert_in_delta out.resources["gold"]["amount"], 150 * 300_000 / 3_600_000, 0.001
+
+      # one tick: loyalty 99, 45 people (4.5% of 1000) move in, and pay 4 more gold an hour from then on
+      out = Economy.settle_city(city, tick + 1, 2 * tick + 1)
+      assert out.loyalty == 99
+      assert out.population["current"] == 545
+      assert out.resources["gold"]["perHour"] == 154
+
+      # a day later loyalty sits at 100 - 10 - 0 and the people at 90% of the limit
+      out = Economy.settle_city(city, tick + 1, tick + 86_400_000)
+      assert out.loyalty == 90
+      assert out.population["current"] == 900
+      assert out.resources["gold"]["perHour"] == 100 + 90
+
+      # nobody moves in at 100% tax, and time going backwards changes nothing
+      out = Economy.settle_city(%{city | tax_rate: 100}, tick + 1, 2 * tick + 1)
+      assert out.population["current"] == 500
+      assert Economy.settle_city(city, 5 * tick, tick).population["current"] == 500
     end
 
     test "take_population takes people out, and gives them back" do

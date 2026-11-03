@@ -47,6 +47,8 @@ defmodule Age3.Cheats do
       cities.
     * "addMedals" {medals: {cross: 10, ...}}: adds medals to the player (negative takes away, not below 0)
     * "setTitle" {rank?, title?}: the player's rank and/or title, set straight with nothing paid
+    * "setLoyalty" {loyalty?, grievance?}: the city's loyalty and/or public grievance (0-100), set straight; the
+      comfort cooldown is cleared too
     * "resetCity": back to a new city (Town Hall and walls Lv1, starting resources, no troops, heroes or tasks)
   """
   def parse("addResources", %{"amounts" => %{} = amounts}) do
@@ -118,6 +120,14 @@ defmodule Age3.Cheats do
 
     if changes != [] and Enum.all?(changes, fn {_f, ladder, id} -> Age3.Titles.spec(ladder, id) != nil end),
       do: {:ok, %{changes: for({field, _l, id} <- changes, do: {field, id})}},
+      else: bad()
+  end
+
+  def parse("setLoyalty", p) do
+    changes = for k <- ["loyalty", "grievance"], Map.has_key?(p, k), do: {String.to_atom(k), p[k]}
+
+    if changes != [] and Enum.all?(changes, fn {_k, v} -> is_integer(v) and v in 0..100 end),
+      do: {:ok, %{changes: changes}},
       else: bad()
   end
 

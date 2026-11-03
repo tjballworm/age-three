@@ -96,6 +96,11 @@ export type GetReportMessage = Envelope<'getReport', { reportId: string }>;
  * (whose Town Hall counts for ranks), the medals from the player. Replies with state.
  */
 export type PromoteMessage = Envelope<'promote', { cityId: string; ladder: Ladder }>;
+/**
+ * Comforts a city's people (COMFORTS in core): Disaster Relief pays food, Praying gold, each the population limit,
+ * once every 15 minutes per city. Raises loyalty and lowers grievance. Replies with state.
+ */
+export type ComfortMessage = Envelope<'comfort', { cityId: string; kind: 'relief' | 'pray' }>;
 /** Sets a city's tax rate, a whole number from 0 to 100. Gold per hour changes from now on. Replies with state. */
 export type SetTaxMessage = Envelope<'setTax', { cityId: string; taxRate: number }>;
 
@@ -115,6 +120,8 @@ export type CheatAction =
   | { action: 'addTroops'; troops: Partial<Record<TroopType, number>> }
   /** The population, from 0 up to the city's limit (cottages raise the limit). */
   | { action: 'setPopulation'; amount: number }
+  /** loyalty and/or grievance, 0-100 each; also clears the comfort cooldown */
+  | { action: 'setLoyalty'; loyalty?: number; grievance?: number }
   /** Every construction, research and training batch in the city finishes now. */
   | { action: 'finishAll' }
   /** The building on a slot at any level, free and with no requirements. Leave out type to keep what is there; level 0 removes it. */
@@ -164,6 +171,7 @@ export type ClientMessage =
   | CancelBuildMessage
   | SpeedUpMessage
   | SetTaxMessage
+  | ComfortMessage
   | ResearchMessage
   | CancelResearchMessage
   | TrainMessage
@@ -272,4 +280,6 @@ export type ErrorCode =
   /** a promotion without the medals it needs */
   | 'not_enough_medals'
   /** a title whose rank the player hasn't reached */
-  | 'rank_too_low';
+  | 'rank_too_low'
+  /** comfort less than 15 minutes after the last one in that city */
+  | 'comfort_cooldown';

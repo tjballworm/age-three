@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { populationAt } from '@age3/core';
+  import { settleCity } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game, openWindow, selectCity } from '$state/game.svelte';
   import { formatNumber } from '$ui/format';
 
   const city = $derived(currentCity());
-  const idle = $derived(populationAt(city.population, city.taxRate, game.syncedAt, clock.now).idle);
+  const now = $derived(settleCity(city, game.syncedAt, clock.now));
+  const idle = $derived(now.population.idle);
 </script>
 
 <section class="city hud-panel" aria-label="City">
@@ -17,7 +18,7 @@
   <dl class="stats">
     <div>
       <dt>Loyalty</dt>
-      <dd class:low={city.loyalty < 50}>{city.loyalty}</dd>
+      <dd class:low={now.loyalty < 50}>{now.loyalty}</dd>
     </div>
     <div>
       <dt>Tax</dt>

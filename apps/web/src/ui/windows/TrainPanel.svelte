@@ -13,10 +13,9 @@
     TROOPS,
     TROOP_DATA,
     TROOP_STATS,
-    populationAt,
+    settleCity,
     remaining,
     researchInCity,
-    stockAt,
     techLevel,
     trainSeconds,
     type ResourceType,
@@ -70,8 +69,9 @@
   );
   /** Research counts here only up to this city's Academy level. */
   const research = $derived(researchInCity(game.player.research, academy));
-  const idle = $derived(populationAt(city.population, city.taxRate, game.syncedAt, clock.now).idle);
-  const own = (r: ResourceType) => stockAt(city.resources[r], game.syncedAt, clock.now);
+  const settled = $derived(settleCity(city, game.syncedAt, clock.now));
+  const idle = $derived(settled.population.idle);
+  const own = (r: ResourceType) => settled.resources[r].amount;
 
   /** A Barracks' batches, in the order they run: the first is training, the rest wait. */
   const queueOf = (slot: number): TimedTask[] =>

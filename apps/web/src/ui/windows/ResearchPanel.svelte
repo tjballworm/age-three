@@ -6,7 +6,7 @@
     TECHS,
     progress,
     remaining,
-    stockAt,
+    settleCity,
     techLevel,
     techLevelSpec,
     type BuildingType,
@@ -66,7 +66,8 @@
     for (const [tech, lv] of Object.entries(next.research ?? {}))
       if (techLevel(research, tech as TechId) < lv!) return `Needs ${TECHS[tech as TechId].name} Lv ${lv}`;
     for (const r of RESOURCE_TYPES)
-      if (stockAt(city.resources[r], game.syncedAt, clock.now) < next.cost[r]) return 'Not enough resources';
+      if (settleCity(city, game.syncedAt, clock.now).resources[r].amount < next.cost[r])
+        return 'Not enough resources';
     if (running) return 'The Academy is busy';
     if (academyUpgrading) return 'The Academy is being upgraded';
     return null;
