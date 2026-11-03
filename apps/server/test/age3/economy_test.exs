@@ -102,7 +102,7 @@ defmodule Age3.EconomyTest do
 
     test "troops eat food every hour, and taxes come from the population limit" do
       rates = Economy.rates([b("cottage", 1)], 10, %{}, %{"warrior" => 100, "cavalry" => 10})
-      assert rates["food"] == 100 - 100 - 90
+      assert rates["food"] == 100 - 10 - 9
       assert rates["gold"] == 100 + div(Economy.max_population([b("cottage", 1)]) * 10, 100)
     end
 
