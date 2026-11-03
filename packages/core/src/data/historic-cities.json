@@ -1,0 +1,36 @@
+{
+  "walls": 10,
+  "research": 10,
+  "fortifications": {"trap": 22000, "abatis": 11000, "tower": 6666, "log": 6000, "trebuchet": 5000},
+  "resources": {"food": 19000000, "lumber": 600000, "stone": 600000, "iron": 600000, "gold": 1500000},
+  "cities": [
+    {"level": 12, "flag": "red", "ruler": {"level": 100, "attack": 635, "intelligence": 335}, "garrison": [
+      {"types": ["warrior"], "count": 1120000},
+      {"types": ["sword", "pike"], "count": 162666},
+      {"types": ["archer"], "count": 42807},
+      {"types": ["cataphract", "cavalry"], "count": 108444},
+      {"types": ["catapult", "ram", "ballista"], "count": 14640, "counts": {"ballista": 108444}}
+    ]},
+    {"level": 14, "flag": "green", "ruler": {"level": 100, "attack": 735, "intelligence": 435}, "garrison": [
+      {"types": ["warrior"], "count": 2800000},
+      {"types": ["sword", "pike"], "count": 406666},
+      {"types": ["archer"], "count": 171228},
+      {"types": ["cataphract", "cavalry"], "count": 271111},
+      {"types": ["catapult", "ram", "ballista"], "count": 36600, "counts": {"ballista": 271111}}
+    ]},
+    {"level": 16, "flag": "blue", "ruler": {"level": 100, "attack": 935, "intelligence": 635}, "garrison": [
+      {"types": ["warrior"], "count": 7000000},
+      {"types": ["sword", "pike"], "count": 1016665},
+      {"types": ["archer"], "count": 428070},
+      {"types": ["cataphract"], "count": 677777},
+      {"types": ["catapult"], "count": 91500}
+    ]},
+    {"level": 18, "flag": "gold", "ruler": {"level": 100, "attack": 1335, "intelligence": 1035}, "garrison": [
+      {"types": ["warrior"], "count": 14000000},
+      {"types": ["sword", "pike"], "count": 2033330},
+      {"types": ["archer"], "count": 856140},
+      {"types": ["cataphract"], "count": 1355555},
+      {"types": ["catapult"], "count": 183000}
+    ]}
+  ]
+}

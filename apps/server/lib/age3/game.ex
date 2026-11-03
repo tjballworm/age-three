@@ -12,26 +12,51 @@ defmodule Age3.Game do
   def historic_city?(x, y), do: historic_level(x, y) != nil
 
   @doc """
-  The level of the historic city at (x, y), or nil. Matches historicCityAt in packages/core/src/world/states.ts:
-  Atlantis (Lv 18) at (0, 0), and in every 200 x 200 state the capital (Lv 16) at local (100, 100), Lv 14 every 66
-  from 33 and Lv 12 every 18 from 9, none at local (99, 99).
+  The level of the historic city at (x, y), or nil. Matches historicCityAt in packages/core/src/world/states.ts
+  (see there for the sources): Atlantis (Lv 18) at (0, 0); a capital (Lv 16) at the centre of every 200 x 200 state;
+  Lv 14 every 66 from (33, 33) across the whole map, except the middle of each state's nine and two spots empty on
+  the live game; Lv 12 every 18 from (9, 9), except within 9 tiles (on both axes) of a bigger historic city.
   """
   def historic_level(0, 0), do: 18
 
   def historic_level(x, y) do
-    lx = rem(x, 200)
-    ly = rem(y, 200)
-
     cond do
-      lx == 100 and ly == 100 -> 16
-      lx == 99 and ly == 99 -> nil
-      on_grid?(lx, 33, 66) and on_grid?(ly, 33, 66) -> 14
-      on_grid?(lx, 9, 18) and on_grid?(ly, 9, 18) -> 12
+      capital?(x, y) -> 16
+      lv14?(x, y) -> 14
+      on_grid?(x, 9, 18, 791) and on_grid?(y, 9, 18, 791) and not near_bigger_city?(x, y) -> 12
       true -> nil
     end
   end
 
-  defp on_grid?(v, start, step), do: v >= start and rem(v - start, step) == 0
+  @empty_lv14 [{693, 759}, {759, 759}]
+  @lv12_clearance 9
+
+  defp capital?(x, y), do: rem(x, 200) == 100 and rem(y, 200) == 100
+
+  # On the 66 grid, not the middle of its state (the one spot also on the 18 grid), not empty on the live game.
+  defp lv14?(x, y) do
+    on_grid?(x, 33, 66, 759) and on_grid?(y, 33, 66, 759) and
+      not (rem(x - 9, 18) == 0 and rem(y - 9, 18) == 0) and
+      {x, y} not in @empty_lv14
+  end
+
+  defp near_bigger_city?(x, y) do
+    near? = fn a, b -> abs(a - b) <= @lv12_clearance end
+    cx = nearest(x, 100, 200)
+    cy = nearest(y, 100, 200)
+    # Lv 14 points are 66 apart, so at most one is within 9 on each axis.
+    hx = nearest(x, 33, 66)
+    hy = nearest(y, 33, 66)
+
+    (near?.(x, 0) and near?.(y, 0)) or
+      (near?.(x, cx) and near?.(y, cy)) or
+      (near?.(x, hx) and near?.(y, hy) and lv14?(hx, hy))
+  end
+
+  defp on_grid?(v, start, step, last), do: v >= start and v <= last and rem(v - start, step) == 0
+
+  # The grid point nearest v, rounding halves up like JavaScript's Math.round (v >= 0 here, so no negatives).
+  defp nearest(v, start, step), do: start + floor((v - start) / step + 0.5) * step
 
   @doc """
   A new player's first city starts with these resources: Record<ResourceType, ResourceStock>. Its Town Hall and
