@@ -5,6 +5,7 @@
   import Window from '$ui/components/Window.svelte';
   import CheatsWindow from './CheatsWindow.svelte';
   import CityOverview from './CityOverview.svelte';
+  import HeroesOverview from './HeroesOverview.svelte';
   import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
   import TroopsOverview from './TroopsOverview.svelte';
 
@@ -45,6 +46,8 @@
       <CityOverview />
     {:else if game.openWindow === 'city' && tab === 'Troops'}
       <TroopsOverview />
+    {:else if game.openWindow === 'hero' && tab === 'Heroes'}
+      <HeroesOverview />
     {:else if game.openWindow === 'cheats'}
       <CheatsWindow page={tab === 'Buildings & research' ? 'buildings' : 'resources'} />
     {:else if game.openWindow === 'leaderboard'}

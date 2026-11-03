@@ -28,7 +28,8 @@ defmodule Age3.Cheats do
     * "setBuilding" {slot, type?, level}: the building on a slot at any level for free; level 0 removes it
     * "levelAll" {level}: every building and field in the city at that level
     * "setResearch" {tech, level} / "researchAll" {level}: research levels for the player (0 forgets them)
-    * "resetCity": back to a new city (Town Hall and walls Lv1, starting resources, no troops or tasks)
+    * "heroExp" {amount}: exp for every hero in the city (they level up as it covers)
+    * "resetCity": back to a new city (Town Hall and walls Lv1, starting resources, no troops, heroes or tasks)
   """
   def parse("addResources", %{"amounts" => %{} = amounts}) do
     if Enum.all?(amounts, fn {k, v} -> k in @resources and amount?(v) end),
@@ -54,6 +55,9 @@ defmodule Age3.Cheats do
       true -> {:ok, %{slot: slot_key(slot), type: type, level: level}}
     end
   end
+
+  def parse("heroExp", %{"amount" => n}) when is_integer(n) and n > 0 and n <= @max_amount,
+    do: {:ok, %{amount: n}}
 
   def parse("levelAll", %{"level" => level}) when is_integer(level) do
     if level in 1..Data.max_level(), do: {:ok, %{level: level}}, else: bad()

@@ -87,6 +87,9 @@ defmodule Age3.Session do
               "cancelResearch",
               "train",
               "cancelTrain",
+              "hire",
+              "dismiss",
+              "setMayor",
               "cheat"
             ],
        do: {error(id, "not_logged_in", "Log in first."), session}
@@ -200,6 +203,49 @@ defmodule Age3.Session do
 
   defp handle("cancelTrain", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid cancel."), session}
+
+  # Hire a hero from the city's Inn into its Feasting Hall: {cityId, offerId}, offerId being the id of one of the
+  # Inn's offers (city.inn.offers). The fee is paid now. Replies with the new state.
+  defp handle("hire", %{"cityId" => city_id, "offerId" => offer_id}, id, session)
+       when is_binary(city_id) and is_binary(offer_id) do
+    now = session.now.()
+
+    case session.store.hire(session.player_id, city_id, offer_id, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("hire", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid hire."), session}
+
+  # Send a hero away for good: {cityId, heroId}. Only an idle hero (not the mayor, not marching).
+  defp handle("dismiss", %{"cityId" => city_id, "heroId" => hero_id}, id, session)
+       when is_binary(city_id) and is_binary(hero_id) do
+    now = session.now.()
+
+    case session.store.dismiss(session.player_id, city_id, hero_id, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("dismiss", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid dismiss."), session}
+
+  # Appoint the city's mayor: {cityId, heroId}, or heroId null to have none. The old mayor goes back to idle.
+  defp handle("setMayor", %{"cityId" => city_id, "heroId" => hero_id}, id, session)
+       when is_binary(city_id) and (is_binary(hero_id) or is_nil(hero_id)) do
+    now = session.now.()
+
+    case session.store.set_mayor(session.player_id, city_id, hero_id, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("setMayor", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid mayor appointment."), session}
 
   # Finish a build, research or the batch a Barracks is training for free when it has 5 minutes or less left:
   # {cityId, taskId}.
@@ -330,6 +376,11 @@ defmodule Age3.Session do
     do: "Speedup is only free in the last 5 minutes of a build, research or training."
 
   defp message("player_not_found"), do: "No player with that name."
+  defp message("no_inn"), do: "This city has no Inn."
+  defp message("no_hall"), do: "Build a Feasting Hall to house heroes."
+  defp message("hall_full"), do: "The Feasting Hall is full. Upgrade it or dismiss a hero."
+  defp message("offer_gone"), do: "That hero has left the Inn. Here are the new ones."
+  defp message("hero_busy"), do: "That hero is busy."
   defp message(_code), do: "Not a valid request."
 
   defp welcome(id, player_id, token, session) do

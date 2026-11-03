@@ -23,6 +23,8 @@
   import Window from '$ui/components/Window.svelte';
   import { formatDuration, formatNumber } from '$ui/format';
   import { tooltip } from '$ui/tooltip.svelte';
+  import HallPanel from './HallPanel.svelte';
+  import InnPanel from './InnPanel.svelte';
   import ResearchPanel from './ResearchPanel.svelte';
   import TrainPanel, { recruitWindow } from './TrainPanel.svelte';
 
@@ -126,9 +128,14 @@
           ? 'Empty field'
           : 'Empty plot',
   );
-  /** The Academy and the Barracks get one window: the building and its Upgrade on top, what it does below. */
+  /**
+   * The Academy, Barracks, Inn and Feasting Hall get one window: the building and its Upgrade on top, what it
+   * does below.
+   */
+  const PANELS = ['academy', 'barracks', 'inn', 'feastinghall'] as const;
+  type Panel = (typeof PANELS)[number];
   const panel = $derived(
-    standing?.type === 'academy' || standing?.type === 'barracks' ? standing.type : null,
+    standing && (PANELS as readonly string[]).includes(standing.type) ? (standing.type as Panel) : null,
   );
   /** Escape or ✕ closes the Barracks' Recruit window first, if it is open. */
   const close = () => (recruitWindow.troop ? (recruitWindow.troop = null) : openBuild(null));
@@ -137,6 +144,14 @@
     barracks: {
       icon: 'train',
       text: 'Soldier training and dismissal are conducted in the Barracks; the higher its level, the more advanced army branches can be trained.',
+    },
+    inn: {
+      icon: 'hero',
+      text: 'Heroes looking for work gather at the Inn; the higher its level, the more heroes it offers.',
+    },
+    feastinghall: {
+      icon: 'hero',
+      text: 'The Feasting Hall is home to your heroes; it houses as many heroes as its level.',
     },
   } as const;
 </script>
@@ -196,6 +211,10 @@
       {#if error}<p class="error" role="alert">{error}</p>{/if}
       {#if panel === 'academy'}
         <ResearchPanel />
+      {:else if panel === 'inn'}
+        <InnPanel />
+      {:else if panel === 'feastinghall'}
+        <HallPanel />
       {:else if typeof slot === 'number'}
         <TrainPanel plot={slot} />
       {/if}

@@ -329,6 +329,104 @@ defmodule Age3.Store.PgTest do
     assert {:ok, _} = Pg.train(id, city_id, "4", "warrior", 100, built)
   end
 
+  describe "heroes" do
+    # a city with an Inn and a Feasting Hall, both Lv2, and plenty of gold
+    defp innkeeper(name) do
+      {id, city_id, now} = general(name)
+
+      Age3.Repo.insert_all(Age3.Building, [
+        %{city_id: city_id, slot: "8", type: "inn", level: 2},
+        %{city_id: city_id, slot: "9", type: "feastinghall", level: 2}
+      ])
+
+      {id, city_id, now}
+    end
+
+    test "the Inn offers Inn-level heroes; hiring pays the fee and the salary comes off gold" do
+      {id, city_id, now} = innkeeper("Hirer")
+      {:ok, _, [city], _} = Pg.state(id, now)
+      assert %{refreshAt: refresh_at, offers: [offer, _]} = city.inn
+      assert refresh_at > now
+      assert city.heroes == []
+      gold = city.resources["gold"]
+      assert offer.fee == offer.level * 1000
+
+      assert :ok = Pg.hire(id, city_id, offer.id, now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+      assert [hero] = city.heroes
+
+      assert %{name: name, level: level, leadership: level, status: "idle", exp: 0, points: 0} = hero
+      assert name == offer.name and level == offer.level
+      assert hero.salary == level * 20
+      assert_in_delta city.resources["gold"]["amount"], gold["amount"] - offer.fee, 1
+      assert city.resources["gold"]["perHour"] == gold["perHour"] - level * 20
+      # the hired hero left the Inn, and can't be hired twice
+      assert [_] = city.inn.offers
+      assert {:error, "offer_gone"} = Pg.hire(id, city_id, offer.id, now)
+
+      # same offers until refreshAt, then a new set
+      {:ok, _, [same], _} = Pg.state(id, refresh_at - 1)
+      assert same.inn == city.inn
+      {:ok, _, [later], _} = Pg.state(id, refresh_at)
+      assert length(later.inn.offers) == 2 and later.inn.offers != city.inn.offers
+    end
+
+    test "the Feasting Hall's level limits the heroes" do
+      {id, city_id, now} = innkeeper("Collector")
+      {:ok, _, [city], _} = Pg.state(id, now)
+      [a, b] = city.inn.offers
+      assert :ok = Pg.hire(id, city_id, a.id, now)
+      assert :ok = Pg.hire(id, city_id, b.id, now)
+
+      # next set of offers, but the Lv2 Hall is full
+      {:ok, _, [city], _} = Pg.state(id, city.inn.refreshAt)
+      [c | _] = city.inn.offers
+      assert {:error, "hall_full"} = Pg.hire(id, city_id, c.id, city.inn.refreshAt)
+    end
+
+    test "one mayor at a time; a mayor can't be dismissed; dismissing stops the salary" do
+      {id, city_id, now} = innkeeper("Mayor Maker")
+      {:ok, _, [city], _} = Pg.state(id, now)
+      for o <- city.inn.offers, do: :ok = Pg.hire(id, city_id, o.id, now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+      [a, b] = city.heroes
+
+      assert :ok = Pg.set_mayor(id, city_id, a.id, now)
+      assert :ok = Pg.set_mayor(id, city_id, b.id, now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+
+      assert Enum.map(city.heroes, &{&1.id, &1.status}) |> Enum.sort() ==
+               Enum.sort([{a.id, "idle"}, {b.id, "mayor"}])
+
+      assert {:error, "hero_busy"} = Pg.dismiss(id, city_id, b.id, now)
+      assert :ok = Pg.set_mayor(id, city_id, nil, now)
+      gold_rate = city.resources["gold"]["perHour"]
+      assert :ok = Pg.dismiss(id, city_id, b.id, now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+      assert [%{status: "idle"}] = city.heroes
+      assert city.resources["gold"]["perHour"] == gold_rate + b.salary
+
+      assert {:error, "bad_message"} = Pg.dismiss(id, city_id, b.id, now)
+      assert {:error, "bad_message"} = Pg.set_mayor(id, city_id, "not-a-uuid", now)
+    end
+
+    test "no Inn, no offers; the heroExp cheat levels heroes up" do
+      {id, city_id, now} = general("No Inn")
+      {:ok, _, [city], _} = Pg.state(id, now)
+      assert city.inn == nil
+      assert {:error, "no_inn"} = Pg.hire(id, city_id, "x", now)
+
+      {id, city_id, now} = innkeeper("Trainer")
+      {:ok, _, [city], _} = Pg.state(id, now)
+      [o | _] = city.inn.offers
+      :ok = Pg.hire(id, city_id, o.id, now)
+      assert {:ok, ^id} = Pg.cheat(id, {:city, city_id}, "heroExp", %{amount: 100 * o.level * o.level}, now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+      assert [%{level: level, leadership: level, points: 1}] = city.heroes
+      assert level == o.level + 1
+    end
+  end
+
   test "state for an unknown player" do
     assert {:error, :not_found} = Pg.state(Ecto.UUID.generate(), 0)
     assert {:error, :not_found} = Pg.state("not-a-uuid", 0)

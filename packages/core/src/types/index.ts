@@ -47,6 +47,53 @@ export interface City extends Coord {
   fields?: Field[];
   /** Trained troops in the city, by type (troops still training are tasks). Missing from older servers. */
   troops?: Partial<Record<TroopType, number>>;
+  /** Heroes living in the city's Feasting Hall, highest level first. Missing from older servers. */
+  heroes?: CityHero[];
+  /** Heroes the city's Inn offers for hire; null without an Inn. Missing from older servers. */
+  inn?: Inn | null;
+}
+
+/** idle heroes can be hired out to marches, made mayor or dismissed; a mayor stays home. */
+export type HeroStatus = 'idle' | 'mayor' | 'marching';
+
+export interface HeroStats {
+  name: string;
+  /** 1–100. */
+  level: number;
+  politics: number;
+  attack: number;
+  intelligence: number;
+}
+
+/** A hero in a city's Feasting Hall. (Hero is the combat engine's battle stats.) */
+export interface CityHero extends HeroStats {
+  id: string;
+  /** Equals the level: how many troops get the hero's Attack and Intelligence bonus in battle. */
+  leadership: number;
+  exp: number;
+  /** Exp needed for the next level. */
+  expToNext: number;
+  /** Stat points from levelling up, not spent yet. */
+  points: number;
+  status: HeroStatus;
+  /** Gold per hour, already taken off the city's gold rate. */
+  salary: number;
+}
+
+/** A hero the Inn offers for hire. */
+export interface InnOffer extends HeroStats {
+  /** Pass to the hire message. */
+  id: string;
+  /** Gold paid once to hire. */
+  fee: number;
+  /** Gold per hour once hired. */
+  salary: number;
+}
+
+export interface Inn {
+  /** When the offers change (epoch ms). Refreshing is free. */
+  refreshAt: number;
+  offers: InnOffer[];
 }
 
 /** Buildings that stand inside the walls (Evony age 2 names). */

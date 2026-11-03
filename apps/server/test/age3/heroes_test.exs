@@ -1,0 +1,79 @@
+defmodule Age3.HeroesTest do
+  use ExUnit.Case, async: true
+
+  alias Age3.Heroes
+
+  defp b(type, level), do: %{type: type, level: level}
+
+  test "the Feasting Hall's level is how many heroes a city holds, the Inn's how many it offers" do
+    assert Heroes.capacity([b("feastinghall", 3), b("inn", 2)]) == 3
+    assert Heroes.offer_count([b("feastinghall", 3), b("inn", 2)]) == 2
+    assert Heroes.capacity([]) == 0
+    assert Heroes.offer_count([]) == 0
+  end
+
+  test "fee and salary go with the hero's level" do
+    assert Heroes.fee(10) == 10_000
+    assert Heroes.salary(10) == 200
+    assert Heroes.salaries([%{level: 2}, %{level: 10}]) == 240
+  end
+
+  test "roll_offers gives Inn-level heroes, the same ones for the same seed" do
+    offers = Heroes.roll_offers(3, 42)
+    assert length(offers) == 3
+    assert offers == Heroes.roll_offers(3, 42)
+    assert offers != Heroes.roll_offers(3, 43)
+    assert Enum.map(offers, & &1["id"]) == ["42-0", "42-1", "42-2"]
+
+    for o <- offers do
+      assert o["level"] in 1..15
+      assert is_binary(o["name"])
+      # one strong stat (45-78) plus the other two (15-50) plus one point per level
+      total = o["politics"] + o["attack"] + o["intelligence"]
+      assert total in (45 + 30 + o["level"])..(78 + 100 + o["level"])
+      assert Enum.max([o["politics"], o["attack"], o["intelligence"]]) >= 45
+    end
+  end
+
+  test "current_inn keeps the offers until refreshAt, then rolls new ones on whole steps" do
+    step = Heroes.refresh_ms()
+    {inn, true} = Heroes.current_inn(%{}, 2, 10, 1)
+    assert inn["refreshAt"] == step
+    assert inn["level"] == 2
+    assert length(inn["offers"]) == 2
+
+    assert {^inn, false} = Heroes.current_inn(inn, 2, step - 1, 2)
+    {later, true} = Heroes.current_inn(inn, 2, step, 2)
+    assert later["refreshAt"] == 2 * step
+    assert later["offers"] != inn["offers"]
+
+    # an upgraded Inn rolls a bigger set straight away, and no Inn has none
+    {bigger, true} = Heroes.current_inn(inn, 3, 10, 3)
+    assert length(bigger["offers"]) == 3
+    assert {%{}, true} = Heroes.current_inn(inn, 0, 10)
+    assert {%{}, false} = Heroes.current_inn(%{}, 0, 10)
+  end
+
+  test "check_hire" do
+    inn = %{"offers" => [%{"id" => "a", "level" => 5}]}
+    city = [b("inn", 1), b("feastinghall", 1)]
+
+    assert {:ok, %{"id" => "a"}} = Heroes.check_hire(city, [], inn, "a", 5_000)
+    assert {:error, "not_enough_resources"} = Heroes.check_hire(city, [], inn, "a", 4_999)
+    assert {:error, "offer_gone"} = Heroes.check_hire(city, [], inn, "b", 5_000)
+    assert {:error, "hall_full"} = Heroes.check_hire(city, [%{level: 1}], inn, "a", 5_000)
+    assert {:error, "no_hall"} = Heroes.check_hire([b("inn", 1)], [], inn, "a", 5_000)
+    assert {:error, "no_inn"} = Heroes.check_hire([b("feastinghall", 1)], [], inn, "a", 5_000)
+    assert Heroes.remove_offer(inn, "a") == %{"offers" => []}
+  end
+
+  test "gain_exp levels up as often as the exp covers, with a point each time, and stops at 100" do
+    hero = %{level: 1, exp: 0, points: 0}
+    assert Heroes.gain_exp(hero, 99) == %{level: 1, exp: 99, points: 0}
+    assert Heroes.gain_exp(hero, 100) == %{level: 2, exp: 0, points: 1}
+    # 100 to reach Lv2, 400 more to reach Lv3, 50 left over
+    assert Heroes.gain_exp(hero, 550) == %{level: 3, exp: 50, points: 2}
+    assert Heroes.gain_exp(%{level: 99, exp: 0, points: 0}, 10_000_000) == %{level: 100, exp: 0, points: 1}
+    assert Heroes.gain_exp(%{level: 100, exp: 0, points: 3}, 5) == %{level: 100, exp: 0, points: 3}
+  end
+end

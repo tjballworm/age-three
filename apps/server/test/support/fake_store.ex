@@ -60,4 +60,17 @@ defmodule Age3.FakeStore do
   def cheat(_player_id, {:player, "Other"}, _action, _args, _now_ms), do: {:ok, "p2"}
   def cheat(_player_id, {:player, _name}, _action, _args, _now_ms), do: {:error, "player_not_found"}
   def cheat(_player_id, _target, _action, _args, _now_ms), do: {:error, "bad_message"}
+
+  # offer "o1" can always be hired, hero "h1" dismissed or appointed (or no mayor at all); anything else is gone
+  @impl true
+  def hire(_player_id, _city_id, "o1", _now_ms), do: :ok
+  def hire(_player_id, _city_id, _offer_id, _now_ms), do: {:error, "offer_gone"}
+
+  @impl true
+  def dismiss(_player_id, _city_id, "h1", _now_ms), do: :ok
+  def dismiss(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "hero_busy"}
+
+  @impl true
+  def set_mayor(_player_id, _city_id, hero_id, _now_ms) when hero_id in ["h1", nil], do: :ok
+  def set_mayor(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "bad_message"}
 end
