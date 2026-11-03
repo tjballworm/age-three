@@ -67,6 +67,10 @@ defmodule Age3.FakeStore do
   def hire(_player_id, _city_id, _offer_id, _now_ms), do: {:error, "offer_gone"}
 
   @impl true
+  def reroll_inn(_player_id, "c1", _now_ms), do: :ok
+  def reroll_inn(_player_id, _city_id, _now_ms), do: {:error, "no_inn"}
+
+  @impl true
   def dismiss(_player_id, _city_id, "h1", _now_ms), do: :ok
   def dismiss(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "hero_busy"}
 

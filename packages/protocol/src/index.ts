@@ -58,6 +58,8 @@ export type CancelTrainMessage = Envelope<'cancelTrain', { cityId: string; taskI
 export type SpeedUpMessage = Envelope<'speedUp', { cityId: string; taskId: string }>;
 /** Hire one of the Inn's offers (`offerId` from `city.inn.offers`) into the Feasting Hall, paying its fee. Replies with state. */
 export type HireMessage = Envelope<'hire', { cityId: string; offerId: string }>;
+/** The Inn's free refresh: swaps its offers for a new set now. The timed refresh (`inn.refreshAt`) stays. Replies with state. */
+export type RefreshInnMessage = Envelope<'refreshInn', { cityId: string }>;
 /** Send an idle hero away for good; their salary stops. Replies with state. */
 export type DismissMessage = Envelope<'dismiss', { cityId: string; heroId: string }>;
 /** Make an idle hero the city's mayor (the old one goes back to idle), or `heroId: null` for none. Replies with state. */
@@ -115,6 +117,7 @@ export type ClientMessage =
   | TrainMessage
   | CancelTrainMessage
   | HireMessage
+  | RefreshInnMessage
   | DismissMessage
   | SetMayorMessage
   | CheatMessage;

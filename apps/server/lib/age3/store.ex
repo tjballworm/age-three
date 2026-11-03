@@ -102,6 +102,10 @@ defmodule Age3.Store do
   @callback hire(player_id :: String.t(), city_id :: String.t(), offer_id :: String.t(), now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
 
+  @doc "Swaps the city's Inn offers for a new set now, for free. The timed refresh stays where it was."
+  @callback reroll_inn(player_id :: String.t(), city_id :: String.t(), now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
   @doc "Sends an idle hero away for good. Their salary stops."
   @callback dismiss(player_id :: String.t(), city_id :: String.t(), hero_id :: String.t(), now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
@@ -514,6 +518,19 @@ defmodule Age3.Store.Pg do
         {:error, code} ->
           Repo.rollback(code)
       end
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def reroll_inn(player_id, city_id, now_ms) do
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      city = if complete_due(city.id, to_datetime(now_ms)) == [], do: city, else: Repo.get!(City, city.id)
+      level = Repo.one(from b in Building, where: b.city_id == ^city.id and b.type == "inn", select: b.level)
+      if is_nil(level), do: Repo.rollback("no_inn")
+      {inn, _changed} = Heroes.current_inn(city.inn, level, now_ms)
+      Repo.update_all(from(c in City, where: c.id == ^city.id), set: [inn: Heroes.reroll(inn, level)])
     end)
     |> ok()
   end
