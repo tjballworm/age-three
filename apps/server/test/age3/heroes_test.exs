@@ -54,6 +54,14 @@ defmodule Age3.HeroesTest do
     assert {%{}, false} = Heroes.current_inn(%{}, 0, 10)
   end
 
+  test "reroll swaps the offers and keeps the timer" do
+    {inn, true} = Heroes.current_inn(%{}, 2, 10, 1)
+    new = Heroes.reroll(inn, 2, 7)
+    assert new["refreshAt"] == inn["refreshAt"] and new["level"] == 2
+    assert new["offers"] == Heroes.roll_offers(2, 7)
+    assert new["offers"] != inn["offers"]
+  end
+
   test "check_hire" do
     inn = %{"offers" => [%{"id" => "a", "level" => 5}]}
     city = [b("inn", 1), b("feastinghall", 1)]

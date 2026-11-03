@@ -10,8 +10,9 @@
 
   // The Inn half of the Inn window: heroes for hire on the right, the Feasting Hall's free places and the next
   // refresh on the left. The Inn offers as many heroes as its level and swaps them for new ones for free on a
-  // timer. Hiring needs a free place in the Feasting Hall (as many as its level). As elsewhere, the checks here
-  // only grey out buttons and explain why; the server decides.
+  // timer, or straight away with the free Refresh button (which leaves the timer as it was). Hiring needs a free
+  // place in the Feasting Hall (as many as its level). As elsewhere, the checks here only grey out buttons and
+  // explain why; the server decides.
 
   const city = $derived(currentCity());
   const levelOf = (type: string) => city.buildings.find((b) => b.type === type)?.level ?? 0;
@@ -50,6 +51,18 @@
       sending = false;
     }
   }
+
+  async function refresh() {
+    error = '';
+    sending = true;
+    try {
+      await command({ type: 'refreshInn', payload: { cityId: city.id } });
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      sending = false;
+    }
+  }
 </script>
 
 <div class="inn">
@@ -68,7 +81,8 @@
     <div class="box">
       {#if inn}
         <span>Arrive in <b>{formatDuration(Math.max(0, inn.refreshAt - clock.now))}</b></span>
-        <span class="small">The Inn's heroes change for free every 30 minutes.</span>
+        <span class="small">The Inn's heroes change for free every 30 minutes, or now with Refresh.</span>
+        <Button small disabled={!game.fromServer || sending} onclick={refresh}>Refresh (free)</Button>
       {:else}
         <i>No offers.</i>
       {/if}

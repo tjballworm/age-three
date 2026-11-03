@@ -223,6 +223,19 @@ defmodule Age3.Session do
   defp handle("hire", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid hire."), session}
 
+  # The Inn's free refresh: {cityId}. New offers now; the timed refresh stays where it was. Replies with state.
+  defp handle("refreshInn", %{"cityId" => city_id}, id, session) when is_binary(city_id) do
+    now = session.now.()
+
+    case session.store.reroll_inn(session.player_id, city_id, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("refreshInn", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid refresh."), session}
+
   # Send a hero away for good: {cityId, heroId}. Only an idle hero (not the mayor, not marching).
   defp handle("dismiss", %{"cityId" => city_id, "heroId" => hero_id}, id, session)
        when is_binary(city_id) and is_binary(hero_id) do

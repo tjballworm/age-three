@@ -1,7 +1,8 @@
 defmodule Age3.Heroes do
   # Heroes' rules, as pure functions (no database), like Age3.Train. A hero belongs to a city and lives in its
   # Feasting Hall, which holds as many heroes as its level. The Inn shows as many heroes for hire as its level;
-  # the offers change for free every @refresh_ms. Hiring costs level x 1,000 gold, and a hero's salary is
+  # the offers change for free every @refresh_ms, and the player can also swap them for new ones by hand, for free,
+  # as often as they like (reroll). Hiring costs level x 1,000 gold, and a hero's salary is
   # level x 20 gold an hour, taken off the city's gold rate (Economy.rates).
   #
   # Leadership is the hero's level (TJ, 2026-11-03): +1 per level, heroes stop at level 100. In battle it decides
@@ -103,6 +104,15 @@ defmodule Age3.Heroes do
         refresh_at = (div(now_ms, @refresh_ms) + 1) * @refresh_ms
         {%{"refreshAt" => refresh_at, "level" => inn_level, "offers" => roll_offers(inn_level, seed)}, true}
     end
+  end
+
+  @doc """
+  The player's free refresh: a new set of offers now, from the current Inn (current_inn). The timer isn't touched,
+  so the next timed refresh still comes at the same refreshAt. (tunable) No limit and no cost for now.
+  """
+  def reroll(inn, inn_level, seed \\ nil) do
+    seed = seed || :erlang.unique_integer([:positive])
+    Map.put(inn, "offers", roll_offers(inn_level, seed))
   end
 
   @doc """

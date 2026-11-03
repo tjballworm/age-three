@@ -213,6 +213,17 @@ defmodule Age3.SessionTest do
     assert_received {:wake, 31_000}
   end
 
+  test "refreshInn replies with the new state" do
+    msg = fn payload -> Jason.encode!(%{type: "refreshInn", id: 2, payload: payload}) end
+
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "no_inn"}},
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}}
+           ] = run([login("secret123"), msg.(%{cityId: "c1"}), msg.(%{cityId: "c2"}), msg.(%{})])
+  end
+
   test "cancelTrain wakes the task runner, as the next batch may end sooner" do
     cancel = fn task ->
       Jason.encode!(%{type: "cancelTrain", id: 2, payload: %{cityId: "c1", taskId: task}})

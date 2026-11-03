@@ -371,6 +371,22 @@ defmodule Age3.Store.PgTest do
       assert length(later.inn.offers) == 2 and later.inn.offers != city.inn.offers
     end
 
+    test "the free refresh rolls new offers now and keeps the timer" do
+      {id, city_id, now} = innkeeper("Refresher")
+      {:ok, _, [city], _} = Pg.state(id, now)
+      [old | _] = city.inn.offers
+
+      assert :ok = Pg.reroll_inn(id, city_id, now + 1)
+      {:ok, _, [fresh], _} = Pg.state(id, now + 1)
+      assert fresh.inn.refreshAt == city.inn.refreshAt
+      assert length(fresh.inn.offers) == 2 and fresh.inn.offers != city.inn.offers
+      # the old offers are gone
+      assert {:error, "offer_gone"} = Pg.hire(id, city_id, old.id, now + 1)
+
+      {id, city_id, now} = general("No Inn To Refresh")
+      assert {:error, "no_inn"} = Pg.reroll_inn(id, city_id, now)
+    end
+
     test "the Feasting Hall's level limits the heroes" do
       {id, city_id, now} = innkeeper("Collector")
       {:ok, _, [city], _} = Pg.state(id, now)
