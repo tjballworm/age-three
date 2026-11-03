@@ -25,10 +25,11 @@ defmodule Age3.Economy do
   on top (Agriculture, Lumbering, Masonry, Mining: +10% of the fields' production per level, rounded down; only
   up to the city's Academy level),
   plus gold from taxes, which is the population limit x tax rate % (the wiki's tax formula uses the limit, and
-  it keeps gold steady while people move back in after training), minus the food the city's troops eat.
+  it keeps gold steady while people move back in after training), minus the food the city's troops eat and
+  the gold its heroes are paid (salary, gold per hour: Heroes.salaries/1).
   buildings is a list of %{type, level}; troops is %{"warrior" => 100, ...}.
   """
-  def rates(buildings, tax_rate, research \\ %{}, troops \\ %{}) do
+  def rates(buildings, tax_rate, research \\ %{}, troops \\ %{}, salary \\ 0) do
     research = Research.in_city(research, buildings)
     base = Data.base()["perHour"]
     gold = div(max_population(buildings) * tax_rate, 100)
@@ -40,7 +41,14 @@ defmodule Age3.Economy do
 
     Map.new(base, fn {name, n} ->
       fields = Map.get(made, name, 0)
-      upkeep = if name == "food", do: Train.upkeep(troops), else: 0
+
+      upkeep =
+        case name do
+          "food" -> Train.upkeep(troops)
+          "gold" -> salary
+          _ -> 0
+        end
+
       {name, n + div(fields * (100 + Research.production_bonus(research, name)), 100) - upkeep}
     end)
   end
@@ -84,11 +92,12 @@ defmodule Age3.Economy do
   end
 
   @doc """
-  Resources with the perHour and cap the city's buildings, tax rate, troops and the player's research give. Amounts are
-  kept, so settle them first: the new rates only apply from the moment this snapshot is saved.
+  Resources with the perHour and cap the city's buildings, tax rate, troops, heroes' salary and the player's
+  research give. Amounts are kept, so settle them first: the new rates only apply from the moment this snapshot
+  is saved.
   """
-  def recalc(resources, buildings, tax_rate, research \\ %{}, troops \\ %{}) do
-    rates = rates(buildings, tax_rate, research, troops)
+  def recalc(resources, buildings, tax_rate, research \\ %{}, troops \\ %{}, salary \\ 0) do
+    rates = rates(buildings, tax_rate, research, troops, salary)
     cap = cap(buildings, research)
 
     Map.new(resources, fn {name, stock} ->

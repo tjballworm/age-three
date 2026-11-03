@@ -95,6 +95,25 @@ defmodule Age3.Store do
               now_ms :: integer
             ) :: {:ok, target_player_id :: String.t()} | {:error, code :: String.t()}
 
+  @doc """
+  Hires the hero the city's Inn offers under offer_id into its Feasting Hall, paying the fee in gold now. The
+  hero's salary comes off the city's gold rate from now on.
+  """
+  @callback hire(player_id :: String.t(), city_id :: String.t(), offer_id :: String.t(), now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
+  @doc "Sends an idle hero away for good. Their salary stops."
+  @callback dismiss(player_id :: String.t(), city_id :: String.t(), hero_id :: String.t(), now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
+  @doc "Makes an idle hero the city's mayor (the old mayor goes back to idle), or with nil leaves it without one."
+  @callback set_mayor(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              hero_id :: String.t() | nil,
+              now_ms :: integer
+            ) :: :ok | {:error, code :: String.t()}
+
   @doc "Stops a construction that hasn't finished and refunds its whole cost."
   @callback cancel_build(
               player_id :: String.t(),
@@ -121,6 +140,8 @@ defmodule Age3.Store.Pg do
     Data,
     Economy,
     Game,
+    Hero,
+    Heroes,
     Player,
     Repo,
     Research,
@@ -204,14 +225,19 @@ defmodule Age3.Store.Pg do
       city_ids = Repo.all(from c in City, where: c.player_id == ^player_id, select: c.id)
       Enum.each(city_ids, &finish_due_in_city(&1, now))
       Enum.each(city_ids, &refresh_stale(&1, now))
+      Enum.each(city_ids, &refresh_inn(&1, now_ms))
       # read after finishing tasks, which can raise research levels
       player = Repo.get!(Player, player_id)
 
       buildings = from(b in Building, order_by: b.slot)
+      heroes = from(h in Hero, order_by: [desc: h.level, asc: h.inserted_at])
 
       cities =
         Repo.all(
-          from c in City, where: c.player_id == ^player_id, order_by: c.id, preload: [buildings: ^buildings]
+          from c in City,
+            where: c.player_id == ^player_id,
+            order_by: c.id,
+            preload: [buildings: ^buildings, heroes: ^heroes]
         )
 
       tasks = Repo.all(from t in Task, where: t.city_id in ^city_ids, order_by: t.ends_at)
@@ -450,6 +476,110 @@ defmodule Age3.Store.Pg do
     end
   end
 
+  # Heroes. Same pattern: lock the city, settle, check with Age3.Heroes, write. Hiring and dismissing change the
+  # heroes' salaries, so the city gets a new snapshot with the new gold rate (resnapshot).
+
+  @impl true
+  def hire(player_id, city_id, offer_id, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
+      buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+      heroes = Repo.all(from h in Hero, where: h.city_id == ^city.id)
+      {inn, _changed} = Heroes.current_inn(city.inn, Heroes.offer_count(buildings), now_ms)
+      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+
+      case Heroes.check_hire(buildings, heroes, inn, offer_id, resources["gold"]["amount"]) do
+        {:ok, offer} ->
+          Repo.insert!(%Hero{
+            city_id: city.id,
+            name: offer["name"],
+            level: offer["level"],
+            politics: offer["politics"],
+            attack: offer["attack"],
+            intelligence: offer["intelligence"]
+          })
+
+          save_resources(city, Build.spend(resources, %{"gold" => Heroes.fee(offer["level"])}), now_ms)
+
+          Repo.update_all(from(c in City, where: c.id == ^city.id),
+            set: [inn: Heroes.remove_offer(inn, offer_id)]
+          )
+
+          # the new salary: settled to now above, so the snapshot is already at now_ms
+          resnapshot(Repo.get!(City, city.id), now)
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def dismiss(player_id, city_id, hero_id, now_ms) do
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      hero = find_hero(city.id, hero_id) || Repo.rollback("bad_message")
+      if hero.status != "idle", do: Repo.rollback("hero_busy")
+      Repo.delete!(hero)
+      resnapshot(city, to_datetime(now_ms))
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def set_mayor(player_id, city_id, hero_id, _now_ms) do
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      hero = hero_id && (find_hero(city.id, hero_id) || Repo.rollback("bad_message"))
+      if hero && hero.status not in ["idle", "mayor"], do: Repo.rollback("hero_busy")
+
+      Repo.update_all(from(h in Hero, where: h.city_id == ^city.id and h.status == "mayor"),
+        set: [status: "idle"]
+      )
+
+      if hero, do: Repo.update_all(from(h in Hero, where: h.id == ^hero.id), set: [status: "mayor"])
+    end)
+    |> ok()
+  end
+
+  defp ok({:ok, _}), do: :ok
+  defp ok({:error, code}), do: {:error, code}
+
+  defp find_hero(city_id, hero_id) do
+    case Ecto.UUID.cast(hero_id) do
+      {:ok, id} -> Repo.one(from h in Hero, where: h.id == ^id and h.city_id == ^city_id)
+      :error -> nil
+    end
+  end
+
+  defp salary_of(city_id),
+    do: Heroes.salaries(Repo.all(from h in Hero, where: h.city_id == ^city_id, select: %{level: h.level}))
+
+  # Rolls new Inn offers when the old ones have run out (or the Inn's level changed), under the city's lock so two
+  # reads at once can't each roll a different set.
+  defp refresh_inn(city_id, now_ms) do
+    stale? = fn city ->
+      level = Repo.one(from b in Building, where: b.city_id == ^city.id and b.type == "inn", select: b.level)
+      Heroes.current_inn(city.inn, level || 0, now_ms)
+    end
+
+    case stale?.(Repo.get!(City, city_id)) do
+      {_inn, false} ->
+        :ok
+
+      _ ->
+        Repo.transaction(fn ->
+          city = Repo.one(from c in City, where: c.id == ^city_id, lock: "FOR UPDATE")
+          {inn, changed?} = stale?.(city)
+          if changed?, do: Repo.update_all(from(c in City, where: c.id == ^city_id), set: [inn: inn])
+        end)
+    end
+  end
+
   # Cheats (testing commands). Locks the target cities in id order and then the player, like research does, so
   # they can't deadlock with other commands. Anything already due finishes first.
 
@@ -587,8 +717,18 @@ defmodule Age3.Store.Pg do
     resnapshot(city, to_datetime(now_ms))
   end
 
+  defp cheat_city(city, "heroExp", %{amount: amount}, _now_ms) do
+    for h <- Repo.all(from h in Hero, where: h.city_id == ^city.id) do
+      up = Heroes.gain_exp(h, amount)
+      h |> Ecto.Changeset.change(level: up.level, exp: up.exp, points: up.points) |> Repo.update!()
+    end
+
+    :ok
+  end
+
   defp cheat_city(city, "resetCity", _args, now_ms) do
     Repo.delete_all(from t in Task, where: t.city_id == ^city.id)
+    Repo.delete_all(from h in Hero, where: h.city_id == ^city.id)
     Repo.delete_all(from b in Building, where: b.city_id == ^city.id and b.slot not in ["townhall", "walls"])
 
     Repo.insert_all(
@@ -605,6 +745,7 @@ defmodule Age3.Store.Pg do
       set: [
         tax_rate: 10,
         troops: %{},
+        inn: %{},
         resources: Game.starter_resources(),
         population: Game.starter_population(),
         synced_at: to_datetime(now_ms)
@@ -782,7 +923,15 @@ defmodule Age3.Store.Pg do
     Repo.update_all(from(c in City, where: c.id == ^city.id),
       set:
         [
-          resources: Economy.recalc(resources, buildings, tax_rate, research_of(city.player_id), troops),
+          resources:
+            Economy.recalc(
+              resources,
+              buildings,
+              tax_rate,
+              research_of(city.player_id),
+              troops,
+              salary_of(city.id)
+            ),
           population: %{"current" => current, "max" => max, "idle" => current},
           synced_at: synced_at
         ] ++ changes
@@ -796,8 +945,14 @@ defmodule Age3.Store.Pg do
     city = City |> Repo.get!(city_id) |> Repo.preload(:buildings)
 
     stale? =
-      Economy.recalc(city.resources, city.buildings, city.tax_rate, research_of(city.player_id), city.troops) !=
-        city.resources or
+      Economy.recalc(
+        city.resources,
+        city.buildings,
+        city.tax_rate,
+        research_of(city.player_id),
+        city.troops,
+        salary_of(city.id)
+      ) != city.resources or
         Economy.max_population(city.buildings) != city.population["max"]
 
     if stale? do
@@ -871,9 +1026,50 @@ defmodule Age3.Store.Pg do
       taxRate: c.tax_rate,
       buildings: Enum.map(town, &building_json(&1, busy)),
       fields: Enum.map(fields, &building_json(&1, busy)),
-      troops: c.troops
+      troops: c.troops,
+      heroes: Enum.map(c.heroes, &hero_json/1),
+      inn: inn_json(c.inn)
     }
   end
+
+  defp hero_json(h) do
+    %{
+      id: h.id,
+      name: h.name,
+      level: h.level,
+      leadership: h.level,
+      exp: h.exp,
+      expToNext: Heroes.exp_to_next(h.level),
+      points: h.points,
+      politics: h.politics,
+      attack: h.attack,
+      intelligence: h.intelligence,
+      status: h.status,
+      salary: Heroes.salary(h.level)
+    }
+  end
+
+  # fee and salary are worked out here so the client never repeats the formulas
+  defp inn_json(%{"refreshAt" => refresh_at, "offers" => offers}) do
+    %{
+      refreshAt: refresh_at,
+      offers:
+        Enum.map(offers, fn o ->
+          %{
+            id: o["id"],
+            name: o["name"],
+            level: o["level"],
+            politics: o["politics"],
+            attack: o["attack"],
+            intelligence: o["intelligence"],
+            fee: Heroes.fee(o["level"]),
+            salary: Heroes.salary(o["level"])
+          }
+        end)
+    }
+  end
+
+  defp inn_json(_none), do: nil
 
   defp building_json(b, busy) do
     json = %{type: b.type, level: b.level, slot: slot_json(b.slot)}

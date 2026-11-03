@@ -56,6 +56,12 @@ export type CancelTrainMessage = Envelope<'cancelTrain', { cityId: string; taskI
  * (5 minutes) or less left. Replies with state.
  */
 export type SpeedUpMessage = Envelope<'speedUp', { cityId: string; taskId: string }>;
+/** Hire one of the Inn's offers (`offerId` from `city.inn.offers`) into the Feasting Hall, paying its fee. Replies with state. */
+export type HireMessage = Envelope<'hire', { cityId: string; offerId: string }>;
+/** Send an idle hero away for good; their salary stops. Replies with state. */
+export type DismissMessage = Envelope<'dismiss', { cityId: string; heroId: string }>;
+/** Make an idle hero the city's mayor (the old one goes back to idle), or `heroId: null` for none. Replies with state. */
+export type SetMayorMessage = Envelope<'setMayor', { cityId: string; heroId: string | null }>;
 /** Sets a city's tax rate, a whole number from 0 to 100. Gold per hour changes from now on. Replies with state. */
 export type SetTaxMessage = Envelope<'setTax', { cityId: string; taxRate: number }>;
 
@@ -90,7 +96,9 @@ export type CheatAction =
   | { action: 'setResearch'; tech: TechId; level: number }
   /** Every tech at a level. */
   | { action: 'researchAll'; level: number }
-  /** Back to a new city: Town Hall and walls Lv1, starting resources, no troops, no tasks. */
+  /** Exp for every hero in the city; they level up as far as it covers. */
+  | { action: 'heroExp'; amount: number }
+  /** Back to a new city: Town Hall and walls Lv1, starting resources, no troops, heroes or tasks. */
   | { action: 'resetCity' };
 
 export type ClientMessage =
@@ -106,6 +114,9 @@ export type ClientMessage =
   | CancelResearchMessage
   | TrainMessage
   | CancelTrainMessage
+  | HireMessage
+  | DismissMessage
+  | SetMayorMessage
   | CheatMessage;
 
 // ---------- server -> client ----------
@@ -160,4 +171,14 @@ export type ErrorCode =
   /** not enough idle population for the batch */
   | 'not_enough_population'
   /** a cheat named a player who doesn't exist */
-  | 'player_not_found';
+  | 'player_not_found'
+  /** hire in a city without an Inn */
+  | 'no_inn'
+  /** hire in a city without a Feasting Hall */
+  | 'no_hall'
+  /** the Feasting Hall already holds as many heroes as its level */
+  | 'hall_full'
+  /** the offer was hired already, or the Inn's offers changed since */
+  | 'offer_gone'
+  /** the hero isn't idle (mayor or marching) */
+  | 'hero_busy';

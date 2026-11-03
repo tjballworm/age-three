@@ -17,8 +17,10 @@ defmodule Age3.City do
     field :population, :map
     # trained troops, e.g. %{"warrior" => 100}; troops still training are tasks
     field :troops, :map, default: %{}
+    field :inn, :map, default: %{}
     # when the resources snapshot was taken; Age3.Economy.settle works forward from here
     field :synced_at, :utc_datetime_usec
     has_many :buildings, Age3.Building
+    has_many :heroes, Age3.Hero
   end
 end

@@ -150,6 +150,37 @@ defmodule Age3.SessionTest do
     assert_received {:wake, 251_000}
   end
 
+  test "hire, dismiss and setMayor reply with the new state" do
+    msg = fn type, payload ->
+      Jason.encode!(%{type: type, id: 2, payload: Map.put(payload, :cityId, "c1")})
+    end
+
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "offer_gone", "message" => gone}},
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}},
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "hero_busy"}},
+             %{"type" => "state"},
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}}
+           ] =
+             run([
+               login("secret123"),
+               msg.("hire", %{offerId: "o1"}),
+               msg.("hire", %{offerId: "o2"}),
+               msg.("hire", %{offerId: 1}),
+               msg.("dismiss", %{heroId: "h1"}),
+               msg.("dismiss", %{heroId: "h2"}),
+               msg.("setMayor", %{heroId: "h1"}),
+               msg.("setMayor", %{heroId: nil}),
+               msg.("setMayor", %{})
+             ])
+
+    assert gone =~ "left the Inn"
+  end
+
   test "cancelTrain wakes the task runner, as the next batch may end sooner" do
     cancel = fn task ->
       Jason.encode!(%{type: "cancelTrain", id: 2, payload: %{cityId: "c1", taskId: task}})

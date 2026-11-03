@@ -248,6 +248,21 @@
     </section>
 
     <section>
+      <h3>Heroes <span class="note">exp for every hero in this city</span></h3>
+      <div class="row">
+        {#each [1_000, 10_000, 100_000, 1_000_000] as exp (exp)}
+          <Button
+            variant="blue"
+            disabled={!game.fromServer || sending}
+            onclick={() =>
+              cheat({ action: 'heroExp', amount: exp }, `heroes given ${exp.toLocaleString()} exp`)}
+            >+{exp.toLocaleString()} exp</Button
+          >
+        {/each}
+      </div>
+    </section>
+
+    <section>
       <h3>Buildings <span class="note">free, instant, no requirements</span></h3>
       <div class="row">
         <select bind:value={slot} aria-label="Slot">

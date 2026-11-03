@@ -5,8 +5,10 @@ import {
   TOWN_SLOTS,
   type ChatMessage,
   type City,
+  type CityHero,
   type Field,
   type FieldType,
+  type InnOffer,
   type Player,
   type ResourceStock,
   type ResourceType,
@@ -103,6 +105,18 @@ export function sampleCities(): City[] {
       buildings: sampleTown(9),
       fields: sampleFields(9),
       troops: { worker: 500, warrior: 2_400, pike: 1_200, archer: 1_500, cavalry: 300 },
+      heroes: [
+        sampleHero('h1', 'Linda', 10, 56, 27, 45, 'mayor'),
+        sampleHero('h2', 'Rodney', 2, 41, 65, 45, 'idle'),
+      ],
+      inn: {
+        refreshAt: Date.now() + 17 * 60_000,
+        offers: [
+          sampleOffer('o1', 'Aldric', 7, 30, 72, 28),
+          sampleOffer('o2', 'Beatrix', 3, 61, 22, 35),
+          sampleOffer('o3', 'Cedric', 12, 33, 40, 70),
+        ],
+      },
     },
     {
       id: 'c2',
@@ -180,4 +194,40 @@ export function sampleChat(now: number): ChatMessage[] {
       at: now - 2 * MIN,
     },
   ];
+}
+
+function sampleHero(
+  id: string,
+  name: string,
+  level: number,
+  politics: number,
+  attack: number,
+  intelligence: number,
+  status: CityHero['status'],
+): CityHero {
+  return {
+    id,
+    name,
+    level,
+    leadership: level,
+    exp: level * 37,
+    expToNext: 100 * level * level,
+    points: 0,
+    politics,
+    attack,
+    intelligence,
+    status,
+    salary: level * 20,
+  };
+}
+
+function sampleOffer(
+  id: string,
+  name: string,
+  level: number,
+  politics: number,
+  attack: number,
+  intelligence: number,
+): InnOffer {
+  return { id, name, level, politics, attack, intelligence, fee: level * 1000, salary: level * 20 };
 }
