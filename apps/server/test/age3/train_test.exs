@@ -115,7 +115,11 @@ defmodule Age3.TrainTest do
   test "upkeep and adding troops" do
     assert Train.upkeep(%{}) == 0
     assert Train.upkeep(nil) == 0
-    assert Train.upkeep(%{"warrior" => 100, "catapult" => 2}) == 100 + 250
+    assert Train.upkeep(%{"warrior" => 100, "catapult" => 2}) == 10 + 25
+    # tenths round up to whole food
+    assert Train.upkeep(%{"warrior" => 1}) == 1
+    assert Train.upkeep(%{"warrior" => 15}) == 2
+    assert Train.upkeep(%{"warrior" => 3, "scout" => 3, "pike" => 3}) == 2
     assert Train.add(%{"warrior" => 5}, "warrior", 10) == %{"warrior" => 15}
     assert Train.add(%{}, "scout", 3) == %{"scout" => 3}
   end

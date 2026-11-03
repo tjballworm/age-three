@@ -25,7 +25,7 @@
           <td class="name">{TROOP_DATA[troop].name}</td>
           <td>{formatNumber(n)}</td>
           <td>{inTraining(troop) ? formatNumber(inTraining(troop)) : '—'}</td>
-          <td class:neg={n > 0}>{n > 0 ? `-${formatNumber(n * TROOP_DATA[troop].upkeep)}` : '—'}</td>
+          <td class:neg={n > 0}>{n > 0 ? `-${formatNumber(upkeep({ [troop]: n }))}` : '—'}</td>
         </tr>
       {/each}
     </tbody>
