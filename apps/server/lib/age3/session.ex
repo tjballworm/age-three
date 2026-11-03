@@ -323,15 +323,14 @@ defmodule Age3.Session do
   defp handle("getReport", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid report request."), session}
 
-  # Finish a build, research or the batch a Barracks is training for free when it has 5 minutes or less left:
-  # {cityId, taskId}.
+  # Finish a building's construction or upgrade for free when it has 5 minutes or less left: {cityId, taskId}.
+  # Research, training and walls can't be sped up.
   defp handle("speedUp", %{"cityId" => city_id, "taskId" => task_id}, id, session)
        when is_binary(city_id) and is_binary(task_id) do
     now = session.now.()
 
     case session.store.speed_up(session.player_id, city_id, task_id, now) do
       :ok ->
-        # a sped-up batch lets the next one in its Barracks start (and end) sooner
         session.wake.(now)
         state_reply(id, session, now)
 
@@ -463,7 +462,10 @@ defmodule Age3.Session do
   defp message("max_level"), do: "Already at the highest level."
 
   defp message("too_early"),
-    do: "Speedup is only free in the last 5 minutes of a build, research or training."
+    do: "Speedup is only free in the last 5 minutes of a building's construction or upgrade."
+
+  defp message("no_free_speedup"),
+    do: "Only buildings can be sped up for free. Research, training and walls can't."
 
   defp message("player_not_found"), do: "No player with that name."
   defp message("no_inn"), do: "This city has no Inn."

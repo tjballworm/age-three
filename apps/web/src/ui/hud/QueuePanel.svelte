@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FREE_SPEEDUP_MS, progress, remaining, type TaskKind, type TimedTask } from '@age3/core';
+  import { canFreeSpeedUp, progress, remaining, type TaskKind, type TimedTask } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { game } from '$state/game.svelte';
   import { command, speedUp } from '$state/sync';
@@ -23,14 +23,8 @@
     march: 'march',
   };
 
-  /**
-   * Server builds, research and training with 5 minutes or less left get a free Speedup button. A training batch
-   * still waiting for its Barracks doesn't, however soon it will be done.
-   */
-  const canSpeedUp = (t: TimedTask) =>
-    game.fromServer &&
-    (t.kind === 'build' || t.kind === 'research' || (t.kind === 'train' && t.startedAt <= clock.now)) &&
-    remaining(t, clock.now) <= FREE_SPEEDUP_MS;
+  /** Only building construction and upgrades (not walls) with 5 minutes or less left get a free Speedup button. */
+  const canSpeedUp = (t: TimedTask) => game.fromServer && canFreeSpeedUp(t, clock.now);
 
   /** A march still on its way can be called back; it takes as long to come home as it has been out. */
   const canRecall = (t: TimedTask) => game.fromServer && t.kind === 'march' && t.march?.phase === 'out';

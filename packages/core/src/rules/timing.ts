@@ -1,3 +1,4 @@
+import { FREE_SPEEDUP_MS } from '../data/buildings';
 import type { Population, ResourceStock, TimedTask } from '../types';
 
 const HOUR = 3_600_000;
@@ -40,3 +41,11 @@ export function progress(task: Pick<TimedTask, 'startedAt' | 'endsAt'>, now: num
 }
 
 export const isFinished = (task: Pick<TimedTask, 'endsAt'>, now: number) => now >= task.endsAt;
+
+/**
+ * Whether the free Speedup button applies: only a building's construction or upgrade with FREE_SPEEDUP_MS (5
+ * minutes) or less left. Research, training and walls never get it. The server checks the same rule.
+ */
+export function canFreeSpeedUp(task: Pick<TimedTask, 'kind' | 'slot' | 'endsAt'>, now: number): boolean {
+  return task.kind === 'build' && task.slot !== 'walls' && remaining(task, now) <= FREE_SPEEDUP_MS;
+}

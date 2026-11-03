@@ -1,7 +1,6 @@
 <script lang="ts">
   import {
     BUILDINGS,
-    FREE_SPEEDUP_MS,
     MAX_TECH_LEVEL,
     RESOURCE_TYPES,
     TECHS,
@@ -16,7 +15,7 @@
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game } from '$state/game.svelte';
-  import { command, speedUp } from '$state/sync';
+  import { command } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
   import { formatDuration, formatNumber } from '$ui/format';
@@ -113,9 +112,6 @@
         <div class="bar"><div style:width="{progress(running, clock.now) * 100}%"></div></div>
         <span>{formatDuration(remaining(running, clock.now))} left</span>
         <div class="actions">
-          {#if game.fromServer && remaining(running, clock.now) <= FREE_SPEEDUP_MS}
-            <Button small disabled={sending} onclick={() => send(() => speedUp(running))}>Speedup</Button>
-          {/if}
           <Button small variant="red" disabled={sending} onclick={() => cancel(running.id)}>Cancel</Button>
         </div>
       {:else}
