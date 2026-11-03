@@ -53,12 +53,13 @@ defmodule Age3.Train do
   end
 
   @doc """
-  Food these troops (%{"warrior" => 100, ...}) eat each hour, rounded up to whole food. One troop's upkeep can be a
-  tenth (a warrior eats 0.1), so this adds up in tenths to keep float error out. Matches upkeep in packages/core.
+  Food these troops (%{"warrior" => 100, ...}) eat each hour, rounded up to whole food, so any army eats at
+  least 1. One troop's upkeep can be a thousandth (a warrior eats 0.001), so this adds up in thousandths to keep float
+  error out. Matches upkeep in packages/core.
   """
   def upkeep(troops) do
-    tenths = Enum.sum(for {troop, n} <- troops || %{}, do: round(Data.troop(troop)["upkeep"] * 10) * n)
-    div(tenths + 9, 10)
+    thousandths = Enum.sum(for {troop, n} <- troops || %{}, do: round(Data.troop(troop)["upkeep"] * 1000) * n)
+    div(thousandths + 999, 1000)
   end
 
   @doc "Adds count troops of a type to a city's troops."
