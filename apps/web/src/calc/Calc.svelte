@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FORTS, FORT_NAME, simulate, type BattleResult } from '@age3/core';
+  import { FORTS, FORT_NAME, NPCS, npcArmy, simulate, type BattleResult } from '@age3/core';
   import ArmyPanel from './ArmyPanel.svelte';
   import QuantityInput from './QuantityInput.svelte';
   import Results from './Results.svelte';
@@ -38,6 +38,20 @@
     battle.fortifications = {};
   }
 
+  // Fills the defender and their city with an NPC of that level: garrison, research, fortifications and walls.
+  function loadNpc(e: Event) {
+    const select = e.currentTarget as HTMLSelectElement;
+    const spec = NPCS[Number(select.value) - 1];
+    select.value = '';
+    if (!spec) return;
+    battle.defender = npcArmy(spec);
+    battle.fortifications = { ...spec.fortifications };
+    battle.settings.walls = spec.walls;
+    battle.settings.valley = 0;
+    battle.settings.closedGates = false;
+    battle.settings.npc = true;
+  }
+
   function swapSides() {
     const a = battle.attacker;
     battle.attacker = battle.defender;
@@ -70,6 +84,19 @@
           <h2 id="city-title">Defender's city</h2>
           <button type="button" class="link" onclick={clearDefence}>Clear defence</button>
         </header>
+        <div class="preset">
+          <label for="npc-preset">Preset</label>
+          <select
+            id="npc-preset"
+            onchange={loadNpc}
+            title="Fills the defender, fortifications and walls with that NPC's garrison (Age II wiki)"
+          >
+            <option value="">Load an NPC garrison…</option>
+            {#each NPCS as n (n.level)}
+              <option value={n.level}>NPC level {n.level}</option>
+            {/each}
+          </select>
+        </div>
         <fieldset>
           <legend>Fortifications</legend>
           <div class="grid">
@@ -208,6 +235,16 @@
     padding: 10px 0;
     background: var(--bg);
     border-top: 1px solid var(--line);
+  }
+  .preset {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 8px;
+  }
+  .preset select {
+    flex: 1;
+    min-width: 0;
   }
   .error {
     color: #ff9b85;
