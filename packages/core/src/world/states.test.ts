@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateWorld, historicCityAt, stateAt, STATES, tileAt } from '.';
+import { generateWorld, historicCityAt, stateAt, STATES } from '.';
 
 describe('stateAt', () => {
   it('splits the map into a 4 x 4 grid of states', () => {
@@ -18,26 +18,30 @@ describe('historicCityAt', () => {
     expect(historicCityAt(100, 700)).toEqual({ level: 16, name: 'Ottawa' });
   });
 
-  it('places the Lv 14 and Lv 12 grids, leaving the middle spot to the capital', () => {
-    expect(historicCityAt(233, 365)?.level).toBe(14);
-    expect(historicCityAt(209, 389)?.level).toBe(12);
-    expect(historicCityAt(299, 299)).toBeNull();
+  it('runs the Lv 14 grid across the whole map, as the guide lists round Cairo', () => {
+    for (const x of [627, 693, 759]) {
+      for (const y of [429, 495, 561]) {
+        if (x === 693 && y === 495) expect(historicCityAt(x, y)).toBeNull();
+        else expect(historicCityAt(x, y)).toEqual({ level: 14, name: 'Historic City' });
+      }
+    }
+    expect(historicCityAt(693, 759)).toBeNull();
+    expect(historicCityAt(759, 759)).toBeNull();
+  });
+
+  it('runs the Lv 12 grid from (9, 9), clear of bigger historic cities', () => {
+    expect(historicCityAt(27, 9)).toEqual({ level: 12, name: 'Historic City' });
+    expect(historicCityAt(9, 9)).toBeNull(); // Atlantis
+    expect(historicCityAt(27, 27)).toBeNull(); // Lv 14 at (33, 33)
+    expect(historicCityAt(99, 99)).toBeNull(); // Washington D.C. at (100, 100)
     expect(historicCityAt(10, 9)).toBeNull();
   });
 
-  it('gives every state 1 capital, 8 Lv 14 and 120 Lv 12 historic cities', () => {
+  it('has Atlantis, 16 capitals, 126 Lv 14 and 1,793 Lv 12 historic cities', () => {
     const w = generateWorld({ seed: 1 });
-    for (let i = 0; i < STATES.length; i++) {
-      const x0 = (i % 4) * 200;
-      const y0 = Math.floor(i / 4) * 200;
-      const levels: Record<number, number> = {};
-      for (let y = y0; y < y0 + 200; y++) {
-        for (let x = x0; x < x0 + 200; x++) {
-          const t = tileAt(w, x, y);
-          if (t.kind === 'historic') levels[t.level] = (levels[t.level] ?? 0) + 1;
-        }
-      }
-      expect(levels).toEqual(i === 0 ? { 12: 120, 14: 8, 16: 1, 18: 1 } : { 12: 120, 14: 8, 16: 1 });
-    }
+    const levels: Record<number, number> = {};
+    for (const t of w.tiles) if (t.kind === 'historic') levels[t.level] = (levels[t.level] ?? 0) + 1;
+    expect(levels).toEqual({ 12: 1793, 14: 126, 16: 16, 18: 1 });
+    expect(STATES.map((s) => s.capital)).toContain('Washington D.C.');
   });
 });

@@ -40,4 +40,5 @@ export const WORLD_SIZE = 800;
 export * from './buildings';
 export * from './research';
 export * from './troops';
+export * from './historic';
 export * from './npcs';

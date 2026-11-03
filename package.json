@@ -16,7 +16,7 @@
     "preview": "npm run preview -w @age3/web",
     "typecheck": "tsc -p packages/core && tsc -p packages/protocol && npm run check -w @age3/web",
     "test": "vitest run",
-    "sync-data": "node -e \"for (const f of ['buildings.json', 'research.json', 'troops.json', 'npcs.json']) require('fs').copyFileSync('packages/core/src/data/' + f, 'apps/server/priv/data/' + f)\"",
+    "sync-data": "node -e \"for (const f of ['buildings.json', 'research.json', 'troops.json', 'npcs.json', 'historic-cities.json']) require('fs').copyFileSync('packages/core/src/data/' + f, 'apps/server/priv/data/' + f)\"",
     "test:server": "cd apps/server && mix test",
     "test:watch": "vitest",
     "lint": "eslint .",

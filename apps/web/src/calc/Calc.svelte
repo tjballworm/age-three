@@ -1,5 +1,17 @@
 <script lang="ts">
-  import { FORTS, FORT_NAME, NPCS, npcArmy, simulate, type BattleResult } from '@age3/core';
+  import {
+    FORTS,
+    FORT_NAME,
+    HISTORIC_CITIES,
+    HISTORIC_FORTIFICATIONS,
+    HISTORIC_WALLS,
+    NPCS,
+    historicArmy,
+    historicSpec,
+    npcArmy,
+    simulate,
+    type BattleResult,
+  } from '@age3/core';
   import ArmyPanel from './ArmyPanel.svelte';
   import QuantityInput from './QuantityInput.svelte';
   import Results from './Results.svelte';
@@ -38,15 +50,25 @@
     battle.fortifications = {};
   }
 
-  // Fills the defender and their city with an NPC of that level: garrison, research, fortifications and walls.
+  // Fills the defender and their city with an NPC ("3") or a historic city ("h12") of that level: garrison,
+  // research, hero, fortifications and walls. A historic city's either/or troop slots take their first type.
   function loadNpc(e: Event) {
     const select = e.currentTarget as HTMLSelectElement;
-    const spec = NPCS[Number(select.value) - 1];
+    const value = select.value;
     select.value = '';
-    if (!spec) return;
-    battle.defender = npcArmy(spec);
-    battle.fortifications = { ...spec.fortifications };
-    battle.settings.walls = spec.walls;
+    if (value.startsWith('h')) {
+      const spec = historicSpec(Number(value.slice(1)));
+      if (!spec) return;
+      battle.defender = historicArmy(spec);
+      battle.fortifications = { ...HISTORIC_FORTIFICATIONS };
+      battle.settings.walls = HISTORIC_WALLS;
+    } else {
+      const spec = NPCS[Number(value) - 1];
+      if (!spec) return;
+      battle.defender = npcArmy(spec);
+      battle.fortifications = { ...spec.fortifications };
+      battle.settings.walls = spec.walls;
+    }
     battle.settings.valley = 0;
     battle.settings.closedGates = false;
     battle.settings.npc = true;
@@ -89,11 +111,14 @@
           <select
             id="npc-preset"
             onchange={loadNpc}
-            title="Fills the defender, fortifications and walls with that NPC's garrison (Age II wiki)"
+            title="Fills the defender, fortifications and walls with that NPC's or historic city's garrison"
           >
             <option value="">Load an NPC garrison…</option>
             {#each NPCS as n (n.level)}
               <option value={n.level}>NPC level {n.level}</option>
+            {/each}
+            {#each HISTORIC_CITIES as h (h.level)}
+              <option value="h{h.level}">Historic City level {h.level}</option>
             {/each}
           </select>
         </div>

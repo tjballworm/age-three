@@ -36,7 +36,7 @@ defmodule Age3.WorldTest do
     assert World.tile_at(800, -800) == %{kind: "historic", level: 18}
     assert World.tile_at(100, 100) == %{kind: "historic", level: 16}
     assert World.tile_at(33, 33) == %{kind: "historic", level: 14}
-    assert World.tile_at(9, 9) == %{kind: "historic", level: 12}
+    assert World.tile_at(27, 9) == %{kind: "historic", level: 12}
     assert World.tile_at(5, 7) == World.tile_at(805, 1607)
   end
 end
