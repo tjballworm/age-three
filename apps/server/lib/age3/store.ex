@@ -765,6 +765,9 @@ defmodule Age3.Store.Pg do
         action == "instantMarch" ->
           Repo.update_all(from(p in Player, where: p.id == ^target_id), set: [instant_march: args.on])
 
+        action == "setHero" ->
+          cheat_hero(city_ids, args, now)
+
         Cheats.research?(action) ->
           research =
             Repo.one!(from p in Player, where: p.id == ^target_id, lock: "FOR UPDATE", select: p.research)
@@ -790,6 +793,17 @@ defmodule Age3.Store.Pg do
 
       target_id
     end)
+  end
+
+  # setHero: one hero in the target's cities, then its city's gold rate again (the salary follows the level).
+  defp cheat_hero(city_ids, %{hero_id: hero_id, changes: changes}, now) do
+    with {:ok, id} <- Ecto.UUID.cast(hero_id),
+         %Hero{city_id: city_id} <- Repo.one(from h in Hero, where: h.id == ^id and h.city_id in ^city_ids) do
+      Repo.update_all(from(h in Hero, where: h.id == ^id), set: changes)
+      resnapshot(Repo.get!(City, city_id), now)
+    else
+      _ -> Repo.rollback("hero_not_found")
+    end
   end
 
   # {target player's id, the city ids to change}, or nil when there is no such city or player.
@@ -890,13 +904,14 @@ defmodule Age3.Store.Pg do
     resnapshot(city, to_datetime(now_ms))
   end
 
-  defp cheat_city(city, "heroExp", %{amount: amount}, _now_ms) do
+  defp cheat_city(city, "heroExp", %{amount: amount}, now_ms) do
     for h <- Repo.all(from h in Hero, where: h.city_id == ^city.id) do
       up = Heroes.gain_exp(h, amount)
       h |> Ecto.Changeset.change(level: up.level, exp: up.exp, points: up.points) |> Repo.update!()
     end
 
-    :ok
+    # higher levels mean higher salaries, taken off the gold rate
+    resnapshot(Repo.get!(City, city.id), to_datetime(now_ms))
   end
 
   defp cheat_city(city, "resetCity", _args, now_ms) do
@@ -1208,7 +1223,7 @@ defmodule Age3.Store.Pg do
   defp combat_hero(nil), do: Combat.default_army().hero
 
   defp combat_hero(h),
-    do: %{level: h.level, attack: h.attack, intelligence: h.intelligence, leadership: h.level, stars: 0}
+    do: %{level: h.level, attack: h.attack, intelligence: h.intelligence, leadership: h.level, stars: h.stars}
 
   # Gives the hero exp and returns what the report shows about them.
   defp gain_hero_exp(hero, exp) do
@@ -1360,6 +1375,7 @@ defmodule Age3.Store.Pg do
       politics: h.politics,
       attack: h.attack,
       intelligence: h.intelligence,
+      stars: h.stars,
       status: h.status,
       salary: Heroes.salary(h.level)
     }

@@ -75,6 +75,8 @@ export interface CityHero extends HeroStats {
   expToNext: number;
   /** Stat points from levelling up, not spent yet. */
   points: number;
+  /** Gear stars, 0-15: in battle they raise the life of the troops the hero leads and the hero's Leadership coverage. */
+  stars: number;
   status: HeroStatus;
   /** Gold per hour, already taken off the city's gold rate. */
   salary: number;

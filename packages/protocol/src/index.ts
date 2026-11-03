@@ -125,6 +125,20 @@ export type CheatAction =
   | { action: 'researchAll'; level: number }
   /** Exp for every hero in the city; they level up as far as it covers. */
   | { action: 'heroExp'; amount: number }
+  /**
+   * One hero's level (1-100), stats (0-9,999) and gear stars (0-15), set straight. Only the fields sent change; a new level starts at
+   * 0 exp. The hero has to be in the target's cities (error `hero_not_found`).
+   */
+  | {
+      action: 'setHero';
+      heroId: string;
+      level?: number;
+      points?: number;
+      politics?: number;
+      attack?: number;
+      intelligence?: number;
+      stars?: number;
+    }
   /** Back to a new city: Town Hall and walls Lv1, starting resources, no troops, heroes or tasks. */
   | { action: 'resetCity' }
   /** The player's marches take a second each way (on) or the normal time (off). */
@@ -235,6 +249,8 @@ export type ErrorCode =
   | 'no_troops'
   /** a march with no hero, or one not in the city */
   | 'no_hero'
+  /** a setHero cheat for a hero that isn't in the target's cities */
+  | 'hero_not_found'
   /** only NPC cities can be attacked for now */
   | 'bad_target'
   /** recall on a march already coming home */

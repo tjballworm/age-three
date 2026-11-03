@@ -27,6 +27,23 @@ defmodule Age3.CheatsTest do
 
     assert {:error, _} = Cheats.parse("setResearch", %{"tech" => "archery", "level" => 11})
     assert {:ok, %{}} = Cheats.parse("finishAll", %{})
+
+    # setHero: only the fields sent; a new level starts at 0 exp
+    assert {:ok, %{hero_id: "h", changes: [attack: 300]}} =
+             Cheats.parse("setHero", %{"heroId" => "h", "attack" => 300})
+
+    assert {:ok, %{changes: [exp: 0, level: 100, politics: 0]}} =
+             Cheats.parse("setHero", %{"heroId" => "h", "level" => 100, "politics" => 0})
+
+    assert {:error, _} = Cheats.parse("setHero", %{"heroId" => "h"})
+    assert {:error, _} = Cheats.parse("setHero", %{"heroId" => "h", "level" => 0})
+    assert {:error, _} = Cheats.parse("setHero", %{"heroId" => "h", "level" => 101})
+    assert {:error, _} = Cheats.parse("setHero", %{"heroId" => "h", "attack" => 10_000})
+    assert {:error, _} = Cheats.parse("setHero", %{"heroId" => "h", "attack" => -1})
+    assert {:error, _} = Cheats.parse("setHero", %{"heroId" => "h", "attack" => 1.5})
+    assert {:error, _} = Cheats.parse("setHero", %{"attack" => 5})
+    assert {:ok, %{changes: [stars: 15]}} = Cheats.parse("setHero", %{"heroId" => "h", "stars" => 15})
+    assert {:error, _} = Cheats.parse("setHero", %{"heroId" => "h", "stars" => 16})
     assert {:error, _} = Cheats.parse("launchNukes", %{})
   end
 

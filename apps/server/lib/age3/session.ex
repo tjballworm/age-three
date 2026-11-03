@@ -461,6 +461,7 @@ defmodule Age3.Session do
   defp message("not_enough_troops"), do: "Not enough troops in the city."
   defp message("no_troops"), do: "Choose some troops to send."
   defp message("no_hero"), do: "Choose a hero to lead the march."
+  defp message("hero_not_found"), do: "That hero isn't in those cities any more."
   defp message("bad_target"), do: "Only NPC cities can be attacked for now."
   defp message("already_returning"), do: "That march is already on its way back."
   defp message(_code), do: "Not a valid request."
