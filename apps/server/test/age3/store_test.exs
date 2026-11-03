@@ -97,6 +97,29 @@ defmodule Age3.Store.PgTest do
     assert {:error, "bad_message"} = Pg.speed_up(id, city.id, task.id, late)
   end
 
+  test "speed_up never finishes walls, however little is left" do
+    {:ok, id} = Pg.find_or_create_player("WallSpeeder")
+    now = System.system_time(:millisecond)
+    {:ok, _, [city], []} = Pg.state(id, now)
+
+    walls =
+      Age3.Repo.insert!(%Age3.Task{
+        city_id: city.id,
+        kind: "build",
+        label: "Walls Lv 2",
+        slot: "walls",
+        target_type: "walls",
+        target_level: 2,
+        cost: %{},
+        started_at: DateTime.from_unix!((now - 60_000) * 1000, :microsecond),
+        ends_at: DateTime.from_unix!((now + 60_000) * 1000, :microsecond)
+      })
+
+    assert {:error, "no_free_speedup"} = Pg.speed_up(id, city.id, walls.id, now)
+    {:ok, _, _, [task]} = Pg.state(id, now)
+    assert task.id == walls.id
+  end
+
   test "comfort pays the population limit and lifts loyalty, once every 15 minutes" do
     {id, city_id, now} = general("Comforter")
 
@@ -204,7 +227,7 @@ defmodule Age3.Store.PgTest do
     assert {:error, "academy_busy"} = Pg.research(id, city_id, "agriculture", now)
   end
 
-  test "cancel_research refunds the cost, and speed_up finishes a research in its last 5 minutes" do
+  test "cancel_research refunds the cost, and speed_up never finishes a research" do
     {id, city_id, now} = scholar("Refunder")
     {:ok, _, [city], []} = Pg.state(id, now)
     gold = city.resources["gold"]["amount"]
@@ -218,9 +241,9 @@ defmodule Age3.Store.PgTest do
 
     {:ok, ends_at} = Pg.research(id, city_id, "agriculture", now)
     {:ok, _, _, [task]} = Pg.state(id, now)
-    assert :ok = Pg.speed_up(id, city_id, task.id, ends_at - 300_000)
-    {:ok, player, _, []} = Pg.state(id, ends_at - 300_000)
-    assert player.research == %{"agriculture" => 1}
+    assert {:error, "no_free_speedup"} = Pg.speed_up(id, city_id, task.id, ends_at - 60_000)
+    {:ok, player, _, [_still_running]} = Pg.state(id, ends_at - 60_000)
+    assert player.research == %{}
   end
 
   # A new player whose city has a Barracks Lv2 on plot 4 (and a Rally Spot, Town Hall Lv3, cottages for a
@@ -339,20 +362,16 @@ defmodule Age3.Store.PgTest do
     assert first > half
   end
 
-  test "speed_up finishes the batch in its last 5 minutes, not one still waiting" do
+  test "speed_up never finishes training, however little is left" do
     {id, city_id, now} = general("Hurrier")
     {:ok, first} = Pg.train(id, city_id, "4", "warrior", 10, now)
-    {:ok, _} = Pg.train(id, city_id, "4", "warrior", 1, now)
-    {:ok, _, _, [a, b]} = Pg.state(id, now)
+    {:ok, _, _, [task]} = Pg.state(id, now)
 
-    # the second batch ends within 5 minutes, but hasn't started
-    assert {:error, "too_early"} = Pg.speed_up(id, city_id, b.id, now)
-    assert :ok = Pg.speed_up(id, city_id, a.id, now)
-    {:ok, _, [city], [b]} = Pg.state(id, now)
-    assert city.troops == %{"warrior" => 10}
-    assert %{startedAt: ^now} = b
-    assert b.endsAt == now + 24_000
-    assert first > now
+    # 10 warriors take well under 5 minutes, and still can't be sped up
+    assert first - now <= Age3.Data.free_speedup_ms()
+    assert {:error, "no_free_speedup"} = Pg.speed_up(id, city_id, task.id, now)
+    {:ok, _, [city], [_still_training]} = Pg.state(id, now)
+    assert city.troops == %{}
   end
 
   test "a Barracks upgrades while it trains, and trains while it is upgraded" do

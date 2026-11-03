@@ -42,7 +42,7 @@ export const MAX_BUILDING_LEVEL: number = data.maxLevel;
 
 export const BUILDINGS = data.buildings as Record<BuildingType, BuildingSpec>;
 
-/** A build with this long or less left can be finished for free with the Speedup button. */
+/** A building (not walls) with this long or less left can be finished for free with the Speedup button. */
 export const FREE_SPEEDUP_MS: number = data.freeSpeedupSeconds * 1000;
 
 /** Cost and time to build or upgrade `type` to `level`, or undefined past the top level. */

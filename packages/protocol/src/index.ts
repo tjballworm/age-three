@@ -64,8 +64,8 @@ export type TrainMessage = Envelope<
 /** Stop a training batch (running or waiting) and get its cost and people back. The reply is a `state` message. */
 export type CancelTrainMessage = Envelope<'cancelTrain', { cityId: string; taskId: string }>;
 /**
- * Finishes a build, research or the batch a Barracks is training now for free when it has FREE_SPEEDUP_MS
- * (5 minutes) or less left. Replies with state.
+ * Finishes a building's construction or upgrade for free when it has FREE_SPEEDUP_MS (5 minutes) or less left.
+ * Research, training and walls can't be sped up (no_free_speedup). Replies with state.
  */
 export type SpeedUpMessage = Envelope<'speedUp', { cityId: string; taskId: string }>;
 /** Hire one of the Inn's offers (`offerId` from `city.inn.offers`) into the Feasting Hall, paying its fee. Replies with state. */
@@ -235,6 +235,8 @@ export type ErrorCode =
   | 'max_level'
   /** speedUp with more than 5 minutes left */
   | 'too_early'
+  /** speedUp on research, training or walls */
+  | 'no_free_speedup'
   /** research in a city without an Academy */
   | 'no_academy'
   /** the Academy is being upgraded (no research), or is researching (no upgrade) */

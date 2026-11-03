@@ -8,7 +8,6 @@
 
 <script lang="ts">
   import {
-    FREE_SPEEDUP_MS,
     RESOURCE_TYPES,
     TECHS,
     TROOPS,
@@ -27,7 +26,7 @@
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game, openBuild } from '$state/game.svelte';
-  import { command, speedUp } from '$state/sync';
+  import { command } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
   import Window from '$ui/components/Window.svelte';
@@ -265,9 +264,6 @@
             <b>{current.label}</b>
             <span>{formatDuration(left)} left</span>
           </div>
-          {#if game.fromServer && left <= FREE_SPEEDUP_MS}
-            <Button small disabled={sending} onclick={() => send(() => speedUp(current))}>Speedup</Button>
-          {/if}
           <Button small variant="red" disabled={sending} onclick={() => cancel(current.id)}>Cancel</Button>
         </div>
       {:else}

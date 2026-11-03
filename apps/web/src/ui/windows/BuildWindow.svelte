@@ -1,12 +1,12 @@
 <script lang="ts">
   import {
     BUILDINGS,
-    FREE_SPEEDUP_MS,
     MAX_BUILDING_LEVEL,
     RESOURCE_TYPES,
     TECHS,
     buildSeconds,
     buildingLevel,
+    canFreeSpeedUp,
     researchInCity,
     remaining,
     settleCity,
@@ -194,7 +194,7 @@
         </div>
         {#if building}
           <div class="actions">
-            {#if game.fromServer && remaining(building, clock.now) <= FREE_SPEEDUP_MS}
+            {#if game.fromServer && canFreeSpeedUp(building, clock.now)}
               <Button disabled={sending} onclick={() => send(() => speedUp(building))}>Speedup</Button>
             {/if}
             <Button variant="red" disabled={sending} onclick={() => cancel(building.id)}>Cancel</Button>
@@ -233,14 +233,15 @@
             <span>{formatDuration(remaining(building, clock.now))} left</span>
           </div>
           <div class="actions">
-            {#if game.fromServer && remaining(building, clock.now) <= FREE_SPEEDUP_MS}
+            {#if game.fromServer && canFreeSpeedUp(building, clock.now)}
               <Button disabled={sending} onclick={() => send(() => speedUp(building))}>Speedup</Button>
             {/if}
             <Button variant="red" disabled={sending} onclick={() => cancel(building.id)}>Cancel</Button>
           </div>
         </div>
         <p class="note">
-          Cancelling gives back the whole cost. Builds with 5 minutes or less left can be sped up for free.
+          Cancelling gives back the whole cost. Buildings (not walls) with 5 minutes or less left can be sped
+          up for free.
         </p>
       {:else}
         {#each options as { type, level } (type)}

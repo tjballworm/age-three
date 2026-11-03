@@ -72,8 +72,8 @@ defmodule Age3.Store do
             ) :: :ok | {:error, code :: String.t()}
 
   @doc """
-  Finishes a construction, research or the training batch a Barracks is working on now, for free, when it has
-  Data.free_speedup_ms/0 or less left.
+  Finishes a building's construction or upgrade for free when it has Data.free_speedup_ms/0 or less left. Research,
+  training and walls never get it (no_free_speedup).
   """
   @callback speed_up(player_id :: String.t(), city_id :: String.t(), task_id :: String.t(), now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
@@ -498,15 +498,13 @@ defmodule Age3.Store.Pg do
       complete_due(city.id, now)
       task = find_task(city.id, task_id, ["build", "research", "train"]) || Repo.rollback("bad_message")
 
-      # a training batch still waiting its turn isn't in its last 5 minutes, however short it is
-      if to_ms(task.ends_at) - now_ms > Data.free_speedup_ms() or
-           DateTime.compare(task.started_at, now) == :gt,
-         do: Repo.rollback("too_early")
+      # only buildings get the free speedup: no research, training or walls
+      if task.kind != "build" or task.slot == "walls", do: Repo.rollback("no_free_speedup")
+      if to_ms(task.ends_at) - now_ms > Data.free_speedup_ms(), do: Repo.rollback("too_early")
 
-      # finish it as if it had ended now; the next batch in that Barracks starts now
+      # finish it as if it had ended now
       task |> Ecto.Changeset.change(ends_at: now) |> Repo.update!()
       complete_due(city.id, now)
-      if task.kind == "train", do: rechain(city.id, task.slot, now_ms)
     end)
     |> case do
       {:ok, _done} -> :ok
