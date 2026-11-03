@@ -21,6 +21,7 @@ import {
   type Technology,
   type TroopType,
 } from '../src/combat';
+import { npcArmy, npcSpec } from '../src/data/npcs';
 
 const count = Number(process.argv[2] ?? 500);
 const out = process.argv[3] ?? 'apps/server/test/fixtures/combat.json';
@@ -75,50 +76,6 @@ function army(maxTroops: number): ArmyInput {
   };
 }
 
-// the wiki's NPC garrisons (warrior, pike, sword, archer, cavalry; trap, abatis, tower, log, trebuchet) by level
-const NPC: [number[], number[]][] = [
-  [
-    [50, 40, 35, 15, 8],
-    [1000, 0, 0, 0, 0],
-  ],
-  [
-    [50, 45, 40, 30, 25],
-    [1850, 550, 0, 0, 0],
-  ],
-  [
-    [200, 160, 65, 40, 60],
-    [2000, 1000, 650, 0, 0],
-  ],
-  [
-    [400, 400, 100, 100, 150],
-    [4500, 1875, 550, 0, 0],
-  ],
-  [
-    [750, 1000, 350, 250, 200],
-    [3750, 1875, 1250, 750, 0],
-  ],
-  [
-    [4000, 750, 550, 500, 450],
-    [4250, 1500, 1500, 950, 400],
-  ],
-  [
-    [12000, 3000, 750, 800, 750],
-    [5600, 2800, 1850, 1100, 700],
-  ],
-  [
-    [15000, 6750, 4000, 3000, 2000],
-    [7200, 3600, 2400, 1440, 900],
-  ],
-  [
-    [60000, 18000, 2000, 6750, 2500],
-    [9000, 4500, 3000, 1800, 1150],
-  ],
-  [
-    [400000, 0, 0, 0, 0],
-    [11000, 5500, 3666, 2200, 1375],
-  ],
-];
-
 function battle(i: number): BattleInput {
   const big = chance(0.3) ? 1_000_000 : chance(0.5) ? 100_000 : 5_000;
   const settings = { ...defaultSettings(), walls: int(0, 10) };
@@ -127,32 +84,11 @@ function battle(i: number): BattleInput {
 
   if (i % 4 === 0) {
     // an NPC city: its garrison and fortifications, research at its level, no hero (playtest 1)
-    const lv = int(1, 10);
-    const [troops, forts] = NPC[lv - 1]!;
-    const types: TroopType[] = ['warrior', 'pike', 'sword', 'archer', 'cavalry'];
-    const garrison: Partial<Record<TroopType, number>> = {};
-    types.forEach((t, j) => troops[j] && (garrison[t] = troops[j]));
-    FORTS.forEach((f, j) => forts[j] && (fortifications[f] = forts[j]));
-    const v = lv;
-    defender = {
-      ...defender,
-      troops: garrison,
-      tech: {
-        militaryTradition: v,
-        ironWorking: v,
-        compass: v,
-        horsebackRiding: v,
-        archery: v,
-        medicine: v,
-        engineering: v,
-        machinery: v,
-      },
-      hero: { level: 0, attack: 0, intelligence: 0, leadership: 0, stars: 0 },
-      warHorn: false,
-      corselet: false,
-    };
+    const spec = npcSpec(int(1, 10))!;
+    Object.assign(fortifications, spec.fortifications);
+    defender = { ...npcArmy(spec), healPercent: defender.healPercent };
     settings.npc = true;
-    settings.walls = lv;
+    settings.walls = spec.walls;
   } else {
     if (chance(0.5)) for (const f of pickSome(FORTS, int(1, 5))) fortifications[f] = amount(20_000);
     if (chance(0.15)) settings.closedGates = true;
