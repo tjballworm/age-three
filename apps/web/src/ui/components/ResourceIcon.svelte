@@ -2,12 +2,41 @@
   import type { ResourceType } from '@age3/core';
 
   let { type, size = 20 }: { type: ResourceType | 'population'; size?: number } = $props();
+
+  // Reference icons from the private devart repo (dev and the locked test preview only, see vite.config.ts).
+  // Normal builds, and any icon that fails to load, fall back to the drawn coins below.
+  const REF_ICON: Record<ResourceType | 'population', string> = {
+    gold: 'coin',
+    food: 'food',
+    lumber: 'wood',
+    stone: 'stone',
+    iron: 'iron',
+    population: 'population',
+  };
+
+  let broken = $state(false);
 </script>
 
-<!-- Placeholder coloured coins until resource art exists. -->
-<i class="res res-{type}" style:width="{size}px" style:height="{size}px" title={type}></i>
+{#if import.meta.env.VITE_REF_ART && !broken}
+  <img
+    class="ref"
+    src="{import.meta.env.BASE_URL}ref/flash/ui/{REF_ICON[type]}.png"
+    width={size}
+    height={size}
+    alt=""
+    title={type}
+    onerror={() => (broken = true)}
+  />
+{:else}
+  <!-- Placeholder coloured coins until our own resource art exists. -->
+  <i class="res res-{type}" style:width="{size}px" style:height="{size}px" title={type}></i>
+{/if}
 
 <style>
+  .ref {
+    flex: 0 0 auto;
+    object-fit: contain;
+  }
   .res {
     display: inline-block;
     flex: 0 0 auto;
