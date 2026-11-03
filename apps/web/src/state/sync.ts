@@ -2,7 +2,7 @@
 // reached) the game keeps showing the sample data, so the client still works on its own.
 
 import type { TimedTask } from '@age3/core';
-import { PROTOCOL_VERSION } from '@age3/protocol';
+import { PROTOCOL_VERSION, type ServerMessage } from '@age3/protocol';
 import { connect, ServerError, type GameClient, type Request } from '$net/client';
 import { auth, forgetToken, savedToken, saveToken } from './auth.svelte';
 import { applyServerState, game, postChat } from './game.svelte';
@@ -22,6 +22,12 @@ export async function command(message: Request): Promise<void> {
   if (!current) throw new Error('Not connected to the server.');
   const reply = await current.request(message);
   if (reply.type === 'state') applyServerState(reply.payload);
+}
+
+/** Sends a request that doesn't change the game (getReports, getReport) and returns the server's reply. */
+export async function ask(message: Request): Promise<ServerMessage> {
+  if (!current) throw new Error('Not connected to the server.');
+  return current.request(message);
 }
 
 /** Finishes a build or research for free (it must have 5 minutes or less left) and says so in chat. */
@@ -82,13 +88,9 @@ export function startServerSync(): () => void {
     }
     if (m.type !== 'taskDone') return;
     applyServerState(m.payload);
-    const city = m.payload.cities.find((c) => c.id === m.payload.task.cityId);
-    postChat(
-      'system',
-      null,
-      `${m.payload.task.label} complete${city ? ` in ${city.name}` : ''}.`,
-      m.payload.serverTime,
-    );
+    const { task } = m.payload;
+    const city = m.payload.cities.find((c) => c.id === task.cityId);
+    postChat('system', null, doneText(task, city?.name), m.payload.serverTime);
   });
   return () => {
     clearTimeout(giveUpTimer);
@@ -96,6 +98,18 @@ export function startServerSync(): () => void {
     client.close();
     current = null;
   };
+}
+
+/** The chat line for a finished task. A march arriving says how the battle went; one coming home, what it brought. */
+function doneText(task: TimedTask, cityName: string | undefined): string {
+  const m = task.march;
+  if (m?.phase === 'out')
+    return `Battle at (${m.x},${m.y}): ${m.won ? 'Victory!' : 'Defeat.'} See Reports for the details.`;
+  if (m?.phase === 'back') {
+    const loot = Object.values(m.loot).reduce((n, v) => n + (v ?? 0), 0);
+    return `${m.heroName}'s march is back${cityName ? ` in ${cityName}` : ''}${loot ? ` with ${loot.toLocaleString('en-US')} resources` : ''}.`;
+  }
+  return `${task.label} complete${cityName ? ` in ${cityName}` : ''}.`;
 }
 
 /** Logs in from the login screen. Rejects with the server's message (e.g. wrong password) on failure. */

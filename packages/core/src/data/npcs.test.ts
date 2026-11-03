@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { NPCS, npcArmy, npcSpec } from './npcs';
+import { RESOURCE_TYPES } from '../types';
+import { NPCS, NPC_GARRISON_REGEN_SECONDS, NPC_RESOURCE_REGEN_SECONDS, npcArmy, npcSpec } from './npcs';
 
 describe('NPC garrisons', () => {
   it('has levels 1-10 in order, with walls and research at the NPC level', () => {
@@ -22,6 +23,19 @@ describe('NPC garrisons', () => {
       troops: { warrior: 400000 },
       fortifications: { trap: 11000, abatis: 5500, tower: 3666, log: 2200, trebuchet: 1375 },
     });
+  });
+
+  it('holds every resource, and refills over an hour (garrison) and 8 hours (resources)', () => {
+    for (const n of NPCS) expect(Object.keys(n.resources).sort()).toEqual([...RESOURCE_TYPES].sort());
+    expect(npcSpec(1)!.resources).toEqual({
+      food: 100000,
+      lumber: 20000,
+      stone: 20000,
+      iron: 20000,
+      gold: 55000,
+    });
+    expect(NPC_GARRISON_REGEN_SECONDS).toBe(3600);
+    expect(NPC_RESOURCE_REGEN_SECONDS).toBe(28800);
   });
 
   it('defends with research at its level, no hero, no items and no healing', () => {

@@ -248,6 +248,27 @@
     </section>
 
     <section>
+      <h3>Marches <span class="note">for the player, not one city; normal speed is already 5x</span></h3>
+      <div class="row">
+        {#if game.player.instantMarch}
+          <Button
+            variant="blue"
+            disabled={!game.fromServer || sending}
+            onclick={() => cheat({ action: 'instantMarch', on: false }, 'marches back to normal speed')}
+            >Instant march: ON (turn off)</Button
+          >
+        {:else}
+          <Button
+            variant="blue"
+            disabled={!game.fromServer || sending}
+            onclick={() => cheat({ action: 'instantMarch', on: true }, 'marches take a second each way')}
+            >Instant march: OFF (turn on)</Button
+          >
+        {/if}
+      </div>
+    </section>
+
+    <section>
       <h3>Heroes <span class="note">exp for every hero in this city</span></h3>
       <div class="row">
         {#each [1_000, 10_000, 100_000, 1_000_000] as exp (exp)}

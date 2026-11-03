@@ -105,46 +105,21 @@ defmodule Age3.CombatTest do
     }
   end
 
-  # Age3.Combat's result in the fixture's shape (see combat-fixtures.ts): camelCase, troop types with no troops
-  # left out, stats and the round log only for the battles that keep them. Round-tripped through JSON so numbers
-  # compare the way they were recorded.
+  # Age3.Combat's result in the fixture's shape (see combat-fixtures.ts), built from Combat.to_json/1 so the
+  # client's shape is checked too: troop types with no troops left out, stats and the round log only for the
+  # battles that keep them. Round-tripped through JSON so numbers compare the way they were recorded.
   defp to_fixture(r, full) do
-    side = fn s ->
-      base = %{
-        "troops" => for(t <- s.troops, t.initial > 0, do: Map.new(t, fn {k, v} -> {to_string(k), v} end)),
-        "totalInitial" => s.total_initial,
-        "totalLost" => s.total_lost,
-        "totalSurvived" => s.total_survived,
-        "totalHealed" => s.total_healed
-      }
+    j = Combat.to_json(r)
 
-      if full, do: Map.put(base, "stats", s.stats), else: base
+    side = fn s ->
+      s = Map.update!(s, "troops", fn ts -> Enum.filter(ts, &(&1["initial"] > 0)) end)
+      if full, do: s, else: Map.delete(s, "stats")
     end
 
-    log =
-      Enum.map(r.log, fn l ->
-        %{
-          "round" => l.round,
-          "attackerAlive" => l.attacker_alive,
-          "defenderAlive" => l.defender_alive,
-          "attackerLosses" => l.attacker_losses,
-          "defenderLosses" => l.defender_losses,
-          "wallLife" => l.wall_life,
-          "events" => l.events,
-          "blocks" => l.blocks
-        }
-      end)
-
-    %{
-      "winner" => r.winner,
-      "rounds" => r.rounds,
-      "battlefield" => r.battlefield,
-      "attacker" => side.(r.attacker),
-      "defender" => side.(r.defender),
-      "fortifications" => r.fortifications,
-      "wall" => r.wall
-    }
-    |> then(&if(full, do: Map.put(&1, "log", log), else: &1))
+    j
+    |> Map.update!("attacker", side)
+    |> Map.update!("defender", side)
+    |> then(&if(full, do: &1, else: Map.delete(&1, "log")))
     |> Jason.encode!()
     |> Jason.decode!()
     |> normalise()

@@ -6,6 +6,7 @@
   import TileHoverCard from './hud/TileHoverCard.svelte';
   import TooltipLayer from './components/TooltipLayer.svelte';
   import BuildWindow from './windows/BuildWindow.svelte';
+  import MarchWindow from './windows/MarchWindow.svelte';
   import TileWindow from './windows/TileWindow.svelte';
   import WindowHost from './windows/WindowHost.svelte';
 
@@ -38,6 +39,9 @@
     <WindowHost />
     {#if game.selectedTile}
       <TileWindow tile={game.selectedTile} />
+    {/if}
+    {#if game.marchTarget}
+      <MarchWindow target={game.marchTarget} />
     {/if}
     {#if game.buildSlot !== null}
       <BuildWindow slot={game.buildSlot} />

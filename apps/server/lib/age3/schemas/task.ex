@@ -16,6 +16,8 @@ defmodule Age3.Task do
     field :target_type, :string
     field :target_level, :integer
     field :cost, :map
+    # marches only: troops, hero, target, loot and phase (Age3.March)
+    field :data, :map
     field :started_at, :utc_datetime_usec
     field :ends_at, :utc_datetime_usec
   end

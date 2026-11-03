@@ -114,6 +114,31 @@ defmodule Age3.Store do
               now_ms :: integer
             ) :: :ok | {:error, code :: String.t()}
 
+  @doc """
+  Sends an attack from one of the player's cities to the NPC city at x, y with hero_id and troops
+  (%{"warrior" => 100}), taking the troops, hero and the trip's food now (Age3.March). Returns when it arrives.
+  """
+  @callback march(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              x :: integer,
+              y :: integer,
+              hero_id :: String.t(),
+              troops :: map,
+              now_ms :: integer
+            ) :: {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
+
+  @doc "Turns a march that hasn't arrived yet around; it takes as long to come back as it has been out."
+  @callback recall(player_id :: String.t(), city_id :: String.t(), task_id :: String.t(), now_ms :: integer) ::
+              {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
+
+  @doc "The player's latest battle reports, newest first, without the battle details."
+  @callback reports(player_id :: String.t()) :: [map]
+
+  @doc "One of the player's battle reports with the whole battle (BattleResult), marking it read."
+  @callback report(player_id :: String.t(), report_id :: String.t()) ::
+              {:ok, map} | {:error, code :: String.t()}
+
   @doc "Stops a construction that hasn't finished and refunds its whole cost."
   @callback cancel_build(
               player_id :: String.t(),
@@ -137,12 +162,17 @@ defmodule Age3.Store.Pg do
     Building,
     Cheats,
     City,
+    Combat,
     Data,
     Economy,
     Game,
     Hero,
     Heroes,
+    March,
+    Npc,
+    NpcState,
     Player,
+    Report,
     Repo,
     Research,
     Task,
@@ -580,6 +610,127 @@ defmodule Age3.Store.Pg do
     end
   end
 
+  # Marches. Sending takes the troops, the hero and the trip's food from the city now; the battle is fought when
+  # the march task ends (complete_due), which then starts a second task for the way back. See Age3.March.
+
+  @impl true
+  def march(player_id, city_id, x, y, hero_id, troops, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
+      buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+      player = Repo.get!(Player, player_id)
+      research = Research.in_city(player.research, buildings)
+      hero = find_hero(city.id, hero_id)
+      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+      food = resources["food"]["amount"]
+
+      case March.check(buildings, research, city.troops, hero, {city.x, city.y}, {x, y}, food, troops) do
+        {:ok, plan} ->
+          seconds = if player.instant_march, do: 1, else: plan.seconds
+          save_resources(city, Build.spend(resources, %{"food" => plan.food}), now_ms)
+
+          Repo.update_all(from(c in City, where: c.id == ^city.id),
+            set: [troops: March.take(city.troops, plan.troops)]
+          )
+
+          Repo.update_all(from(h in Hero, where: h.id == ^hero.id), set: [status: "marching"])
+          # fewer troops at home eat less food
+          resnapshot(Repo.get!(City, city.id), now)
+
+          Repo.insert!(%Task{
+            city_id: city.id,
+            kind: "march",
+            label: "Attack on Lv#{plan.level} NPC (#{x},#{y})",
+            target_type: "attack",
+            target_level: plan.level,
+            cost: %{"food" => plan.food},
+            data: %{
+              "phase" => "out",
+              "x" => x,
+              "y" => y,
+              "heroId" => hero.id,
+              "heroName" => hero.name,
+              "troops" => plan.troops,
+              "seconds" => seconds
+            },
+            started_at: now,
+            ends_at: to_datetime(now_ms + seconds * 1000)
+          })
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> case do
+      {:ok, task} -> {:ok, to_ms(task.ends_at)}
+      {:error, code} -> {:error, code}
+    end
+  end
+
+  @impl true
+  def recall(player_id, city_id, task_id, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      complete_due(city.id, now)
+      task = find_task(city.id, task_id, ["march"]) || Repo.rollback("bad_message")
+      if task.data["phase"] != "out", do: Repo.rollback("already_returning")
+      back_ms = max(1000, now_ms - to_ms(task.started_at))
+
+      task
+      |> Ecto.Changeset.change(
+        label: "Returning from (#{task.data["x"]},#{task.data["y"]})",
+        data: Map.merge(task.data, %{"phase" => "back", "loot" => %{}}),
+        started_at: now,
+        ends_at: to_datetime(now_ms + back_ms)
+      )
+      |> Repo.update!()
+    end)
+    |> case do
+      {:ok, task} -> {:ok, to_ms(task.ends_at)}
+      {:error, code} -> {:error, code}
+    end
+  end
+
+  # How many reports the Reports window lists.
+  @reports 30
+
+  @impl true
+  def reports(player_id) do
+    case Ecto.UUID.cast(player_id) do
+      {:ok, id} ->
+        Repo.all(
+          from r in Report,
+            where: r.player_id == ^id,
+            order_by: [desc: r.fought_at],
+            limit: @reports,
+            select: struct(r, [:id, :city_id, :title, :x, :y, :won, :loot, :hero, :read, :fought_at])
+        )
+        |> Enum.map(&report_json/1)
+
+      :error ->
+        []
+    end
+  end
+
+  @impl true
+  def report(player_id, report_id) do
+    with {:ok, id} <- Ecto.UUID.cast(report_id),
+         %Report{} = r <- Repo.one(from r in Report, where: r.id == ^id and r.player_id == ^player_id) do
+      unless r.read, do: Repo.update_all(from(x in Report, where: x.id == ^r.id), set: [read: true])
+      {:ok, r |> report_json() |> Map.merge(%{read: true, result: r.result})}
+    else
+      _ -> {:error, "bad_message"}
+    end
+  end
+
+  defp unread_reports(player_id),
+    do: Repo.aggregate(from(r in Report, where: r.player_id == ^player_id and not r.read), :count)
+
   # Cheats (testing commands). Locks the target cities in id order and then the player, like research does, so
   # they can't deadlock with other commands. Anything already due finishes first.
 
@@ -593,26 +744,31 @@ defmodule Age3.Store.Pg do
       Repo.all(from c in City, where: c.id in ^city_ids, order_by: c.id, lock: "FOR UPDATE", select: c.id)
       Enum.each(city_ids, &complete_due(&1, now))
 
-      if Cheats.research?(action) do
-        research =
-          Repo.one!(from p in Player, where: p.id == ^target_id, lock: "FOR UPDATE", select: p.research)
+      cond do
+        action == "instantMarch" ->
+          Repo.update_all(from(p in Player, where: p.id == ^target_id), set: [instant_march: args.on])
 
-        research =
-          case action do
-            "setResearch" -> Cheats.set_research(research, args.tech, args.level)
-            "researchAll" -> Cheats.all_research(args.level)
-          end
+        Cheats.research?(action) ->
+          research =
+            Repo.one!(from p in Player, where: p.id == ^target_id, lock: "FOR UPDATE", select: p.research)
 
-        Repo.update_all(from(p in Player, where: p.id == ^target_id), set: [research: research])
-        # production, storage and build times change in every city
-        Enum.each(city_ids, &resnapshot(Repo.get!(City, &1), now))
-      else
-        Enum.each(city_ids, fn id ->
-          case cheat_city(Repo.get!(City, id), action, args, now_ms) do
-            {:error, code} -> Repo.rollback(code)
-            _done -> :ok
-          end
-        end)
+          research =
+            case action do
+              "setResearch" -> Cheats.set_research(research, args.tech, args.level)
+              "researchAll" -> Cheats.all_research(args.level)
+            end
+
+          Repo.update_all(from(p in Player, where: p.id == ^target_id), set: [research: research])
+          # production, storage and build times change in every city
+          Enum.each(city_ids, &resnapshot(Repo.get!(City, &1), now))
+
+        true ->
+          Enum.each(city_ids, fn id ->
+            case cheat_city(Repo.get!(City, id), action, args, now_ms) do
+              {:error, code} -> Repo.rollback(code)
+              _done -> :ok
+            end
+          end)
       end
 
       target_id
@@ -850,21 +1006,28 @@ defmodule Age3.Store.Pg do
     end
   end
 
-  # Inside a transaction holding the city's lock: applies each finished task (a building's new level, or the
-  # player's new research level) and drops it. Production changes the moment a task finishes, so resources are
+  # Inside a transaction holding the city's lock: applies each finished task (a building's new level, the
+  # player's new research level, trained troops, a march's battle or return) and drops it. Production changes the moment a task finishes, so resources are
   # settled up to that moment at the old rates and saved as a new snapshot with the new rates and population.
   # Research also changes the player's other cities; refresh_stale gives them the new rates on the next state.
   defp complete_due(city_id, now) do
     tasks = Repo.all(from t in Task, where: t.city_id == ^city_id and t.ends_at <= ^now, order_by: t.ends_at)
 
-    for t <- tasks do
-      city = Repo.get!(City, city_id)
-      apply_task(city, t)
-      Repo.delete!(t)
-      resnapshot(city, t.ends_at)
-    end
+    done =
+      for t <- tasks do
+        applied = apply_task(Repo.get!(City, city_id), t)
+        Repo.delete!(t)
+        # read again: a returning march has already added its loot to a new snapshot
+        resnapshot(Repo.get!(City, city_id), t.ends_at)
+        # a march that arrived reports how the battle went
+        case applied do
+          %Task{} -> applied
+          _other -> t
+        end
+      end
 
-    tasks
+    # a march that arrived starts its way back, which may already be over too
+    if tasks == [], do: [], else: done ++ complete_due(city_id, now)
   end
 
   defp apply_task(_city, %Task{kind: "build"} = t) do
@@ -901,6 +1064,140 @@ defmodule Age3.Store.Pg do
     Repo.update_all(from(c in City, where: c.id == ^city.id),
       set: [troops: Train.add(city.troops, t.target_type, t.target_level)]
     )
+  end
+
+  # A march arriving at its NPC: the battle, as at the moment it arrived. The NPC is locked (after the city, as
+  # always) so two marches arriving at once fight one after the other. Saves what is left of the NPC, the hero's
+  # exp and a report, and sends the survivors home with their loot. Returns the task with the outcome added.
+  defp apply_task(city, %Task{kind: "march", data: %{"phase" => "out"} = d} = t) do
+    at_ms = to_ms(t.ends_at)
+    {x, y, level} = {d["x"], d["y"], t.target_level}
+    npc = lock_npc(x, y, level, at_ms)
+    buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+    research = Research.in_city(research_of(city.player_id), buildings)
+    hero = Repo.get(Hero, d["heroId"])
+    {defender, forts, settings} = Npc.battle(npc, level)
+
+    attacker = %{
+      Combat.default_army()
+      | troops: d["troops"],
+        tech: combat_tech(research),
+        hero: combat_hero(hero),
+        heal_percent: 0
+    }
+
+    result =
+      Combat.simulate(%{attacker: attacker, defender: defender, fortifications: forts, settings: settings})
+
+    won = result.winner == :attacker
+    survivors = for s <- result.attacker.troops, s.survived > 0, into: %{}, do: {s.type, s.survived}
+    loot = if won, do: March.loot(npc["resources"], March.load(survivors, research)), else: %{}
+    left = Npc.after_battle(npc, result, loot)
+
+    Repo.update_all(from(n in NpcState, where: n.x == ^x and n.y == ^y),
+      set: [troops: left["troops"], forts: left["forts"], resources: left["resources"], updated_at: t.ends_at]
+    )
+
+    hero_report = hero && gain_hero_exp(hero, March.hero_exp(result))
+
+    report =
+      Repo.insert!(%Report{
+        player_id: city.player_id,
+        city_id: city.id,
+        title: "#{if won, do: "Victory", else: "Defeat"} against Lv#{level} NPC (#{x},#{y})",
+        x: x,
+        y: y,
+        won: won,
+        loot: loot,
+        hero: hero_report,
+        result: Combat.to_json(result),
+        fought_at: t.ends_at
+      })
+
+    back = Map.merge(d, %{"phase" => "back", "troops" => survivors, "loot" => loot})
+
+    Repo.insert!(%Task{
+      city_id: city.id,
+      kind: "march",
+      label: "Returning from (#{x},#{y})",
+      target_type: "attack",
+      target_level: level,
+      cost: %{},
+      data: back,
+      started_at: t.ends_at,
+      ends_at: to_datetime(at_ms + d["seconds"] * 1000)
+    })
+
+    %{t | data: Map.merge(d, %{"won" => won, "reportId" => report.id, "loot" => loot})}
+  end
+
+  # A march home: the troops rejoin the city, the hero is free again and the loot goes into storage (it can go
+  # over the cap, like a cheat's resources).
+  defp apply_task(city, %Task{kind: "march", data: %{"phase" => "back"} = d} = t) do
+    resnapshot(city, t.ends_at)
+    city = Repo.get!(City, city.id)
+    resources = Cheats.add_resources(city.resources, d["loot"] || %{})
+    troops = Enum.reduce(d["troops"], city.troops, fn {type, n}, acc -> Train.add(acc, type, n) end)
+    Repo.update_all(from(c in City, where: c.id == ^city.id), set: [resources: resources, troops: troops])
+
+    Repo.update_all(from(h in Hero, where: h.id == ^d["heroId"] and h.status == "marching"),
+      set: [status: "idle"]
+    )
+  end
+
+  # The NPC at x, y as it stands at at_ms, locked for this transaction. An NPC never attacked gets its row now
+  # (full, as of at_ms), so there is always a row to lock.
+  defp lock_npc(x, y, level, at_ms) do
+    full = Npc.full(level)
+
+    Repo.insert_all(
+      NpcState,
+      [
+        %{
+          x: x,
+          y: y,
+          level: level,
+          troops: full["troops"],
+          forts: full["forts"],
+          resources: full["resources"],
+          updated_at: to_datetime(at_ms)
+        }
+      ],
+      on_conflict: :nothing,
+      conflict_target: [:x, :y]
+    )
+
+    s = Repo.one!(from n in NpcState, where: n.x == ^x and n.y == ^y, lock: "FOR UPDATE")
+    saved = %{troops: s.troops, forts: s.forts, resources: s.resources, updated_at_ms: to_ms(s.updated_at)}
+    Npc.current(saved, level, at_ms)
+  end
+
+  # The player's research (capped in this city) as the battle engine's technology.
+  defp combat_tech(research) do
+    lv = &Research.level_of(research, &1)
+
+    %{
+      military_tradition: lv.("militaryTradition"),
+      iron_working: lv.("ironWorking"),
+      compass: lv.("compass"),
+      horseback_riding: lv.("horsebackRiding"),
+      archery: lv.("archery"),
+      medicine: lv.("medicine"),
+      engineering: lv.("engineering"),
+      machinery: lv.("machinery")
+    }
+  end
+
+  defp combat_hero(nil), do: Combat.default_army().hero
+
+  defp combat_hero(h),
+    do: %{level: h.level, attack: h.attack, intelligence: h.intelligence, leadership: h.level, stars: 0}
+
+  # Gives the hero exp and returns what the report shows about them.
+  defp gain_hero_exp(hero, exp) do
+    up = Heroes.gain_exp(hero, exp)
+    hero |> Ecto.Changeset.change(level: up.level, exp: up.exp, points: up.points) |> Repo.update!()
+    %{"name" => hero.name, "exp" => exp, "level" => up.level, "levelsGained" => up.level - hero.level}
   end
 
   # Inside a transaction holding the city's lock. Settles the resources up to `at` at the rates the city had
@@ -1002,6 +1299,8 @@ defmodule Age3.Store.Pg do
       prestige: p.prestige,
       honor: p.honor,
       research: p.research,
+      instantMarch: p.instant_march,
+      unreadReports: unread_reports(p.id),
       # not stored yet; the backlog has it derived from prestige
       rank: 0
     }
@@ -1087,6 +1386,36 @@ defmodule Age3.Store.Pg do
       slot: t.slot,
       targetType: t.target_type,
       targetLevel: t.target_level
+    }
+    |> then(&if(t.kind == "march", do: Map.put(&1, :march, march_json(t.data)), else: &1))
+  end
+
+  defp march_json(d) do
+    %{
+      phase: d["phase"],
+      x: d["x"],
+      y: d["y"],
+      heroId: d["heroId"],
+      heroName: d["heroName"],
+      troops: d["troops"],
+      loot: d["loot"] || %{},
+      won: d["won"],
+      reportId: d["reportId"]
+    }
+  end
+
+  defp report_json(r) do
+    %{
+      id: r.id,
+      cityId: r.city_id,
+      title: r.title,
+      x: r.x,
+      y: r.y,
+      won: r.won,
+      loot: r.loot,
+      hero: r.hero,
+      read: r.read,
+      foughtAt: to_ms(r.fought_at)
     }
   end
 

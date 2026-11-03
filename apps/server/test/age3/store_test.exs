@@ -427,6 +427,125 @@ defmodule Age3.Store.PgTest do
     end
   end
 
+  describe "marches" do
+    # a general's city with an idle Lv5 hero, 5,000 cavalry and the nearest Lv1 NPC
+    defp warlord(name) do
+      {id, city_id, now} = general(name)
+      city = Age3.Repo.get!(Age3.City, city_id)
+
+      hero =
+        Age3.Repo.insert!(%Age3.Hero{
+          city_id: city_id,
+          name: "Hector",
+          level: 5,
+          politics: 30,
+          attack: 50,
+          intelligence: 40
+        })
+
+      {:ok, _} = Pg.cheat(id, {:city, city_id}, "addTroops", %{troops: %{"cavalry" => 5000}}, now)
+
+      target =
+        for(d <- 1..80, dx <- -d..d, dy <- [-d, d], do: {city.x + dx, city.y + dy})
+        |> Enum.map(fn {x, y} -> {Integer.mod(x, 800), Integer.mod(y, 800)} end)
+        |> Enum.find(fn {x, y} -> Age3.World.tile_at(x, y) == %{kind: "npc", level: 1} end)
+
+      {id, city_id, hero.id, target, now}
+    end
+
+    test "a march takes troops, hero and food, fights on arrival, comes back with loot and leaves a report" do
+      {id, city_id, hero_id, {x, y}, now} = warlord("Attacker")
+      {:ok, _, [city], _} = Pg.state(id, now)
+      food = city.resources["food"]
+
+      assert {:ok, arrives} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 1000}, now)
+      {:ok, _, [city], [task]} = Pg.state(id, now)
+      assert city.troops["cavalry"] == 4000
+      assert [%{status: "marching"}] = city.heroes
+      assert %{kind: "march", endsAt: ^arrives, march: %{phase: "out", x: ^x, y: ^y, heroId: ^hero_id}} = task
+      seconds = div(arrives - now, 1000)
+
+      assert_in_delta city.resources["food"]["amount"],
+                      food["amount"] - Age3.March.food(%{"cavalry" => 1000}, seconds),
+                      1
+
+      # fewer troops at home eat less
+      assert city.resources["food"]["perHour"] > food["perHour"]
+      assert {:error, "hero_busy"} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 1}, now)
+
+      # arrived: the battle is won, the NPC is emptied and the march turns home
+      {:ok, player, [city], [back]} = Pg.state(id, arrives)
+      assert %{march: %{phase: "back", troops: %{"cavalry" => survivors}, loot: loot}} = back
+      assert back.endsAt == arrives + seconds * 1000
+      assert survivors > 0 and survivors <= 1000
+      # 1,000 cavalry can't carry it all: a share of each resource
+      assert loot ==
+               Age3.March.loot(Age3.Npc.full(1)["resources"], Age3.March.load(%{"cavalry" => survivors}, %{}))
+
+      assert player.unreadReports == 1
+      assert [%{status: "marching", exp: exp}] = city.heroes
+      assert exp > 0
+
+      npc = Age3.Repo.get_by!(Age3.NpcState, x: x, y: y)
+      assert Enum.all?(Map.values(npc.troops), &(&1 == 0))
+      assert npc.resources == Map.new(Age3.Npc.full(1)["resources"], fn {k, v} -> {k, v - loot[k]} end)
+
+      # home: troops back, hero idle, loot in storage
+      {:ok, _, [home], []} = Pg.state(id, back.endsAt)
+      assert home.troops["cavalry"] == 4000 + survivors
+      assert [%{status: "idle"}] = home.heroes
+      assert home.resources["gold"]["amount"] >= city.resources["gold"]["amount"] + loot["gold"]
+
+      # the report, then the whole battle
+      assert [%{id: report_id, won: true, read: false, loot: ^loot, hero: %{"name" => "Hector"}}] =
+               Pg.reports(id)
+
+      assert {:ok, %{result: %{"winner" => "attacker", "log" => [_ | _]}}} = Pg.report(id, report_id)
+      assert [%{read: true}] = Pg.reports(id)
+      assert {:error, "bad_message"} = Pg.report(id, Ecto.UUID.generate())
+
+      # the NPC refills a little every second
+      {:ok, _} = Pg.cheat(id, {:city, city_id}, "addTroops", %{troops: %{"warrior" => 1}}, now)
+      later = back.endsAt + 1800 * 1000
+      {:ok, _} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 1000}, later)
+      {:ok, _, _, [again]} = Pg.state(id, later)
+      {:ok, _, _, [_back]} = Pg.state(id, again.endsAt)
+      [newest | _] = Pg.reports(id)
+      {:ok, %{result: r}} = Pg.report(id, newest.id)
+      warriors = Enum.find(r["defender"]["troops"], &(&1["type"] == "warrior"))["initial"]
+      assert warriors == min(50, div(50 * div(again.endsAt - arrives, 1000), 3600))
+    end
+
+    test "a march finishes in one go even when its return is already due; recall turns it around" do
+      {id, city_id, hero_id, {x, y}, now} = warlord("Returner")
+      {:ok, arrives} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 100}, now)
+      {:ok, _, [city], []} = Pg.state(id, arrives + 10 * (arrives - now))
+      assert city.troops["cavalry"] > 4000
+      assert [%{status: "idle"}] = city.heroes
+
+      {:ok, _} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 100}, now)
+      {:ok, _, _, [task]} = Pg.state(id, now)
+      assert {:ok, home} = Pg.recall(id, city_id, task.id, now + 5000)
+      assert home == now + 10_000
+      assert {:error, "already_returning"} = Pg.recall(id, city_id, task.id, now + 6000)
+      {:ok, _, [city], []} = Pg.state(id, home)
+      assert [%{status: "idle"}] = city.heroes
+      assert Pg.reports(id) |> length() == 1
+    end
+
+    test "instant march cheat: a second each way; errors" do
+      {id, city_id, hero_id, {x, y}, now} = warlord("Flash")
+      {:ok, _, [home], _} = Pg.state(id, now)
+      assert {:error, "bad_target"} = Pg.march(id, city_id, home.x, home.y, hero_id, %{"cavalry" => 1}, now)
+      assert {:error, "no_hero"} = Pg.march(id, city_id, x, y, Ecto.UUID.generate(), %{"cavalry" => 1}, now)
+      {:ok, ^id} = Pg.cheat(id, {:city, city_id}, "instantMarch", %{on: true}, now)
+      {:ok, player, _, _} = Pg.state(id, now)
+      assert player.instantMarch
+      assert {:ok, arrives} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 100}, now)
+      assert arrives == now + 1000
+    end
+  end
+
   test "state for an unknown player" do
     assert {:error, :not_found} = Pg.state(Ecto.UUID.generate(), 0)
     assert {:error, :not_found} = Pg.state("not-a-uuid", 0)
