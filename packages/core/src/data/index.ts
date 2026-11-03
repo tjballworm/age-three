@@ -42,3 +42,4 @@ export * from './research';
 export * from './troops';
 export * from './historic';
 export * from './npcs';
+export * from './titles';

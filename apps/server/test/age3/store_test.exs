@@ -251,12 +251,12 @@ defmodule Age3.Store.PgTest do
 
     {:ok, _, [city], [_]} = Pg.state(id, first)
     assert city.troops == %{"warrior" => 10}
-    # warriors eat 0.1 food an hour each
+    # warriors eat 0.001 food an hour each, rounded up: any army eats at least 1
     assert city.resources["food"]["perHour"] == 100 - 1
 
     {:ok, _, [city], []} = Pg.state(id, second)
     assert city.troops == %{"warrior" => 30}
-    assert city.resources["food"]["perHour"] == 100 - 3
+    assert city.resources["food"]["perHour"] == 100 - 1
   end
 
   test "people move back in over time" do
@@ -533,6 +533,10 @@ defmodule Age3.Store.PgTest do
                Age3.March.loot(Age3.Npc.full(1)["resources"], Age3.March.load(%{"cavalry" => survivors}, %{}))
 
       assert player.unreadReports == 1
+      # a full clear of a full NPC: whatever medals it dropped are the player's already
+      assert [%{medals: medals}] = Pg.reports(id)
+      assert player.medals == medals
+      assert Enum.all?(Map.keys(medals), &(&1 in ["cross", "rose"]))
       assert [%{status: "marching", exp: exp}] = city.heroes
       assert exp > 0
 
@@ -564,6 +568,8 @@ defmodule Age3.Store.PgTest do
       {:ok, %{result: r}} = Pg.report(id, newest.id)
       warriors = Enum.find(r["defender"]["troops"], &(&1["type"] == "warrior"))["initial"]
       assert warriors == min(50, div(50 * div(again.endsAt - arrives, 1000), 3600))
+      # not at full strength: no medals
+      assert newest.medals == %{}
     end
 
     test "a march finishes in one go even when its return is already due; recall turns it around" do
@@ -593,6 +599,51 @@ defmodule Age3.Store.PgTest do
       assert player.instantMarch
       assert {:ok, arrives} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 100}, now)
       assert arrives == now + 1000
+    end
+  end
+
+  describe "promotions" do
+    test "ranks need the Town Hall, titles the rank; both take gold and medals and give prestige" do
+      {id, city_id, now} = general("Climber")
+      # Lieutenant: Town Hall 2 (the general's is 3), 10,000 gold, no medals
+      assert :ok = Pg.promote(id, city_id, :rank, now)
+      assert {:error, "not_enough_medals"} = Pg.promote(id, city_id, :title, now)
+
+      {:ok, _} =
+        Pg.cheat(id, {:player, "Climber"}, "addMedals", %{medals: %{"cross" => 17, "rose" => 5}}, now)
+
+      # Captain needs Town Hall 4
+      assert {:error, "requirement_not_met"} = Pg.promote(id, city_id, :rank, now)
+      assert :ok = Pg.promote(id, city_id, :title, now)
+      {:ok, _} = Pg.cheat(id, {:city, city_id}, "setBuilding", %{slot: "townhall", type: nil, level: 4}, now)
+      assert :ok = Pg.promote(id, city_id, :rank, now)
+      {:ok, player, [city], _} = Pg.state(id, now)
+
+      assert %{title: "Knight", titleId: "knight", militaryRank: "Captain", cityCap: 2, prestige: 400} =
+               player
+
+      assert player.medals == %{"cross" => 2}
+      assert_in_delta city.resources["gold"]["amount"], 1_000_000 - 10_000 - 20_000 - 20_000, 1
+
+      # Baron needs Major
+      {:ok, _} = Pg.cheat(id, {:player, "Climber"}, "setTitle", %{changes: [title: "baronet"]}, now)
+
+      {:ok, _} =
+        Pg.cheat(id, {:player, "Climber"}, "addMedals", %{medals: %{"lion" => 10, "honor" => 5}}, now)
+
+      assert {:error, "rank_too_low"} = Pg.promote(id, city_id, :title, now)
+
+      {:ok, _} =
+        Pg.cheat(
+          id,
+          {:player, "Climber"},
+          "setTitle",
+          %{changes: [military_rank: "general", title: "prinzessin"]},
+          now
+        )
+
+      assert {:error, "max_level"} = Pg.promote(id, city_id, :title, now)
+      assert {:error, "bad_message"} = Pg.promote(id, Ecto.UUID.generate(), :rank, now)
     end
   end
 

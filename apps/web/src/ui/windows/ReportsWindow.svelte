@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { RESOURCE_TYPES, type BattleResult, type ReportSummary } from '@age3/core';
+  import { MEDALS, RESOURCE_TYPES, type BattleResult, type ReportSummary } from '@age3/core';
   import { game, goToCoord } from '$state/game.svelte';
   import { ask } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
+  import MedalBadge from '$ui/components/MedalBadge.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
   import { formatNumber } from '$ui/format';
   import BattleReport from './BattleReport.svelte';
@@ -58,6 +59,7 @@
       minute: '2-digit',
     });
   const lootTotal = (r: ReportSummary) => Object.values(r.loot).reduce((n, v) => n + (v ?? 0), 0);
+  const medalCount = (r: ReportSummary) => Object.values(r.medals ?? {}).reduce((n, v) => n + (v ?? 0), 0);
 </script>
 
 <div class="reports">
@@ -76,7 +78,8 @@
         <b>{r.title.replace(/^(Victory|Defeat) against /, '')}</b>
         <span class="meta">
           {when(r.foughtAt)}{#if lootTotal(r)}
-            · {formatNumber(lootTotal(r))} loot{/if}
+            · {formatNumber(lootTotal(r))} loot{/if}{#if medalCount(r)}
+            · {medalCount(r)} {medalCount(r) === 1 ? 'medal' : 'medals'}{/if}
         </span>
       </button>
     {:else}
@@ -112,6 +115,15 @@
           </span>
         {:else}
           <span>No loot</span>
+        {/if}
+        {#if medalCount(open)}
+          <span class="loot">
+            Medals
+            {#each MEDALS as m (m.id)}
+              {#if open.medals?.[m.id]}<MedalBadge id={m.id} size={16} />
+                <b>{m.name}{(open.medals[m.id] ?? 0) > 1 ? ` x${open.medals[m.id]}` : ''}</b>{/if}
+            {/each}
+          </span>
         {/if}
       </div>
       <BattleReport

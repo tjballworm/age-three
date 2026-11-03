@@ -12,6 +12,8 @@ defmodule Age3.Report do
     field :y, :integer
     field :won, :boolean
     field :loot, :map, default: %{}
+    # medals the battle dropped, e.g. %{"rose" => 1}
+    field :medals, :map, default: %{}
     field :hero, :map
     field :result, :map
     field :read, :boolean, default: false

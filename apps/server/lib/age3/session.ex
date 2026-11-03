@@ -92,6 +92,7 @@ defmodule Age3.Session do
               "setMayor",
               "march",
               "recall",
+              "promote",
               "getReports",
               "getReport",
               "cheat"
@@ -356,6 +357,20 @@ defmodule Age3.Session do
   defp handle("setTax", _payload, id, session),
     do: {error(id, "bad_message", "The tax rate must be a whole number from 0 to 100."), session}
 
+  # One step up the rank or title ladder: {cityId, ladder: "rank" | "title"}. The gold comes from that city.
+  defp handle("promote", %{"cityId" => city_id, "ladder" => ladder}, id, session)
+       when is_binary(city_id) and ladder in ["rank", "title"] do
+    now = session.now.()
+
+    case session.store.promote(session.player_id, city_id, String.to_existing_atom(ladder), now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("promote", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid promotion."), session}
+
   # A testing command (see Age3.Cheats): {action, cityId} for one of your cities, or {action, player} for every
   # city of any player by username, plus the action's fields. No permission check on purpose: every tester can
   # cheat, on any account. Replies with your own new state; another player's open game gets theirs pushed.
@@ -464,6 +479,8 @@ defmodule Age3.Session do
   defp message("hero_not_found"), do: "That hero isn't in those cities any more."
   defp message("bad_target"), do: "Only NPC cities can be attacked for now."
   defp message("already_returning"), do: "That march is already on its way back."
+  defp message("not_enough_medals"), do: "Not enough medals."
+  defp message("rank_too_low"), do: "Your rank is too low for that title."
   defp message(_code), do: "Not a valid request."
 
   defp welcome(id, player_id, token, session) do

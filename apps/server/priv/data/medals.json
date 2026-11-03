@@ -1,0 +1,41 @@
+{
+  "_source": "Drop rates: dominionofages.com/droptable (fetched 2026-11-03). npc = their barbarian camps, full clear of a full-strength camp; fields = valleys and flats won at half strength or more; historic = beat at least 5% of the army. Each medal is its own roll.",
+  "medals": [
+    {"id": "cross", "name": "Cross Medal", "loyalty": 5},
+    {"id": "rose", "name": "Rose Medal", "loyalty": 10},
+    {"id": "lion", "name": "Lion Medal", "loyalty": 15},
+    {"id": "honor", "name": "Honor Medal", "loyalty": 20},
+    {"id": "courage", "name": "Courage Medal", "loyalty": 25},
+    {"id": "wisdom", "name": "Wisdom Medal", "loyalty": 30},
+    {"id": "freedom", "name": "Freedom Medal", "loyalty": 40},
+    {"id": "justice", "name": "Justice Medal", "loyalty": 50},
+    {"id": "nation", "name": "Nation Medal", "loyalty": 60}
+  ],
+  "drops": {
+    "npc": [
+      {"cross": 0.225, "rose": 0.15},
+      {"cross": 0.275, "rose": 0.2, "lion": 0.125},
+      {"rose": 0.275, "lion": 0.2, "honor": 0.125},
+      {"lion": 0.275, "honor": 0.2, "courage": 0.125},
+      {"honor": 0.275, "courage": 0.2, "wisdom": 0.125},
+      {"honor": 0.325, "courage": 0.25, "wisdom": 0.175, "freedom": 0.1},
+      {"courage": 0.325, "wisdom": 0.25, "freedom": 0.175},
+      {"courage": 0.34, "wisdom": 0.275, "freedom": 0.21, "justice": 0.125},
+      {"courage": 0.36, "wisdom": 0.3, "freedom": 0.24, "justice": 0.175},
+      {"courage": 0.375, "wisdom": 0.325, "freedom": 0.275, "justice": 0.225, "nation": 0.175}
+    ],
+    "fields": [
+      {"cross": 0.115, "rose": 0.075},
+      {"cross": 0.14, "rose": 0.1, "lion": 0.065},
+      {"rose": 0.14, "lion": 0.1, "honor": 0.065},
+      {"lion": 0.14, "honor": 0.1, "courage": 0.065},
+      {"honor": 0.14, "courage": 0.1, "wisdom": 0.065},
+      {"honor": 0.165, "courage": 0.125, "wisdom": 0.09, "freedom": 0.05},
+      {"courage": 0.165, "wisdom": 0.125, "freedom": 0.09},
+      {"courage": 0.17, "wisdom": 0.14, "freedom": 0.105},
+      {"courage": 0.18, "wisdom": 0.15, "freedom": 0.12},
+      {"courage": 0.19, "wisdom": 0.165, "freedom": 0.14}
+    ],
+    "historic": {"justice": 0.4, "nation": 0.3}
+  }
+}
