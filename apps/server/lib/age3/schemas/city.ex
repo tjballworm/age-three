@@ -11,7 +11,11 @@ defmodule Age3.City do
     field :x, :integer
     field :y, :integer
     field :level, :integer, default: 1
+    # loyalty and the population are part of the snapshot taken at synced_at (Age3.Economy.settle_city)
     field :loyalty, :integer, default: 100
+    field :grievance, :integer, default: 0
+    # the last Disaster Relief or Praying (Age3.Loyalty, 15 minute cooldown)
+    field :comfort_at, :utc_datetime_usec
     field :tax_rate, :integer, default: 10
     field :resources, :map
     field :population, :map

@@ -31,6 +31,11 @@ defmodule Age3.FakeStore do
   def promote(_player_id, "c1", _ladder, _now_ms), do: :ok
   def promote(_player_id, _city_id, _ladder, _now_ms), do: {:error, "not_enough_medals"}
 
+  # city "c1" can always comfort; anything else is still cooling down
+  @impl true
+  def comfort(_player_id, "c1", kind, _now_ms) when kind in ["relief", "pray"], do: :ok
+  def comfort(_player_id, _city_id, _kind, _now_ms), do: {:error, "comfort_cooldown"}
+
   @impl true
   def set_tax(_player_id, "c1", _tax_rate, _now_ms), do: :ok
   def set_tax(_player_id, _city_id, _tax_rate, _now_ms), do: {:error, "bad_message"}

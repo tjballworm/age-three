@@ -90,6 +90,13 @@ defmodule Age3.Store do
             ) ::
               :ok | {:error, code :: String.t()}
 
+  @doc """
+  Comforts a city's people (Age3.Loyalty): kind "relief" (Disaster Relief, food) or "pray" (Praying, gold), once
+  every 15 minutes per city. Pays the population limit in that resource and raises loyalty / lowers grievance.
+  """
+  @callback comfort(player_id :: String.t(), city_id :: String.t(), kind :: String.t(), now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
   @doc "Sets a city's tax rate (0-100). Gold from taxes changes from now on."
   @callback set_tax(player_id :: String.t(), city_id :: String.t(), tax_rate :: integer, now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
@@ -184,6 +191,7 @@ defmodule Age3.Store.Pg do
     Game,
     Hero,
     Heroes,
+    Loyalty,
     March,
     Npc,
     NpcState,
@@ -312,7 +320,7 @@ defmodule Age3.Store.Pg do
         do: Repo.rollback("queue_busy")
 
       buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
-      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+      resources = settled(city, now_ms).resources
 
       case Build.check(buildings, resources, slot, type, research_of(player_id)) do
         {:ok, plan} ->
@@ -379,7 +387,7 @@ defmodule Age3.Store.Pg do
          do: Repo.rollback("already_researching")
 
       buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
-      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+      resources = settled(city, now_ms).resources
 
       case Research.check(buildings, research, resources, tech) do
         {:ok, plan} ->
@@ -426,9 +434,7 @@ defmodule Age3.Store.Pg do
       # level it has now
       queue = training_queue(city.id, slot)
       buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
-      since_ms = to_ms(city.synced_at)
-      resources = Economy.settle(city.resources, since_ms, now_ms)
-      idle = Economy.settle_population(city.population, city.tax_rate, since_ms, now_ms)["idle"]
+      %{resources: resources, population: %{"idle" => idle}} = settled(city, now_ms)
 
       case Train.check(buildings, research_of(player_id), resources, idle, slot, troop, count, length(queue)) do
         {:ok, plan} ->
@@ -471,7 +477,7 @@ defmodule Age3.Store.Pg do
       # a task that has already finished can't be cancelled, and finishing one changes the city, so read it again
       city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
       task = find_task(city.id, task_id, [kind]) || Repo.rollback("bad_message")
-      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+      resources = settled(city, now_ms).resources
       save_resources(city, Build.spend(resources, task.cost, -1), now_ms, -people(task))
       Repo.delete!(task)
       # the batches waiting behind a cancelled one move up
@@ -509,6 +515,42 @@ defmodule Age3.Store.Pg do
   end
 
   @impl true
+  def comfort(player_id, city_id, kind, now_ms) do
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
+      %{resources: resources, population: pop, loyalty: loyalty} = settled(city, now_ms)
+      comfort_at = city.comfort_at && to_ms(city.comfort_at)
+      limit = pop["max"]
+
+      case Loyalty.check_comfort(
+             kind,
+             comfort_at,
+             now_ms,
+             limit,
+             get_in(resources, [kind_resource(kind), "amount"]) || 0
+           ) do
+        {:ok, c} ->
+          {loyalty, grievance} = Loyalty.apply_change(loyalty, city.grievance, c.loyalty, c.grievance)
+          save_resources(city, Build.spend(resources, %{c.resource => c.cost}), now_ms)
+
+          Repo.update_all(from(x in City, where: x.id == ^city.id),
+            set: [loyalty: loyalty, grievance: grievance, comfort_at: now]
+          )
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> ok()
+  end
+
+  defp kind_resource("relief"), do: "food"
+  defp kind_resource(_kind), do: "gold"
+
+  @impl true
   def set_tax(player_id, city_id, tax_rate, now_ms) do
     now = to_datetime(now_ms)
 
@@ -536,7 +578,7 @@ defmodule Age3.Store.Pg do
       buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
       heroes = Repo.all(from h in Hero, where: h.city_id == ^city.id)
       {inn, _changed} = Heroes.current_inn(city.inn, Heroes.offer_count(buildings), now_ms)
-      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+      resources = settled(city, now_ms).resources
 
       case Heroes.check_hire(buildings, heroes, inn, offer_id, resources["gold"]["amount"]) do
         {:ok, offer} ->
@@ -654,7 +696,7 @@ defmodule Age3.Store.Pg do
       player = Repo.get!(Player, player_id)
       research = Research.in_city(player.research, buildings)
       hero = find_hero(city.id, hero_id)
-      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+      resources = settled(city, now_ms).resources
       food = resources["food"]["amount"]
 
       case March.check(buildings, research, city.troops, hero, {city.x, city.y}, {x, y}, food, troops) do
@@ -776,7 +818,7 @@ defmodule Age3.Store.Pg do
       town_hall =
         Repo.one(from b in Building, where: b.city_id == ^city.id and b.slot == "townhall", select: b.level)
 
-      resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+      resources = settled(city, now_ms).resources
 
       case Titles.check(ladder, player, resources["gold"]["amount"], town_hall || 0) do
         {:ok, step} ->
@@ -884,12 +926,12 @@ defmodule Age3.Store.Pg do
 
   # One city's cheat, inside the transaction holding its lock. {:error, code} undoes the whole cheat.
   defp cheat_city(city, "addResources", %{amounts: amounts}, now_ms) do
-    resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+    resources = settled(city, now_ms).resources
     save_resources(city, Cheats.add_resources(resources, amounts), now_ms)
   end
 
   defp cheat_city(city, "fillResources", _args, now_ms) do
-    resources = Economy.settle(city.resources, to_ms(city.synced_at), now_ms)
+    resources = settled(city, now_ms).resources
     save_resources(city, Cheats.fill_resources(resources), now_ms)
   end
 
@@ -904,9 +946,7 @@ defmodule Age3.Store.Pg do
 
   # the population can't go above the limit (it would be cut back at the next change); cottages raise the limit
   defp cheat_city(city, "setPopulation", %{amount: amount}, now_ms) do
-    since_ms = to_ms(city.synced_at)
-    resources = Economy.settle(city.resources, since_ms, now_ms)
-    pop = Economy.settle_population(city.population, city.tax_rate, since_ms, now_ms)
+    %{resources: resources, population: pop} = settled(city, now_ms)
     save_resources(city, resources, now_ms, pop["current"] - min(amount, pop["max"]))
   end
 
@@ -967,6 +1007,11 @@ defmodule Age3.Store.Pg do
     resnapshot(Repo.get!(City, city.id), to_datetime(now_ms))
   end
 
+  # settled to now first, so the new loyalty counts from now
+  defp cheat_city(city, "setLoyalty", %{changes: changes}, now_ms) do
+    resnapshot(city, to_datetime(now_ms), changes ++ [comfort_at: nil])
+  end
+
   defp cheat_city(city, "resetCity", _args, now_ms) do
     Repo.delete_all(from t in Task, where: t.city_id == ^city.id)
     Repo.delete_all(from h in Hero, where: h.city_id == ^city.id)
@@ -985,6 +1030,9 @@ defmodule Age3.Store.Pg do
     Repo.update_all(from(c in City, where: c.id == ^city.id),
       set: [
         tax_rate: 10,
+        loyalty: 100,
+        grievance: 0,
+        comfort_at: nil,
         troops: %{},
         inn: %{},
         resources: Game.starter_resources(),
@@ -1295,40 +1343,47 @@ defmodule Age3.Store.Pg do
     %{"name" => hero.name, "exp" => exp, "level" => up.level, "levelsGained" => up.level - hero.level}
   end
 
-  # Inside a transaction holding the city's lock. Settles the resources up to `at` at the rates the city had
-  # (city is the row as it was before the change), and the population too, then saves them with the rates, caps
-  # and population limit its buildings, troops and tax rate give now. `changes` are other City fields to save
+  # Inside a transaction holding the city's lock. Settles the resources, population and loyalty up to `at` at the
+  # rates the city had (city is the row as it was before the change), then saves them with the rates, caps and
+  # population limit its buildings, troops, tax rate and people give now. `changes` are other City fields to save
   # with it, e.g. tax_rate: 20.
   defp resnapshot(city, at, changes \\ []) do
     # never move the snapshot back in time
     synced_at = Enum.max([city.synced_at, at], DateTime)
-    {since_ms, at_ms} = {to_ms(city.synced_at), to_ms(synced_at)}
-    resources = Economy.settle(city.resources, since_ms, at_ms)
-    population = Economy.settle_population(city.population, city.tax_rate, since_ms, at_ms)
+    %{resources: resources, population: population, loyalty: loyalty} = settled(city, to_ms(synced_at))
     tax_rate = Keyword.get(changes, :tax_rate, city.tax_rate)
     buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
     # read again: a training batch that just finished changed them
     troops = Repo.one!(from c in City, where: c.id == ^city.id, select: c.troops)
     max = Economy.max_population(buildings)
     current = min(population["current"], max)
+    people = %{"current" => current, "max" => max, "idle" => current}
 
     Repo.update_all(from(c in City, where: c.id == ^city.id),
       set:
-        [
-          resources:
-            Economy.recalc(
-              resources,
-              buildings,
-              tax_rate,
-              research_of(city.player_id),
-              troops,
-              salary_of(city.id)
-            ),
-          population: %{"current" => current, "max" => max, "idle" => current},
-          synced_at: synced_at
-        ] ++ changes
+        Keyword.merge(
+          [
+            resources:
+              Economy.recalc(
+                resources,
+                buildings,
+                tax_rate,
+                research_of(city.player_id),
+                troops,
+                salary_of(city.id),
+                people
+              ),
+            population: people,
+            loyalty: loyalty,
+            synced_at: synced_at
+          ],
+          changes
+        )
     )
   end
+
+  # The city as it stands at at_ms (%{resources, population, loyalty}), worked out from its snapshot.
+  defp settled(city, at_ms), do: Economy.settle_city(city, to_ms(city.synced_at), at_ms)
 
   # A city saved before its rates came from buildings (or before the data file changed, or before a research
   # finished in another city) still has the old rates, caps or population limit. Gives it the right ones from now
@@ -1343,7 +1398,8 @@ defmodule Age3.Store.Pg do
         city.tax_rate,
         research_of(city.player_id),
         city.troops,
-        salary_of(city.id)
+        salary_of(city.id),
+        city.population
       ) != city.resources or
         Economy.max_population(city.buildings) != city.population["max"]
 
@@ -1365,17 +1421,20 @@ defmodule Age3.Store.Pg do
     end
   end
 
-  # A new snapshot: the settled amounts as of now, which is where Economy.settle starts next time. The population
-  # shares the snapshot's time, so it is settled to now too, less the `people` that just went into training
-  # (negative to give them back).
+  # A new snapshot: the settled amounts as of now, which is where Economy.settle_city starts next time. The
+  # population and loyalty share the snapshot's time, so they are settled to now too, less the `people` that just
+  # went into training (negative to give them back). Fewer people pay less tax, so the gold rate follows them.
   defp save_resources(city, resources, now_ms, people \\ 0) do
-    population =
-      city.population
-      |> Economy.settle_population(city.tax_rate, to_ms(city.synced_at), now_ms)
-      |> Economy.take_population(people)
+    %{population: settled_pop, loyalty: loyalty} = settled(city, now_ms)
+    population = Economy.take_population(settled_pop, people)
+
+    resources =
+      update_in(resources, ["gold", "perHour"], fn rate ->
+        rate - Loyalty.tax_gold(settled_pop, city.tax_rate) + Loyalty.tax_gold(population, city.tax_rate)
+      end)
 
     Repo.update_all(from(c in City, where: c.id == ^city.id),
-      set: [resources: resources, population: population, synced_at: to_datetime(now_ms)]
+      set: [resources: resources, population: population, loyalty: loyalty, synced_at: to_datetime(now_ms)]
     )
   end
 
@@ -1409,7 +1468,7 @@ defmodule Age3.Store.Pg do
   # Resources are settled to now_ms on the way out; the stored snapshot only changes when something spends.
   # Town buildings and outskirts fields share the buildings table; fields have slots "f0".."f12".
   defp city_json(c, tasks, now_ms) do
-    since_ms = to_ms(c.synced_at)
+    now = settled(c, now_ms)
     busy = for t <- tasks, t.city_id == c.id and t.kind == "build", into: MapSet.new(), do: t.slot
     {fields, town} = Enum.split_with(c.buildings, &String.starts_with?(&1.slot, "f"))
 
@@ -1419,10 +1478,12 @@ defmodule Age3.Store.Pg do
       x: c.x,
       y: c.y,
       level: c.level,
-      resources: Economy.settle(c.resources, since_ms, now_ms),
-      population: Economy.settle_population(c.population, c.tax_rate, since_ms, now_ms),
-      loyalty: c.loyalty,
+      resources: now.resources,
+      population: now.population,
+      loyalty: now.loyalty,
+      grievance: c.grievance,
       taxRate: c.tax_rate,
+      comfortAt: c.comfort_at && to_ms(c.comfort_at),
       buildings: Enum.map(town, &building_json(&1, busy)),
       fields: Enum.map(fields, &building_json(&1, busy)),
       troops: c.troops,
