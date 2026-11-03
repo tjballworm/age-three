@@ -13,7 +13,7 @@ describe('marches', () => {
   });
 
   it('food for the round trip and load with Logistics', () => {
-    expect(marchFood({ warrior: 100 }, 3600)).toBe(20);
+    expect(marchFood({ warrior: 100_000 }, 3600)).toBe(200);
     expect(marchLoad({ warrior: 100 }, {})).toBe(2000);
     expect(marchLoad({ warrior: 100 }, { logistics: 5 })).toBe(3000);
   });

@@ -251,12 +251,12 @@ defmodule Age3.Store.PgTest do
 
     {:ok, _, [city], [_]} = Pg.state(id, first)
     assert city.troops == %{"warrior" => 10}
-    # warriors eat 0.1 food an hour each
+    # warriors eat 0.001 food an hour each, rounded up: any army eats at least 1
     assert city.resources["food"]["perHour"] == 100 - 1
 
     {:ok, _, [city], []} = Pg.state(id, second)
     assert city.troops == %{"warrior" => 30}
-    assert city.resources["food"]["perHour"] == 100 - 3
+    assert city.resources["food"]["perHour"] == 100 - 1
   end
 
   test "people move back in over time" do

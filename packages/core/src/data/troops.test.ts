@@ -34,11 +34,12 @@ describe('troop data', () => {
 
   it('adds up what the troops eat', () => {
     expect(upkeep(undefined)).toBe(0);
-    expect(upkeep({ warrior: 100, catapult: 2 })).toBe(35);
-    // tenths round up to whole food
+    expect(upkeep({ warrior: 100_000, catapult: 2_000 })).toBe(350);
+    // thousandths round up to whole food: any army eats at least 1
     expect(upkeep({ warrior: 1 })).toBe(1);
-    expect(upkeep({ warrior: 15 })).toBe(2);
-    expect(upkeep({ warrior: 3, scout: 3, pike: 3 })).toBe(2);
+    expect(upkeep({ warrior: 1000 })).toBe(1);
+    expect(upkeep({ warrior: 1001 })).toBe(2);
+    expect(upkeep({ warrior: 300, scout: 300, pike: 300 })).toBe(2);
   });
 
   it("matches the game server's copy (run npm run sync-data after editing)", () => {
