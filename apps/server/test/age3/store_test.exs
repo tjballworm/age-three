@@ -441,6 +441,40 @@ defmodule Age3.Store.PgTest do
       assert [%{level: level, leadership: level, points: 1}] = city.heroes
       assert level == o.level + 1
     end
+
+    test "the setHero cheat sets one hero's level and stats" do
+      {id, city_id, now} = innkeeper("Statter")
+      {:ok, _, [city], _} = Pg.state(id, now)
+      [o | _] = city.inn.offers
+      :ok = Pg.hire(id, city_id, o.id, now)
+      {:ok, _, [%{heroes: [hero]}], _} = Pg.state(id, now)
+
+      {:ok, args} =
+        Age3.Cheats.parse("setHero", %{
+          "heroId" => hero.id,
+          "level" => 80,
+          "attack" => 500,
+          "points" => 3,
+          "stars" => 9
+        })
+
+      assert {:ok, ^id} = Pg.cheat(id, {:city, city_id}, "setHero", args, now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+
+      assert [%{level: 80, leadership: 80, attack: 500, points: 3, exp: 0, stars: 9} = h] = city.heroes
+      assert h.politics == hero.politics and h.intelligence == hero.intelligence
+      assert h.salary == Age3.Heroes.salary(80)
+
+      # someone else's hero, or one that's gone
+      {other, other_city, _} = general("Bystander")
+      assert {:error, "hero_not_found"} = Pg.cheat(other, {:city, other_city}, "setHero", args, now)
+
+      gone = %{args | hero_id: Ecto.UUID.generate()}
+      assert {:error, "hero_not_found"} = Pg.cheat(id, {:city, city_id}, "setHero", gone, now)
+      # by username it reaches the hero too
+      {:ok, args} = Age3.Cheats.parse("setHero", %{"heroId" => hero.id, "intelligence" => 9999})
+      assert {:ok, ^id} = Pg.cheat(other, {:player, "Statter"}, "setHero", args, now)
+    end
   end
 
   describe "marches" do

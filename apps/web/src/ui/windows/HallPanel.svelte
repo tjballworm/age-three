@@ -57,7 +57,10 @@
         <div class="face">{hero.name[0]}</div>
         <div class="who">
           <b>{hero.name}</b>
-          <span>Level <em>{hero.level}</em> · Leadership <em>{hero.leadership}</em></span>
+          <span
+            >Level <em>{hero.level}</em> · Leadership <em>{hero.leadership}</em>{#if hero.stars > 0}
+              · <em>★ {hero.stars}</em>{/if}</span
+          >
           <div class="exp" title="{formatNumber(hero.exp)} / {formatNumber(hero.expToNext)} exp">
             <div style:width="{Math.min(100, (hero.exp / Math.max(1, hero.expToNext)) * 100)}%"></div>
           </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import {
     BUILDINGS,
     FIELD_SLOTS,
@@ -114,6 +115,43 @@
       { action: 'setBuilding', slot: toSlot(slot), type, level },
       level === 0 ? `${name} removed` : `${name} set to Lv ${level}`,
     );
+  }
+
+  // One hero's level and stats. The list is the city on screen's heroes, so it only works with no player typed.
+  const MAX_HERO_LEVEL = 100;
+  const MAX_HERO_STAT = 9_999;
+  const MAX_STARS = 15;
+  const HERO_FIELDS = [
+    { key: 'level', label: 'Level', min: 1, max: MAX_HERO_LEVEL },
+    { key: 'attack', label: 'Attack', min: 0, max: MAX_HERO_STAT },
+    { key: 'intelligence', label: 'Intelligence', min: 0, max: MAX_HERO_STAT },
+    { key: 'politics', label: 'Politics', min: 0, max: MAX_HERO_STAT },
+    { key: 'stars', label: 'Stars', min: 0, max: MAX_STARS },
+    { key: 'points', label: 'Unspent points', min: 0, max: MAX_HERO_STAT },
+  ] as const;
+  type HeroField = (typeof HERO_FIELDS)[number]['key'];
+
+  const heroes = $derived(city.heroes ?? []);
+  let heroId = $state('');
+  const hero = $derived(heroes.find((h) => h.id === heroId) ?? heroes[0]);
+  let heroEdit = $state<Partial<Record<HeroField, number>>>({});
+  // a different hero, or new numbers from the server, fills the boxes again (other state updates leave them be)
+  const heroKey = $derived(hero ? [hero.id, ...HERO_FIELDS.map((f) => hero[f.key])].join() : '');
+  $effect(() => {
+    void heroKey;
+    heroEdit = untrack(() => (hero ? Object.fromEntries(HERO_FIELDS.map((f) => [f.key, hero[f.key]])) : {}));
+  });
+
+  function setHero() {
+    if (!hero) return;
+    // only what changed, so a level left alone keeps its exp
+    const changes = Object.fromEntries(
+      HERO_FIELDS.map((f) => [f.key, clampLevel(heroEdit[f.key] ?? hero[f.key], f.max, f.min)]).filter(
+        ([key, n]) => n !== hero[key as HeroField],
+      ),
+    );
+    if (Object.keys(changes).length === 0) return;
+    cheat({ action: 'setHero', heroId: hero.id, ...changes }, `${hero.name}'s stats set`);
   }
 
   let allLevel = $state(10);
@@ -269,7 +307,7 @@
     </section>
 
     <section>
-      <h3>Heroes <span class="note">exp for every hero in this city</span></h3>
+      <h3>Heroes <span class="note">exp for every hero in this city, or set one hero's stats</span></h3>
       <div class="row">
         {#each [1_000, 10_000, 100_000, 1_000_000] as exp (exp)}
           <Button
@@ -281,6 +319,36 @@
           >
         {/each}
       </div>
+      {#if player.trim()}
+        <p class="note">Clear the player box to set one hero's stats (the list is this city's heroes).</p>
+      {:else if heroes.length === 0}
+        <p class="note">No heroes in this city to set stats for. Hire one at the Inn.</p>
+      {:else}
+        <div class="row">
+          <select value={hero?.id} onchange={(e) => (heroId = e.currentTarget.value)} aria-label="Hero">
+            {#each heroes as h (h.id)}<option value={h.id}>{h.name} (Lv {h.level})</option>{/each}
+          </select>
+          {#each HERO_FIELDS as f (f.key)}
+            <label class="stat">
+              <span>{f.label}</span>
+              <input
+                class="lv"
+                type="number"
+                min={f.min}
+                max={f.max}
+                step="1"
+                aria-label="{hero?.name} {f.label}"
+                bind:value={heroEdit[f.key]}
+              />
+            </label>
+          {/each}
+          <Button disabled={!game.fromServer || sending} onclick={setHero}>Set</Button>
+        </div>
+        <p class="note">
+          Level 1-{MAX_HERO_LEVEL} (Leadership follows it, and so does the salary), stats 0-{MAX_HERO_STAT.toLocaleString()},
+          stars 0-{MAX_STARS} (they boost troop life and Leadership in battle). A new level starts at 0 exp.
+        </p>
+      {/if}
     </section>
 
     <section>
@@ -480,6 +548,12 @@
   }
   input.lv {
     width: 56px;
+  }
+  .stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 700;
   }
   .note {
     margin: 0;

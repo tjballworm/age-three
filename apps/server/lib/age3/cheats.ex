@@ -12,6 +12,18 @@ defmodule Age3.Cheats do
   @resources ~w(gold food lumber stone iron)
   # the most a single cheat can add or take away of one resource or troop, so a typo can't overflow anything
   @max_amount 1_000_000_000_000
+  # (tunable) the highest a hero stat or unspent points can be set to
+  @max_hero_stat 9_999
+  # gear stars: the battle multipliers stop growing at 15 (Combat.Units.star_multipliers)
+  @max_stars 15
+  @hero_fields [
+    {"level", :level},
+    {"points", :points},
+    {"politics", :politics},
+    {"attack", :attack},
+    {"intelligence", :intelligence},
+    {"stars", :stars}
+  ]
 
   @doc "Whether cheat messages are accepted. Always true for now (see the note at the top)."
   def enabled?, do: true
@@ -29,6 +41,10 @@ defmodule Age3.Cheats do
     * "levelAll" {level}: every building and field in the city at that level
     * "setResearch" {tech, level} / "researchAll" {level}: research levels for the player (0 forgets them)
     * "heroExp" {amount}: exp for every hero in the city (they level up as it covers)
+    * "setHero" {heroId, level?, points?, politics?, attack?, intelligence?, stars?}: one hero's level, stats and
+      gear stars (0-15), set
+      straight (only the fields sent change; a new level starts with 0 exp). The hero has to be in the target's
+      cities.
     * "resetCity": back to a new city (Town Hall and walls Lv1, starting resources, no troops, heroes or tasks)
   """
   def parse("addResources", %{"amounts" => %{} = amounts}) do
@@ -58,6 +74,19 @@ defmodule Age3.Cheats do
 
   def parse("heroExp", %{"amount" => n}) when is_integer(n) and n > 0 and n <= @max_amount,
     do: {:ok, %{amount: n}}
+
+  def parse("setHero", %{"heroId" => hero_id} = p) when is_binary(hero_id) do
+    changes =
+      for {key, field} <- @hero_fields, Map.has_key?(p, key), do: {field, p[key]}
+
+    cond do
+      changes == [] -> bad()
+      not Enum.all?(changes, fn {field, v} -> hero_value?(field, v) end) -> bad()
+      # a new level starts from 0 exp, so the old exp can't be more than the new level needs
+      Keyword.has_key?(changes, :level) -> {:ok, %{hero_id: hero_id, changes: [{:exp, 0} | changes]}}
+      true -> {:ok, %{hero_id: hero_id, changes: changes}}
+    end
+  end
 
   def parse("levelAll", %{"level" => level}) when is_integer(level) do
     if level in 1..Data.max_level(), do: {:ok, %{level: level}}, else: bad()
@@ -136,6 +165,10 @@ defmodule Age3.Cheats do
   defp taken?(buildings, slot, type) do
     not Data.building(type)["multiple"] and Enum.any?(buildings, &(&1.type == type and &1.slot != slot))
   end
+
+  defp hero_value?(:level, v), do: is_integer(v) and v in 1..Age3.Heroes.max_level()
+  defp hero_value?(:stars, v), do: is_integer(v) and v in 0..@max_stars
+  defp hero_value?(_stat, v), do: is_integer(v) and v in 0..@max_hero_stat
 
   defp amount?(v), do: is_integer(v) and abs(v) <= @max_amount
 

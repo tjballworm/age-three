@@ -13,6 +13,8 @@ defmodule Age3.Hero do
     field :politics, :integer
     field :attack, :integer
     field :intelligence, :integer
+    # gear stars, 0-15 (battle multipliers in Age3.Combat.Units.star_multipliers)
+    field :stars, :integer, default: 0
     field :status, :string, default: "idle"
     timestamps(type: :utc_datetime_usec, updated_at: false)
   end

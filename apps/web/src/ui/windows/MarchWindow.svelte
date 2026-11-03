@@ -156,7 +156,11 @@
               <span class="face">{h.name[0]}</span>
               <span class="who">
                 <b>{h.name}</b>
-                <span>Lv {h.level} · ATK {h.attack} · INT {h.intelligence}</span>
+                <span
+                  >Lv {h.level} · ATK {h.attack} · INT {h.intelligence}{h.stars > 0
+                    ? ` · ★ ${h.stars}`
+                    : ''}</span
+                >
               </span>
             </button>
           {:else}

@@ -213,6 +213,7 @@ function sampleHero(
     exp: level * 37,
     expToNext: 100 * level * level,
     points: 0,
+    stars: 0,
     politics,
     attack,
     intelligence,
