@@ -49,6 +49,8 @@ export const game = $state({
   buildSlot: null as BuildSlot | null,
   /** World-map tile whose window is open. */
   selectedTile: null as WorldTile | null,
+  /** NPC tile the March window is sending an attack to. */
+  marchTarget: null as WorldTile | null,
   /** Game server connection. While not online the game shows sample data. */
   connection: 'offline' as ConnectionStatus,
   /** True once the player and cities came from the server rather than sample data. */
@@ -66,6 +68,7 @@ export function applyServerState(s: GameState) {
   game.cities = s.cities;
   game.queue = s.tasks;
   game.syncedAt = s.serverTime;
+  game.badges.reports = s.player.unreadReports ?? 0;
   if (!s.cities.some((c) => c.id === game.cityId)) game.cityId = s.cities[0]?.id ?? '';
   if (!game.fromServer) {
     const home = s.cities[0];
@@ -109,7 +112,14 @@ export function selectTile(tile: WorldTile | null) {
   if (tile) {
     game.openWindow = null;
     game.buildSlot = null;
+    game.marchTarget = null;
   }
+}
+
+/** Opens the March window to attack this tile (closing the tile's window), or closes it with null. */
+export function openMarch(tile: WorldTile | null) {
+  game.marchTarget = tile;
+  if (tile) game.selectedTile = null;
 }
 
 export function goToCoord(x: number, y: number) {

@@ -2,7 +2,7 @@
   import { FREE_SPEEDUP_MS, progress, remaining, type TaskKind, type TimedTask } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { game } from '$state/game.svelte';
-  import { speedUp } from '$state/sync';
+  import { command, speedUp } from '$state/sync';
   import Icon, { type IconName } from '$ui/components/Icon.svelte';
   import ProgressBar from '$ui/components/ProgressBar.svelte';
   import Tabs from '$ui/components/Tabs.svelte';
@@ -31,6 +31,13 @@
     game.fromServer &&
     (t.kind === 'build' || t.kind === 'research' || (t.kind === 'train' && t.startedAt <= clock.now)) &&
     remaining(t, clock.now) <= FREE_SPEEDUP_MS;
+
+  /** A march still on its way can be called back; it takes as long to come home as it has been out. */
+  const canRecall = (t: TimedTask) => game.fromServer && t.kind === 'march' && t.march?.phase === 'out';
+  const recall = (t: TimedTask) =>
+    command({ type: 'recall', payload: { cityId: t.cityId, taskId: t.id } }).catch((e) =>
+      console.warn('Recall failed:', e),
+    );
 
   let filter = $state<Filter>('all');
   let collapsed = $state(false);
@@ -65,6 +72,9 @@
           <span class="ic"><Icon name={ICON[task.kind]} size={14} stroke={2.2} /></span>
           <span class="label">{task.label}</span>
           <span class="time">{formatDuration(remaining(task, clock.now))}</span>
+          {#if canRecall(task)}
+            <button class="speedup" type="button" onclick={() => recall(task)}>Recall</button>
+          {/if}
           {#if canSpeedUp(task)}
             <button
               class="speedup"

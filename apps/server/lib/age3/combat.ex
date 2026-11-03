@@ -171,6 +171,46 @@ defmodule Age3.Combat do
   # ---------- the battle ----------
 
   @doc """
+  A result from simulate/1 as the client's BattleResult (packages/core/src/combat/engine.ts): camelCase keys, ready
+  for Jason. Battle reports store this, and the calculator page's results view shows it.
+  """
+  def to_json(r) do
+    side = fn s ->
+      %{
+        "troops" => Enum.map(s.troops, fn t -> Map.new(t, fn {k, v} -> {to_string(k), v} end) end),
+        "totalInitial" => s.total_initial,
+        "totalLost" => s.total_lost,
+        "totalSurvived" => s.total_survived,
+        "totalHealed" => s.total_healed,
+        "stats" => s.stats
+      }
+    end
+
+    %{
+      "winner" => to_string(r.winner),
+      "rounds" => r.rounds,
+      "battlefield" => r.battlefield,
+      "attacker" => side.(r.attacker),
+      "defender" => side.(r.defender),
+      "fortifications" => r.fortifications,
+      "wall" => r.wall,
+      "log" =>
+        Enum.map(r.log, fn l ->
+          %{
+            "round" => l.round,
+            "attackerAlive" => l.attacker_alive,
+            "defenderAlive" => l.defender_alive,
+            "attackerLosses" => l.attacker_losses,
+            "defenderLosses" => l.defender_losses,
+            "wallLife" => l.wall_life,
+            "events" => l.events,
+            "blocks" => l.blocks
+          }
+        end)
+    }
+  end
+
+  @doc """
   Fights one battle. input is %{attacker: army, defender: army, fortifications: %{"trap" => n, ...},
   settings: settings} (see default_army/0 and default_settings/0). Returns the winner (:attacker or :defender),
   the rounds fought, both sides' troop outcomes, the fortifications used, the wall, and a log of every round.

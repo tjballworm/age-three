@@ -1,6 +1,16 @@
 // Client <-> server messages. Every message has a `type` discriminator.
 
-import type { BuildingType, City, Player, ResourceType, TechId, TimedTask, TroopType } from '@age3/core';
+import type {
+  BattleResult,
+  BuildingType,
+  City,
+  Player,
+  ReportSummary,
+  ResourceType,
+  TechId,
+  TimedTask,
+  TroopType,
+} from '@age3/core';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -62,6 +72,21 @@ export type HireMessage = Envelope<'hire', { cityId: string; offerId: string }>;
 export type DismissMessage = Envelope<'dismiss', { cityId: string; heroId: string }>;
 /** Make an idle hero the city's mayor (the old one goes back to idle), or `heroId: null` for none. Replies with state. */
 export type SetMayorMessage = Envelope<'setMayor', { cityId: string; heroId: string | null }>;
+/**
+ * Attack the NPC city at x, y with an idle hero and troops from the city. The troops, hero and the trip's food
+ * (marchFood) leave now; the battle is fought when the march arrives (a taskDone with `march.won`), then it comes
+ * home with the loot. Needs a Rally Spot (10,000 troops per level). Replies with state.
+ */
+export type MarchMessage = Envelope<
+  'march',
+  { cityId: string; x: number; y: number; heroId: string; troops: Partial<Record<TroopType, number>> }
+>;
+/** Turn a march around before it arrives; it takes as long to come home as it has been out. Replies with state. */
+export type RecallMessage = Envelope<'recall', { cityId: string; taskId: string }>;
+/** The latest battle reports, newest first. Replies with `reports`. */
+export type GetReportsMessage = Envelope<'getReports', Record<string, never>>;
+/** One report with the whole battle; marks it read. Replies with `report`. */
+export type GetReportMessage = Envelope<'getReport', { reportId: string }>;
 /** Sets a city's tax rate, a whole number from 0 to 100. Gold per hour changes from now on. Replies with state. */
 export type SetTaxMessage = Envelope<'setTax', { cityId: string; taxRate: number }>;
 
@@ -99,7 +124,9 @@ export type CheatAction =
   /** Exp for every hero in the city; they level up as far as it covers. */
   | { action: 'heroExp'; amount: number }
   /** Back to a new city: Town Hall and walls Lv1, starting resources, no troops, heroes or tasks. */
-  | { action: 'resetCity' };
+  | { action: 'resetCity' }
+  /** The player's marches take a second each way (on) or the normal time (off). */
+  | { action: 'instantMarch'; on: boolean };
 
 export type ClientMessage =
   | LoginMessage
@@ -117,6 +144,10 @@ export type ClientMessage =
   | HireMessage
   | DismissMessage
   | SetMayorMessage
+  | MarchMessage
+  | RecallMessage
+  | GetReportsMessage
+  | GetReportMessage
   | CheatMessage;
 
 // ---------- server -> client ----------
@@ -139,8 +170,17 @@ export type StateMessage = Envelope<'state', GameState>;
 /** Pushed (no id) when one of the player's tasks finishes, with the whole new state. */
 export type TaskDoneMessage = Envelope<'taskDone', GameState & { task: TimedTask }>;
 export type ErrorMessage = Envelope<'error', { code: ErrorCode; message: string }>;
+export type ReportsMessage = Envelope<'reports', { reports: ReportSummary[] }>;
+export type ReportMessage = Envelope<'report', { report: ReportSummary & { result: BattleResult } }>;
 
-export type ServerMessage = WelcomeMessage | PongMessage | StateMessage | TaskDoneMessage | ErrorMessage;
+export type ServerMessage =
+  | WelcomeMessage
+  | PongMessage
+  | StateMessage
+  | TaskDoneMessage
+  | ErrorMessage
+  | ReportsMessage
+  | ReportMessage;
 
 export type ErrorCode =
   | 'bad_message'
@@ -181,4 +221,18 @@ export type ErrorCode =
   /** the offer was hired already, or the Inn's offers changed since */
   | 'offer_gone'
   /** the hero isn't idle (mayor or marching) */
-  | 'hero_busy';
+  | 'hero_busy'
+  /** march from a city without a Rally Spot */
+  | 'no_rally_spot'
+  /** more troops than 10,000 per Rally Spot level */
+  | 'too_many_troops'
+  /** the city doesn't have the troops */
+  | 'not_enough_troops'
+  /** a march with no troops */
+  | 'no_troops'
+  /** a march with no hero, or one not in the city */
+  | 'no_hero'
+  /** only NPC cities can be attacked for now */
+  | 'bad_target'
+  /** recall on a march already coming home */
+  | 'already_returning';

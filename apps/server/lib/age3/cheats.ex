@@ -73,6 +73,8 @@ defmodule Age3.Cheats do
     if level in 0..Data.max_tech_level(), do: {:ok, %{level: level}}, else: bad()
   end
 
+  def parse("instantMarch", %{"on" => on}) when is_boolean(on), do: {:ok, %{on: on}}
+
   def parse(action, _payload) when action in ["fillResources", "finishAll", "resetCity"], do: {:ok, %{}}
   def parse(_action, _payload), do: bad()
 

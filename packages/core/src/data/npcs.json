@@ -1,0 +1,16 @@
+{
+  "garrisonRegenSeconds": 3600,
+  "resourceRegenSeconds": 28800,
+  "npcs": [
+    {"level": 1, "walls": 1, "research": 1, "troops": {"warrior": 50, "pike": 40, "sword": 35, "archer": 15, "cavalry": 8}, "fortifications": {"trap": 1000}, "resources": {"food": 100000, "lumber": 20000, "stone": 20000, "iron": 20000, "gold": 55000}},
+    {"level": 2, "walls": 2, "research": 2, "troops": {"warrior": 50, "pike": 45, "sword": 40, "archer": 30, "cavalry": 25}, "fortifications": {"trap": 1850, "abatis": 550}, "resources": {"food": 200000, "lumber": 30000, "stone": 30000, "iron": 30000, "gold": 65000}},
+    {"level": 3, "walls": 3, "research": 3, "troops": {"warrior": 200, "pike": 160, "sword": 65, "archer": 40, "cavalry": 60}, "fortifications": {"trap": 2000, "abatis": 1000, "tower": 650}, "resources": {"food": 900000, "lumber": 75000, "stone": 75000, "iron": 75000, "gold": 75000}},
+    {"level": 4, "walls": 4, "research": 4, "troops": {"warrior": 400, "pike": 400, "sword": 100, "archer": 100, "cavalry": 150}, "fortifications": {"trap": 4500, "abatis": 1875, "tower": 550}, "resources": {"food": 1600000, "lumber": 120000, "stone": 120000, "iron": 120000, "gold": 300000}},
+    {"level": 5, "walls": 5, "research": 5, "troops": {"warrior": 750, "pike": 1000, "sword": 350, "archer": 250, "cavalry": 200}, "fortifications": {"trap": 3750, "abatis": 1875, "tower": 1250, "log": 750}, "resources": {"food": 3000000, "lumber": 180000, "stone": 180000, "iron": 180000, "gold": 450000}},
+    {"level": 6, "walls": 6, "research": 6, "troops": {"warrior": 4000, "pike": 750, "sword": 550, "archer": 500, "cavalry": 450}, "fortifications": {"trap": 4250, "abatis": 1500, "tower": 1500, "log": 950, "trebuchet": 400}, "resources": {"food": 4000000, "lumber": 200000, "stone": 200000, "iron": 200000, "gold": 600000}},
+    {"level": 7, "walls": 7, "research": 7, "troops": {"warrior": 12000, "pike": 3000, "sword": 750, "archer": 800, "cavalry": 750}, "fortifications": {"trap": 5600, "abatis": 2800, "tower": 1850, "log": 1100, "trebuchet": 700}, "resources": {"food": 4500000, "lumber": 500000, "stone": 500000, "iron": 500000, "gold": 800000}},
+    {"level": 8, "walls": 8, "research": 8, "troops": {"warrior": 15000, "pike": 6750, "sword": 4000, "archer": 3000, "cavalry": 2000}, "fortifications": {"trap": 7200, "abatis": 3600, "tower": 2400, "log": 1440, "trebuchet": 900}, "resources": {"food": 8000000, "lumber": 800000, "stone": 800000, "iron": 800000, "gold": 1000000}},
+    {"level": 9, "walls": 9, "research": 9, "troops": {"warrior": 60000, "pike": 18000, "sword": 2000, "archer": 6750, "cavalry": 2500}, "fortifications": {"trap": 9000, "abatis": 4500, "tower": 3000, "log": 1800, "trebuchet": 1150}, "resources": {"food": 14000000, "lumber": 550000, "stone": 550000, "iron": 550000, "gold": 1200000}},
+    {"level": 10, "walls": 10, "research": 10, "troops": {"warrior": 400000}, "fortifications": {"trap": 11000, "abatis": 5500, "tower": 3666, "log": 2200, "trebuchet": 1375}, "resources": {"food": 19000000, "lumber": 600000, "stone": 600000, "iron": 600000, "gold": 1500000}}
+  ]
+}

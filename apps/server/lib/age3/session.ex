@@ -90,6 +90,10 @@ defmodule Age3.Session do
               "hire",
               "dismiss",
               "setMayor",
+              "march",
+              "recall",
+              "getReports",
+              "getReport",
               "cheat"
             ],
        do: {error(id, "not_logged_in", "Log in first."), session}
@@ -247,6 +251,64 @@ defmodule Age3.Session do
   defp handle("setMayor", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid mayor appointment."), session}
 
+  # Attack the NPC city at x, y: {cityId, x, y, heroId, troops: {warrior: 100, ...}}. The troops, hero and the
+  # trip's food leave now; the battle happens when the march arrives, and a report follows. Replies with the new
+  # state.
+  defp handle(
+         "march",
+         %{"cityId" => city_id, "x" => x, "y" => y, "heroId" => hero_id, "troops" => %{} = troops},
+         id,
+         session
+       )
+       when is_binary(city_id) and is_integer(x) and is_integer(y) and is_binary(hero_id) do
+    now = session.now.()
+
+    case session.store.march(session.player_id, city_id, x, y, hero_id, troops, now) do
+      {:ok, ends_at} ->
+        session.wake.(ends_at)
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("march", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid march."), session}
+
+  # Turn a march around before it arrives: {cityId, taskId}. It takes as long to come back as it has been out.
+  defp handle("recall", %{"cityId" => city_id, "taskId" => task_id}, id, session)
+       when is_binary(city_id) and is_binary(task_id) do
+    now = session.now.()
+
+    case session.store.recall(session.player_id, city_id, task_id, now) do
+      {:ok, ends_at} ->
+        session.wake.(ends_at)
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("recall", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid recall."), session}
+
+  # The latest battle reports, without the battles: replies "reports" {reports: [...]}.
+  defp handle("getReports", _payload, id, session),
+    do: {reply(id, "reports", %{reports: session.store.reports(session.player_id)}), session}
+
+  # One report with its whole battle: {reportId}. Marks it read. Replies "report" {report}.
+  defp handle("getReport", %{"reportId" => report_id}, id, session) when is_binary(report_id) do
+    case session.store.report(session.player_id, report_id) do
+      {:ok, report} -> {reply(id, "report", %{report: report}), session}
+      {:error, code} -> {error(id, code, "That report doesn't exist."), session}
+    end
+  end
+
+  defp handle("getReport", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid report request."), session}
+
   # Finish a build, research or the batch a Barracks is training for free when it has 5 minutes or less left:
   # {cityId, taskId}.
   defp handle("speedUp", %{"cityId" => city_id, "taskId" => task_id}, id, session)
@@ -381,6 +443,13 @@ defmodule Age3.Session do
   defp message("hall_full"), do: "The Feasting Hall is full. Upgrade it or dismiss a hero."
   defp message("offer_gone"), do: "That hero has left the Inn. Here are the new ones."
   defp message("hero_busy"), do: "That hero is busy."
+  defp message("no_rally_spot"), do: "Build a Rally Spot to send troops out."
+  defp message("too_many_troops"), do: "Too many troops. Each Rally Spot level sends 10,000."
+  defp message("not_enough_troops"), do: "Not enough troops in the city."
+  defp message("no_troops"), do: "Choose some troops to send."
+  defp message("no_hero"), do: "Choose a hero to lead the march."
+  defp message("bad_target"), do: "Only NPC cities can be attacked for now."
+  defp message("already_returning"), do: "That march is already on its way back."
   defp message(_code), do: "Not a valid request."
 
   defp welcome(id, player_id, token, session) do

@@ -73,4 +73,19 @@ defmodule Age3.FakeStore do
   @impl true
   def set_mayor(_player_id, _city_id, hero_id, _now_ms) when hero_id in ["h1", nil], do: :ok
   def set_mayor(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "bad_message"}
+
+  @impl true
+  def march(_player_id, "c1", 10, 20, "h1", %{"warrior" => 100}, now_ms), do: {:ok, now_ms + 60_000}
+  def march(_player_id, _city_id, _x, _y, _hero_id, _troops, _now_ms), do: {:error, "bad_target"}
+
+  @impl true
+  def recall(_player_id, "c1", "m1", now_ms), do: {:ok, now_ms + 30_000}
+  def recall(_player_id, _city_id, _task_id, _now_ms), do: {:error, "already_returning"}
+
+  @impl true
+  def reports(_player_id), do: [%{id: "r1", title: "Victory against Lv1 NPC (10,20)", won: true, read: false}]
+
+  @impl true
+  def report(_player_id, "r1"), do: {:ok, %{id: "r1", won: true, result: %{"winner" => "attacker"}}}
+  def report(_player_id, _report_id), do: {:error, "bad_message"}
 end

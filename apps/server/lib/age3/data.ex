@@ -1,6 +1,6 @@
 defmodule Age3.Data do
   # Building, research and troop costs, times and requirements. priv/data/buildings.json, research.json and
-  # troops.json are copies of the files in packages/core/src/data: npm run sync-data at the repo root keeps them
+  # troops.json (and npcs.json) are copies of the files in packages/core/src/data: npm run sync-data at the repo root keeps them
   # equal, and a web test fails if they differ. So the client shows exactly what the server charges.
   #
   # The files are read once at compile time and baked into this module; @external_resource makes mix recompile
@@ -18,6 +18,20 @@ defmodule Age3.Data do
   @troops_path Path.expand("../../priv/data/troops.json", __DIR__)
   @external_resource @troops_path
   @troops @troops_path |> File.read!() |> Jason.decode!()
+
+  @npcs_path Path.expand("../../priv/data/npcs.json", __DIR__)
+  @external_resource @npcs_path
+  @npcs @npcs_path |> File.read!() |> Jason.decode!()
+
+  @doc ~s(A full NPC city of this level: %{"troops", "forts", "resources"}, or nil.)
+  def npc(level) when is_integer(level) and level in 1..10 do
+    n = Enum.at(@npcs["npcs"], level - 1)
+    %{"troops" => n["troops"], "forts" => n["fortifications"], "resources" => n["resources"]}
+  end
+  def npc(_level), do: nil
+
+  @doc "Seconds an NPC takes to refill its garrison and fortifications, and its resources, from empty."
+  def npc_regen_seconds, do: {@npcs["garrisonRegenSeconds"], @npcs["resourceRegenSeconds"]}
 
   @doc "The highest level any building can reach."
   def max_level, do: @data["maxLevel"]

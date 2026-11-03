@@ -4,6 +4,7 @@ import { WORLD_SIZE } from '../data';
 import type { Coord } from '../types';
 
 export * from './timing';
+export * from './march';
 
 /** Shortest distance between two tiles on the wrapping world, in tiles. */
 export function distance(a: Coord, b: Coord): number {
