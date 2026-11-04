@@ -495,7 +495,14 @@ defmodule Age3.Session do
       {:ok, player, cities, tasks} ->
         %{
           type: "taskDone",
-          payload: %{task: task, player: player, cities: cities, tasks: tasks, serverTime: now}
+          payload: %{
+            task: task,
+            player: player,
+            cities: cities,
+            tasks: tasks,
+            lords: session.store.lords(session.player_id),
+            serverTime: now
+          }
         }
 
       {:error, _} ->

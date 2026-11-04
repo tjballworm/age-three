@@ -355,6 +355,11 @@ defmodule Age3.SessionTest do
              Session.task_done(session, %{id: "t1"})
   end
 
+  test "task_done includes the other players' cities so the map keeps them" do
+    session = Session.new(store: Age3.FakeStore, player_id: "p1", now: fn -> 7 end)
+    assert %{payload: %{lords: [%{id: "c9"}]}} = Session.task_done(session, %{id: "t1"})
+  end
+
   test "version mismatch" do
     assert [%{"payload" => %{"code" => "version_mismatch"}}] =
              run([login("secret123", Session.version() + 1)])
