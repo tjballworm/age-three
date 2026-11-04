@@ -15,12 +15,12 @@ defmodule Age3.Npc do
   @doc """
   The NPC as it stands at now_ms. saved is what was left after its last battle (%{level, troops, forts,
   resources, updated_at_ms}) or nil for one never attacked (full). Whole seconds since then count; amounts are
-  whole numbers.
+  whole numbers. Instead of a level it can take the full NPC itself (a lord's town, Age3.Lord.full/3).
   """
-  def current(nil, level, _now_ms), do: full(level)
+  def current(saved, level, now_ms) when is_integer(level), do: current(saved, full(level), now_ms)
+  def current(nil, full, _now_ms), do: full
 
-  def current(saved, level, now_ms) do
-    full = full(level)
+  def current(saved, full, now_ms) do
     secs = div(max(0, now_ms - saved.updated_at_ms), 1000)
     {garrison, resources} = Data.npc_regen_seconds()
 

@@ -30,12 +30,14 @@ defmodule Age3.Pvp do
 
   @doc """
   What a march to a tile attacks. city is the player city standing on it (or nil), tile World.tile_at's
-  %{kind, level}, player_id the attacker. {:city, city} | {:npc, level} | {:error, code}.
+  %{kind, level}, player_id the attacker. {:city, city} | {:npc, level} | {:lord, level} | {:error, code}.
   """
   def target(%{player_id: owner} = city, _tile, player_id),
     do: if(owner == player_id, do: {:error, "own_city"}, else: {:city, city})
 
   def target(nil, %{kind: "npc", level: level}, _player_id), do: {:npc, level}
+  # a made-up lord's town with no real player in it (Age3.Lord): fought like an NPC
+  def target(nil, %{kind: "city", level: level}, _player_id), do: {:lord, level}
   def target(nil, _tile, _player_id), do: {:error, "bad_target"}
 
   @doc "Does the garrison fight? Yes with the gate open, or once loyalty is low enough that it opens by itself."

@@ -216,6 +216,7 @@ defmodule Age3.Store.Pg do
     Game,
     Hero,
     Heroes,
+    Lord,
     Loyalty,
     March,
     Npc,
@@ -849,7 +850,8 @@ defmodule Age3.Store.Pg do
               "heroId" => hero.id,
               "heroName" => hero.name,
               "troops" => plan.troops,
-              "seconds" => seconds
+              "seconds" => seconds,
+              "target" => Atom.to_string(elem(target, 0))
             },
             started_at: now,
             ends_at: to_datetime(now_ms + seconds * 1000)
@@ -867,6 +869,7 @@ defmodule Age3.Store.Pg do
 
   defp attack_label({:city, c}, x, y), do: "Attack on #{c.name} (#{x},#{y})"
   defp attack_label({:npc, level}, x, y), do: "Attack on Lv#{level} NPC (#{x},#{y})"
+  defp attack_label({:lord, _level}, x, y), do: "Attack on #{Lord.name(x, y)} (#{x},#{y})"
 
   # The player city standing at x, y (wrapped onto the map), or nil.
   defp city_at(x, y) do
@@ -1653,13 +1656,17 @@ defmodule Age3.Store.Pg do
     )
   end
 
-  # A march arriving at its NPC: the battle, as at the moment it arrived. The NPC is locked (after the city, as
-  # always) so two marches arriving at once fight one after the other. Saves what is left of the NPC, the hero's
-  # exp and a report, and sends the survivors home with their loot. Returns the task with the outcome added.
+  # A march arriving at its NPC (or a made-up lord's town, fought the same way: Age3.Lord): the battle, as at the
+  # moment it arrived. The NPC is locked (after the city, as always) so two marches arriving at once fight one
+  # after the other. Saves what is left of the NPC, the hero's exp and a report, and sends the survivors home with
+  # their loot. Returns the task with the outcome added. Marches sent before lords' towns existed have no "target".
   defp apply_task(city, %Task{kind: "march", data: %{"phase" => "out"} = d} = t) do
     at_ms = to_ms(t.ends_at)
     {x, y, level} = {d["x"], d["y"], t.target_level}
-    npc = lock_npc(x, y, level, at_ms)
+    lord? = d["target"] == "lord"
+    full = if lord?, do: Lord.full(x, y, level), else: Npc.full(level)
+    what = if lord?, do: Lord.name(x, y), else: "Lv#{level} NPC"
+    npc = lock_npc(x, y, level, full, at_ms)
     buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
     research = Research.in_city(research_of(city.player_id), buildings)
     hero = Repo.get(Hero, d["heroId"])
@@ -1686,14 +1693,17 @@ defmodule Age3.Store.Pg do
     )
 
     hero_report = hero && gain_hero_exp(hero, March.hero_exp(result))
-    medals = if Titles.full_clear?(won, npc, Npc.full(level), result), do: Titles.roll_npc(level), else: %{}
+    # lords' towns drop no medals
+    medals =
+      if not lord? and Titles.full_clear?(won, npc, full, result), do: Titles.roll_npc(level), else: %{}
+
     if medals != %{}, do: add_medals(city.player_id, medals)
 
     report =
       Repo.insert!(%Report{
         player_id: city.player_id,
         city_id: city.id,
-        title: "#{if won, do: "Victory", else: "Defeat"} against Lv#{level} NPC (#{x},#{y})",
+        title: "#{if won, do: "Victory", else: "Defeat"} against #{what} (#{x},#{y})",
         x: x,
         y: y,
         won: won,
@@ -1742,11 +1752,9 @@ defmodule Age3.Store.Pg do
     Repo.update_all(from(p in Player, where: p.id == ^player_id), set: [medals: Titles.add(medals, more)])
   end
 
-  # The NPC at x, y as it stands at at_ms, locked for this transaction. An NPC never attacked gets its row now
-  # (full, as of at_ms), so there is always a row to lock.
-  defp lock_npc(x, y, level, at_ms) do
-    full = Npc.full(level)
-
+  # The NPC (or lord's town) at x, y as it stands at at_ms, locked for this transaction. full is what it holds
+  # when full. One never attacked gets its row now (full, as of at_ms), so there is always a row to lock.
+  defp lock_npc(x, y, level, full, at_ms) do
     Repo.insert_all(
       NpcState,
       [
@@ -1766,7 +1774,7 @@ defmodule Age3.Store.Pg do
 
     s = Repo.one!(from n in NpcState, where: n.x == ^x and n.y == ^y, lock: "FOR UPDATE")
     saved = %{troops: s.troops, forts: s.forts, resources: s.resources, updated_at_ms: to_ms(s.updated_at)}
-    Npc.current(saved, level, at_ms)
+    Npc.current(saved, full, at_ms)
   end
 
   # The player's research (capped in this city) as the battle engine's technology.

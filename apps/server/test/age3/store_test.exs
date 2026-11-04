@@ -647,6 +647,37 @@ defmodule Age3.Store.PgTest do
       assert Pg.reports(id) |> length() == 1
     end
 
+    test "a made-up lord's town fights like an NPC with its own garrison and archer towers, and drops no medals" do
+      {id, city_id, hero_id, _npc, now} = warlord("Raider")
+      city = Age3.Repo.get!(Age3.City, city_id)
+
+      {x, y} =
+        for(d <- 1..80, dx <- -d..d, dy <- [-d, d], do: {city.x + dx, city.y + dy})
+        |> Enum.map(fn {x, y} -> {Integer.mod(x, 800), Integer.mod(y, 800)} end)
+        |> Enum.find(fn {x, y} -> Age3.World.tile_at(x, y) == %{kind: "city", level: 1} end)
+
+      name = Age3.Lord.name(x, y)
+      assert {:ok, arrives} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 5000}, now)
+      {:ok, _, _, [out]} = Pg.state(id, now)
+      assert out.label == "Attack on #{name} (#{x},#{y})"
+
+      {:ok, player, _, [%{march: %{phase: "back", loot: loot}}]} = Pg.state(id, arrives)
+      assert [%{id: report_id, won: true, medals: medals, title: title}] = Pg.reports(id)
+      assert title == "Victory against #{name} (#{x},#{y})"
+      assert medals == %{} and player.medals == %{}
+      assert loot != %{}
+
+      {:ok, %{result: r}} = Pg.report(id, report_id)
+      full = Age3.Lord.full(x, y, 1)
+      defenders = Map.new(r["defender"]["troops"], &{&1["type"], &1["initial"]})
+      assert Map.take(defenders, Map.keys(full["troops"])) == full["troops"]
+
+      lord = Age3.Repo.get_by!(Age3.NpcState, x: x, y: y)
+      assert Map.keys(lord.forts) == ["tower"]
+      assert Enum.all?(Map.values(lord.troops), &(&1 == 0))
+      assert lord.resources == Map.new(full["resources"], fn {k, v} -> {k, v - loot[k]} end)
+    end
+
     test "instant march cheat: a second each way; errors" do
       {id, city_id, hero_id, {x, y}, now} = warlord("Flash")
       {:ok, _, [home], _} = Pg.state(id, now)

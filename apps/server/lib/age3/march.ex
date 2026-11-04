@@ -21,11 +21,11 @@ defmodule Age3.March do
   the city's troops, hero the hero sent (a map with :status, or nil), from the city's {x, y}, to the target
   {x, y}, food the city's settled food, send the troops to send (%{"warrior" => 100}).
 
-  target is what stands at `to` (Age3.Pvp.target/3): {:npc, level}, {:city, city} or {:error, code}; left out,
-  only an NPC will do.
+  target is what stands at `to` (Age3.Pvp.target/3): {:npc, level}, {:lord, level}, {:city, city} or
+  {:error, code}; left out, only an NPC will do.
 
-  Returns {:ok, %{troops, seconds, food, level}} (level of the NPC attacked, nil for a player city) or
-  {:error, code}.
+  Returns {:ok, %{troops, seconds, food, level}} (level of the NPC or lord's town attacked, nil for a player
+  city) or {:error, code}.
   """
   def check(buildings, research, troops, hero, from, to, food, send, target \\ nil) do
     rally = level_of(buildings, "rallyspot")
@@ -65,6 +65,7 @@ defmodule Age3.March do
 
   defp target_level(nil, to), do: npc_at(to)
   defp target_level({:npc, level}, _to), do: {:ok, level}
+  defp target_level({:lord, level}, _to), do: {:ok, level}
   defp target_level({:city, _city}, _to), do: {:ok, nil}
   defp target_level({:error, code}, _to), do: {:error, code}
 
