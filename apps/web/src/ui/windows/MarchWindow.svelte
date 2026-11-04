@@ -142,7 +142,7 @@
                     aria-label="{TROOP_DATA[t].name} to send"
                   />
                 </td>
-                <td><Button small variant="blue" onclick={() => max(t)}>Max</Button></td>
+                <td><Button small variant="blue" tabindex={-1} onclick={() => max(t)}>Max</Button></td>
               </tr>
             {/each}
           </tbody>
