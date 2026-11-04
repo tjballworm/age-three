@@ -24,6 +24,7 @@
     research: 'M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3',
     march: 'M6 21V4M6 4h11l-2 4 2 4H6',
     send: 'M4 12l16-8-6 16-2-6z',
+    walls: 'M3 21V7h3v3h2V7h3v3h2V7h3v3h2V7h3v14zM10 21v-5a2 2 0 0 1 4 0v5',
   } as const;
 
   export type IconName = keyof typeof PATHS;

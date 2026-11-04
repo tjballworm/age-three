@@ -27,6 +27,7 @@
   import InnPanel from './InnPanel.svelte';
   import ResearchPanel from './ResearchPanel.svelte';
   import TrainPanel, { recruitWindow } from './TrainPanel.svelte';
+  import WallsPanel from './WallsPanel.svelte';
 
   // Build on an empty plot or field, or upgrade the building that stands there. The checks here only grey out
   // buttons and explain why; the server makes the real decision and its error is shown if it refuses.
@@ -130,10 +131,10 @@
           : 'Empty plot',
   );
   /**
-   * The Academy, Barracks, Inn and Feasting Hall get one window: the building and its Upgrade on top, what it
-   * does below.
+   * The Academy, Barracks, Inn, Feasting Hall and Walls get one window: the building and its Upgrade on top, what
+   * it does below.
    */
-  const PANELS = ['academy', 'barracks', 'inn', 'feastinghall'] as const;
+  const PANELS = ['academy', 'barracks', 'inn', 'feastinghall', 'walls'] as const;
   type Panel = (typeof PANELS)[number];
   const panel = $derived(
     standing && (PANELS as readonly string[]).includes(standing.type) ? (standing.type as Panel) : null,
@@ -154,6 +155,10 @@
       icon: 'hero',
       text: 'The Feasting Hall is home to your heroes; it houses as many heroes as its level.',
     },
+    walls: {
+      icon: 'walls',
+      text: 'The walls guard your city; open the gate to send your troops out to fight, or close it and let the walls hold.',
+    },
   } as const;
 </script>
 
@@ -169,7 +174,7 @@
   {/if}
 {/snippet}
 
-<Window {title} width={panel ? 900 : 620} height={panel ? 640 : 440} onclose={close}>
+<Window {title} width={panel ? 900 : 620} height={panel && panel !== 'walls' ? 640 : 440} onclose={close}>
   {#if panel && standing}
     {@const next = options[0]!}
     {@const why = blocker(next.type, next.level) ?? (queueBusy ? 'Already building in this city' : null)}
@@ -216,6 +221,8 @@
         <InnPanel />
       {:else if panel === 'feastinghall'}
         <HallPanel />
+      {:else if panel === 'walls'}
+        <WallsPanel />
       {:else if typeof slot === 'number'}
         <TrainPanel plot={slot} />
       {/if}
