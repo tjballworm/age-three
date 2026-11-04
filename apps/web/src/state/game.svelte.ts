@@ -7,6 +7,7 @@ import {
   type ChatChannel,
   type City,
   type Coord,
+  type LordCity,
   type Player,
   type WorldTile,
 } from '@age3/core';
@@ -69,6 +70,9 @@ export const game = $state({
   worldVersion: 0,
 });
 
+/** Other players' cities from the last state that had them, for a state that leaves them out. */
+let lastLords: LordCity[] = [];
+
 /** Replaces the sample player and cities (or the last state) with what the server sent. */
 export function applyServerState(s: GameState) {
   syncClock(s.serverTime);
@@ -84,7 +88,10 @@ export function applyServerState(s: GameState) {
   }
   game.fromServer = true;
   game.loading = false;
-  placeMyCities(s.cities, s.player, s.lords ?? []);
+  // a state without lords (an older server's taskDone) keeps the last ones, or the map would fill their tiles with
+  // made-up towns
+  if (s.lords) lastLords = s.lords;
+  placeMyCities(s.cities, s.player, lastLords);
   game.worldVersion++;
 }
 
