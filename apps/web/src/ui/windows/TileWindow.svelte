@@ -13,7 +13,7 @@
     here ? 'This is your current city' : `${distance(from, tile).toFixed(1)} tiles from ${from.name}`,
   );
 
-  // Actions per tile type. Entering your city and attacking an NPC work; the rest are placeholders.
+  // Actions per tile type. Entering your city and attacking NPCs and lords' cities work; the rest are placeholders.
   const actions = $derived.by((): { label: string; hint: string }[] => {
     if (tile.mine) return [{ label: 'Enter City', hint: 'Open this city in Town view' }];
     switch (tile.kind) {
@@ -40,7 +40,7 @@
             label: 'Attack',
             hint: tile.cityId
               ? 'Plunder it and lower its loyalty; at loyalty 0 a win captures it'
-              : 'This town is only scenery for now',
+              : "Plunder this lord's town (it can't be captured)",
           },
         ];
     }
@@ -82,7 +82,7 @@
           </div>
           {#if a.label === 'Enter City'}
             <Button onclick={enterCity}>{a.label}</Button>
-          {:else if a.label === 'Attack' && (tile.kind === 'npc' || (tile.kind === 'city' && tile.cityId))}
+          {:else if a.label === 'Attack' && (tile.kind === 'npc' || tile.kind === 'city')}
             <Button variant="red" disabled={!game.fromServer} onclick={() => openMarch(tile)}
               >{a.label}</Button
             >

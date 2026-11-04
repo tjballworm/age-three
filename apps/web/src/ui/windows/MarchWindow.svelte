@@ -27,7 +27,7 @@
   let { target }: { target: WorldTile } = $props();
 
   const city = $derived(currentCity());
-  /** Another player's city: no garrison to show, as there is no scouting yet. */
+  /** Another lord's city (a player's, or a made-up town): no garrison to show, as there is no scouting yet. */
   const lord = $derived(target.kind === 'city');
   const npc = $derived(lord ? null : npcSpec(target.level));
   const what = $derived(lord ? `${target.name} (${target.owner})` : `the Lv ${target.level} NPC`);
