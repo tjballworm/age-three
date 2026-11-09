@@ -23,6 +23,11 @@ defmodule Age3.City do
     # the hero who leads the city's defence, chosen apart from the mayor (TJ, 2026-11-03)
     field :defender_hero_id, :binary_id
     field :tax_rate, :integer, default: 10
+    # 12-18 for a captured historic city, nil for every other city (Age3.Historic)
+    field :historic_level, :integer
+    # policies this historic city imposed on policies_day (days since the epoch, UTC)
+    field :policies_used, :integer, default: 0
+    field :policies_day, :integer, default: 0
     field :resources, :map
     field :population, :map
     # trained troops, e.g. %{"warrior" => 100}; troops still training are tasks

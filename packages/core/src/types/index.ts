@@ -50,6 +50,10 @@ export interface City extends Coord {
   defenderHeroId?: string | null;
   /** Percent, 0–100 */
   taxRate: number;
+  /** 12, 14, 16 or 18 for a historic city you captured; null (or missing) for every other city. */
+  historicLevel?: number | null;
+  /** A held historic city's policies left today (they come back at 00:00 UTC); null for other cities. */
+  policiesLeft?: number | null;
   /** Buildings inside the walls: the Town Hall, the walls and up to TOWN_SLOTS others. */
   buildings: TownBuilding[];
   /** Resource fields in the outskirts, up to FIELD_SLOTS. Missing until the server sends them. */
@@ -77,6 +81,8 @@ export interface LordCity extends Coord {
   owner: string;
   ownerId: string;
   alliance?: string | null;
+  /** 12-18 when the city is a captured historic city. */
+  historicLevel?: number | null;
 }
 
 export interface HeroStats {
@@ -269,8 +275,22 @@ export interface ReportSummary {
   medals?: MedalCounts;
   /** The hero who led it: exp gained and the level they reached. */
   hero: { name: string; exp: number; level: number; levelsGained: number } | null;
-  /** "attack" for your attacks, "defence" for battles at your cities. Missing from older servers. */
-  side?: 'attack' | 'defence';
+  /**
+   * "attack" for your attacks, "defence" for battles at your cities, "policy" for a policy your historic city
+   * imposed and "policied" for one imposed on your city. Missing from older servers.
+   */
+  side?: 'attack' | 'defence' | 'policy' | 'policied';
+  /** A policy report: which policy, from and to which city, and what it took. No battle comes with it. */
+  policy?: {
+    policy: string;
+    from: string;
+    to: string;
+    taken: {
+      resources: Partial<Record<ResourceType, number>>;
+      people: number;
+      troops: Partial<Record<TroopType, number>>;
+    };
+  } | null;
   /** A player city's loyalty before and after the battle, and whether it was captured; null for NPC battles. */
   loyalty?: { before: number; after: number; captured: boolean } | null;
   read: boolean;

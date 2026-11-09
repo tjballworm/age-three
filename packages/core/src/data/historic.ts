@@ -2,7 +2,8 @@
 // H 'n' T's Age II guide (evonyageii.wordpress.com/2010/10/08/historic-cities, from scouting), corrected where
 // live scout reports disagree (Leitheon's EvIIEmulator notes: Lv 12 cavalry 108,444, Lv 14 archers 171,228).
 // Where the map places them: ../world/states.ts. The game server reads its own copy
-// (apps/server/priv/data/historic-cities.json); nothing attacks historic cities yet.
+// (apps/server/priv/data/historic-cities.json) and fights, captures and runs them with it
+// (apps/server/lib/age3/historic.ex, which has the rules; the numbers below must match it).
 //
 // - Every level has the same fortifications, Walls 10, research 10 and an NPC 10's resources.
 // - A garrison slot that lists several types holds that many of ONE of them, picked again at every daily reset

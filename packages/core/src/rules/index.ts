@@ -16,3 +16,4 @@ export function distance(a: Coord, b: Coord): number {
 
 /** Wraps a coordinate onto the world grid. */
 export const wrapCoord = (v: number) => ((Math.round(v) % WORLD_SIZE) + WORLD_SIZE) % WORLD_SIZE;
+export * from './historic';

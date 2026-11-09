@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { MEDALS, RESOURCE_TYPES, type BattleResult, type ReportSummary } from '@age3/core';
+  import {
+    MEDALS,
+    POLICIES,
+    RESOURCE_TYPES,
+    TROOP_DATA,
+    type BattleResult,
+    type ReportSummary,
+    type TroopType,
+  } from '@age3/core';
   import { game, goToCoord } from '$state/game.svelte';
   import { ask } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
@@ -13,7 +21,8 @@
   // whenever the unread count changes (a battle just happened).
 
   let reports = $state<ReportSummary[]>([]);
-  let open = $state<(ReportSummary & { result: BattleResult }) | null>(null);
+  /** result is null for a policy report (no battle). */
+  let open = $state<(ReportSummary & { result: BattleResult | null }) | null>(null);
   let error = $state('');
   let loading = $state(false);
 
@@ -74,12 +83,14 @@
         class:active={open?.id === r.id}
         onclick={() => show(r)}
       >
-        <span class="badge {r.won ? 'won' : 'lost'}">{r.won ? 'Victory' : 'Defeat'}</span>
+        <span class="badge {r.won ? 'won' : 'lost'}"
+          >{r.side === 'policy' || r.side === 'policied' ? 'Policy' : r.won ? 'Victory' : 'Defeat'}</span
+        >
         <b>{r.title.replace(/^(Victory|Defeat) against /, '')}</b>
         <span class="meta">
           {when(r.foughtAt)}{#if lootTotal(r)}
             · {formatNumber(lootTotal(r))}
-            {r.side === 'defence' ? 'plundered' : 'loot'}{/if}{#if medalCount(r)}
+            {r.side === 'defence' || r.side === 'policied' ? 'taken' : 'loot'}{/if}{#if medalCount(r)}
             · {medalCount(r)} {medalCount(r) === 1 ? 'medal' : 'medals'}{/if}
         </span>
       </button>
@@ -114,7 +125,11 @@
         {/if}
         {#if lootTotal(open)}
           <span class="loot">
-            {open.side === 'defence' ? 'Plundered' : 'Loot'}
+            {open.side === 'defence' || open.side === 'policied'
+              ? 'Taken'
+              : open.side === 'policy'
+                ? 'Took'
+                : 'Loot'}
             {#each RESOURCE_TYPES as res (res)}
               {#if open.loot[res]}<ResourceIcon type={res} size={14} />
                 <b>{formatNumber(open.loot[res] ?? 0)}</b>{/if}
@@ -133,7 +148,26 @@
           </span>
         {/if}
       </div>
-      {#if open.side === 'defence'}
+      {#if open.policy}
+        <div class="facts">
+          <span>
+            {POLICIES.find((p) => p.id === open?.policy?.policy)?.name ?? open.policy.policy}: {open.policy
+              .from} on
+            {open.policy.to}
+          </span>
+          {#if open.policy.taken.people}
+            <span>People <b>{formatNumber(open.policy.taken.people)}</b></span>
+          {/if}
+          {#each Object.entries(open.policy.taken.troops) as [t, n] (t)}
+            <span
+              >{open.policy.policy === 'draft' ? 'Drafted' : 'Disbanded'}
+              <b>{formatNumber(n ?? 0)} {TROOP_DATA[t as TroopType].name}</b></span
+            >
+          {/each}
+        </div>
+      {:else if !open.result}
+        <p class="note">No battle in this report.</p>
+      {:else if open.side === 'defence'}
         <BattleReport result={open.result} attacker="Enemy army" defender="Your city" defending />
       {:else}
         <BattleReport

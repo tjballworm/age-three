@@ -10,6 +10,8 @@ defmodule Age3.NpcState do
     field :troops, :map
     field :forts, :map
     field :resources, :map
+    # a historic city's loyalty as of updated_at (Age3.Historic.loyalty/3); NPCs and lords' towns keep 100
+    field :loyalty, :integer, default: 100
     field :updated_at, :utc_datetime_usec
   end
 end

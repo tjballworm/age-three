@@ -31,7 +31,7 @@
         : KIND_LABEL[t.kind]}
     </div>
     <dl>
-      {#if t.kind === 'city'}
+      {#if t.kind === 'city' || t.owner}
         <dt>Lord</dt>
         <dd>{t.owner}</dd>
         <dt>Alliance</dt>

@@ -21,20 +21,24 @@ defmodule Age3.March do
   the city's troops, hero the hero sent (a map with :status, or nil), from the city's {x, y}, to the target
   {x, y}, food the city's settled food, send the troops to send (%{"warrior" => 100}).
 
-  target is what stands at `to` (Age3.Pvp.target/3): {:npc, level}, {:lord, level}, {:city, city} or
-  {:error, code}; left out, only an NPC will do.
+  target is what stands at `to` (Age3.Pvp.target/3): {:npc, level}, {:lord, level}, {:historic, level},
+  {:city, city} or {:error, code}; left out, only an NPC will do. rally_multiplier: a held historic city's Rally
+  Spot sends more (Age3.Historic.rally_multiplier/1).
 
-  Returns {:ok, %{troops, seconds, food, level}} (level of the NPC or lord's town attacked, nil for a player
-  city) or {:error, code}.
+  Returns {:ok, %{troops, seconds, food, level}} (level of the NPC, lord's town or historic city attacked, nil
+  for a player city) or {:error, code}.
   """
-  def check(buildings, research, troops, hero, from, to, food, send, target \\ nil) do
+  def check(buildings, research, troops, hero, from, to, food, send, target \\ nil, rally_multiplier \\ 1) do
     rally = level_of(buildings, "rallyspot")
     send = for {t, n} <- send || %{}, n > 0, into: %{}, do: {t, n}
 
     with :ok <- valid_troops(send),
          :ok <- if(rally > 0, do: :ok, else: {:error, "no_rally_spot"}),
          :ok <-
-           if(total(send) <= rally * @troops_per_rally_level, do: :ok, else: {:error, "too_many_troops"}),
+           if(total(send) <= floor(rally * @troops_per_rally_level * rally_multiplier),
+             do: :ok,
+             else: {:error, "too_many_troops"}
+           ),
          :ok <-
            if(Enum.all?(send, fn {t, n} -> Map.get(troops, t, 0) >= n end),
              do: :ok,
@@ -66,6 +70,7 @@ defmodule Age3.March do
   defp target_level(nil, to), do: npc_at(to)
   defp target_level({:npc, level}, _to), do: {:ok, level}
   defp target_level({:lord, level}, _to), do: {:ok, level}
+  defp target_level({:historic, level}, _to), do: {:ok, level}
   defp target_level({:city, _city}, _to), do: {:ok, nil}
   defp target_level({:error, code}, _to), do: {:error, code}
 

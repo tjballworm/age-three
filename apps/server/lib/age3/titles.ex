@@ -92,6 +92,14 @@ defmodule Age3.Titles do
     for {m, p} <- Data.npc_medal_drops(level), rand.() < p, into: %{}, do: {m, 1}
   end
 
+  @doc "The medals one qualifying battle against a historic city drops (Justice and Nation, one roll each)."
+  def roll_historic(rand \\ &:rand.uniform/0) do
+    for {m, p} <- Data.historic_medal_drops(), rand.() < p, into: %{}, do: {m, 1}
+  end
+
+  @doc "Whether the step `have` is `need` or above on the ladder (:rank or :title)."
+  def at_least?(ladder, have, need), do: index(steps(ladder), have) >= index(steps(ladder), need)
+
   defp steps(:rank), do: Data.ranks()
   defp steps(:title), do: Data.titles()
 

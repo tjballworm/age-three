@@ -108,6 +108,10 @@ defmodule Age3.FakeStore do
   def march(_player_id, _city_id, _x, _y, _hero_id, _troops, _now_ms), do: {:error, "bad_target"}
 
   @impl true
+  def impose_policy(_player_id, "c1", 10, 20, "tax", _now_ms), do: :ok
+  def impose_policy(_player_id, _city_id, _x, _y, _policy, _now_ms), do: {:error, "not_historic"}
+
+  @impl true
   def recall(_player_id, "c1", "m1", now_ms), do: {:ok, now_ms + 30_000}
   def recall(_player_id, _city_id, _task_id, _now_ms), do: {:error, "already_returning"}
 

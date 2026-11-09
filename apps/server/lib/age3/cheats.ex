@@ -131,6 +131,19 @@ defmodule Age3.Cheats do
       else: bad()
   end
 
+  # a free historic city at x, y: set its loyalty (0-100) and/or empty its garrison and fortifications
+  def parse("setHistoric", %{"x" => x, "y" => y} = p) when is_integer(x) and is_integer(y) do
+    loyalty = p["loyalty"]
+    empty = p["empty"] == true
+
+    cond do
+      Age3.Game.historic_level(Integer.mod(x, 800), Integer.mod(y, 800)) == nil -> bad()
+      loyalty != nil and not (is_integer(loyalty) and loyalty in 0..100) -> bad()
+      loyalty == nil and not empty -> bad()
+      true -> {:ok, %{x: Integer.mod(x, 800), y: Integer.mod(y, 800), loyalty: loyalty, empty: empty}}
+    end
+  end
+
   def parse("instantMarch", %{"on" => on}) when is_boolean(on), do: {:ok, %{on: on}}
 
   def parse(action, _payload) when action in ["fillResources", "finishAll", "resetCity"], do: {:ok, %{}}

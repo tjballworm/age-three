@@ -96,6 +96,7 @@ defmodule Age3.Session do
               "setMayor",
               "march",
               "recall",
+              "imposePolicy",
               "promote",
               "getReports",
               "getReport",
@@ -311,6 +312,20 @@ defmodule Age3.Session do
 
   defp handle("recall", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid recall."), session}
+
+  # A held historic city imposes a policy on another lord's city: {cityId, x, y, policy}. Replies with the state.
+  defp handle("imposePolicy", %{"cityId" => city_id, "x" => x, "y" => y, "policy" => policy}, id, session)
+       when is_binary(city_id) and is_integer(x) and is_integer(y) and is_binary(policy) do
+    now = session.now.()
+
+    case session.store.impose_policy(session.player_id, city_id, x, y, policy, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("imposePolicy", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid policy."), session}
 
   # The latest battle reports, without the battles: replies "reports" {reports: [...]}.
   defp handle("getReports", _payload, id, session),
@@ -565,7 +580,14 @@ defmodule Age3.Session do
   defp message("no_troops"), do: "Choose some troops to send."
   defp message("no_hero"), do: "Choose a hero to lead the march."
   defp message("hero_not_found"), do: "That hero isn't in those cities any more."
-  defp message("bad_target"), do: "Only NPC and player cities can be attacked for now."
+  defp message("bad_target"), do: "Only NPC, historic and player cities can be attacked."
+  defp message("not_historic"), do: "Only a historic city you hold can impose policies."
+  defp message("title_too_low"), do: "You need to be an Earl or above to impose policies."
+  defp message("out_of_range"), do: "That city is outside this historic city's draft area."
+
+  defp message("no_policies_left"),
+    do: "This historic city has no policies left today. They come back at 00:00 UTC."
+
   defp message("already_returning"), do: "That march is already on its way back."
   defp message("not_enough_medals"), do: "Not enough medals."
   defp message("rank_too_low"), do: "Your rank is too low for that title."
