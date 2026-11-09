@@ -176,6 +176,19 @@ defmodule Age3.Store do
               now_ms :: integer
             ) :: {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
 
+  @doc """
+  A held historic city (city_id) imposes a policy (Age3.Historic.policies/0) on another player's city at x, y.
+  Writes a report for both lords.
+  """
+  @callback impose_policy(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              x :: integer,
+              y :: integer,
+              policy :: String.t(),
+              now_ms :: integer
+            ) :: :ok | {:error, String.t()}
+
   @doc "Turns a march that hasn't arrived yet around; it takes as long to come back as it has been out."
   @callback recall(player_id :: String.t(), city_id :: String.t(), task_id :: String.t(), now_ms :: integer) ::
               {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
@@ -216,6 +229,7 @@ defmodule Age3.Store.Pg do
     Game,
     Hero,
     Heroes,
+    Historic,
     Lord,
     Loyalty,
     March,
@@ -653,7 +667,8 @@ defmodule Age3.Store.Pg do
           level: coalesce(b.level, 1),
           owner: p.name,
           ownerId: p.id,
-          alliance: p.alliance
+          alliance: p.alliance,
+          historicLevel: c.historic_level
         }
     )
   end
@@ -822,7 +837,20 @@ defmodule Age3.Store.Pg do
 
       target = Pvp.target(city_at(x, y), World.tile_at(x, y), player_id)
 
-      case March.check(buildings, research, city.troops, hero, {city.x, city.y}, {x, y}, food, troops, target) do
+      rally = Historic.rally_multiplier(city.historic_level)
+
+      case March.check(
+             buildings,
+             research,
+             city.troops,
+             hero,
+             {city.x, city.y},
+             {x, y},
+             food,
+             troops,
+             target,
+             rally
+           ) do
         {:ok, plan} ->
           seconds = if player.instant_march, do: 1, else: plan.seconds
           save_resources(city, Build.spend(resources, %{"food" => plan.food}), now_ms)
@@ -870,6 +898,129 @@ defmodule Age3.Store.Pg do
   defp attack_label({:city, c}, x, y), do: "Attack on #{c.name} (#{x},#{y})"
   defp attack_label({:npc, level}, x, y), do: "Attack on Lv#{level} NPC (#{x},#{y})"
   defp attack_label({:lord, _level}, x, y), do: "Attack on #{Lord.name(x, y)} (#{x},#{y})"
+  defp attack_label({:historic, _level}, x, y), do: "Attack on #{Historic.name(x, y)} (#{x},#{y})"
+
+  # Policies: a held historic city takes from another lord's city in its draft area (Age3.Historic). Both cities
+  # are locked in id order (like an arriving attack), settled to now, and both lords get a report.
+
+  @impl true
+  def impose_policy(player_id, city_id, x, y, policy, now_ms) do
+    now = to_datetime(now_ms)
+    target = city_at(x, y)
+    with %City{} <- target, {:ok, _} <- Ecto.UUID.cast(city_id), do: arrivals([city_id, target.id], now)
+
+    Repo.transaction(fn ->
+      target = city_at(x, y) || Repo.rollback("bad_target")
+      {:ok, src_id} = Ecto.UUID.cast(city_id)
+      ids = Enum.uniq(Enum.sort([src_id, target.id]))
+      Repo.all(from c in City, where: c.id in ^ids, order_by: c.id, lock: "FOR UPDATE", select: c.id)
+      src = Repo.get(City, src_id)
+      player = Repo.get!(Player, player_id)
+
+      cond do
+        src == nil or src.player_id != player_id ->
+          Repo.rollback("bad_message")
+
+        policy not in Historic.policies() ->
+          Repo.rollback("bad_message")
+
+        src.historic_level == nil ->
+          Repo.rollback("not_historic")
+
+        target.player_id == player_id ->
+          Repo.rollback("own_city")
+
+        not Titles.at_least?(:title, player.title, Historic.policy_title()) ->
+          Repo.rollback("title_too_low")
+
+        not Historic.in_range?(src.historic_level, {src.x, src.y}, {target.x, target.y}) ->
+          Repo.rollback("out_of_range")
+
+        Historic.policies_left(src.historic_level, src.policies_used, src.policies_day, now_ms) <= 0 ->
+          Repo.rollback("no_policies_left")
+
+        true ->
+          :ok
+      end
+
+      complete_due(src.id, now)
+      complete_due(target.id, now)
+      src = Repo.get!(City, src.id)
+      target = Repo.get!(City, target.id)
+      %{resources: resources, population: pop} = settled(target, now_ms)
+      amounts = Map.new(resources, fn {k, v} -> {k, v["amount"]} end)
+      taken = Historic.take(policy, amounts, pop["idle"], target.troops)
+      save_resources(target, Build.spend(resources, taken["resources"]), now_ms, taken["people"])
+      gone = taken["troops"]
+
+      Repo.update_all(from(c in City, where: c.id == ^target.id),
+        set: [troops: Map.new(target.troops, fn {t, n} -> {t, n - Map.get(gone, t, 0)} end)]
+      )
+
+      # gold, food and people go to the historic city; drafted troops join its army (disarmed ones are gone)
+      src_resources = Cheats.add_resources(settled(src, now_ms).resources, taken["resources"])
+      save_resources(src, src_resources, now_ms, -taken["people"])
+
+      troops =
+        if policy == "draft",
+          do: Enum.reduce(gone, src.troops, fn {t, n}, acc -> Train.add(acc, t, n) end),
+          else: src.troops
+
+      used =
+        Historic.policies_a_day(src.historic_level) -
+          Historic.policies_left(src.historic_level, src.policies_used, src.policies_day, now_ms)
+
+      Repo.update_all(from(c in City, where: c.id == ^src.id),
+        set: [troops: troops, policies_used: used + 1, policies_day: Historic.day(now_ms)]
+      )
+
+      resnapshot(Repo.get!(City, src.id), now)
+      resnapshot(Repo.get!(City, target.id), now)
+
+      name =
+        Map.new(
+          Repo.all(from p in Player, where: p.id in ^[player_id, target.player_id], select: {p.id, p.name})
+        )
+
+      label = policy_label(policy)
+      info = %{"policy" => policy, "from" => src.name, "to" => target.name, "taken" => taken}
+
+      for {owner, city, title, side} <- [
+            {player_id, src, "#{label} on #{target.name} (#{target.x},#{target.y})", "policy"},
+            {target.player_id, target, "#{src.name} (#{name[player_id]}) imposed #{label} on #{target.name}",
+             "policied"}
+          ] do
+        Repo.insert!(%Report{
+          player_id: owner,
+          city_id: city.id,
+          title: title,
+          x: target.x,
+          y: target.y,
+          won: side == "policy",
+          loot: taken["resources"],
+          side: side,
+          policy: info,
+          fought_at: now
+        })
+      end
+
+      target.player_id
+    end)
+    |> case do
+      {:ok, other} ->
+        tell(other, "attacked")
+        :ok
+
+      {:error, code} ->
+        {:error, code}
+    end
+  end
+
+  defp policy_label("tax"), do: "Tax Imposition"
+  defp policy_label("food"), do: "Food Levy"
+  defp policy_label("population"), do: "Population Redeployment"
+  defp policy_label("draft"), do: "Draft"
+  defp policy_label("disarm"), do: "Disarmament"
 
   # The player city standing at x, y (wrapped onto the map), or nil.
   defp city_at(x, y) do
@@ -930,6 +1081,7 @@ defmodule Age3.Store.Pg do
                 :medals,
                 :side,
                 :loyalty,
+                :policy,
                 :hero,
                 :read,
                 :fought_at
@@ -1014,6 +1166,9 @@ defmodule Age3.Store.Pg do
         action == "addMedals" ->
           add_medals(target_id, args.medals)
 
+        action == "setHistoric" ->
+          cheat_historic(args, now_ms)
+
         action == "setTitle" ->
           Repo.update_all(from(p in Player, where: p.id == ^target_id), set: args.changes)
 
@@ -1042,6 +1197,25 @@ defmodule Age3.Store.Pg do
 
       target_id
     end)
+  end
+
+  # setHistoric: a free historic city's loyalty and/or an empty garrison, as of now.
+  defp cheat_historic(%{x: x, y: y} = args, now_ms) do
+    if city_at(x, y), do: Repo.rollback("bad_target")
+    level = Game.historic_level(x, y)
+    full = Historic.full(x, y, level, Historic.day(now_ms))
+    {npc, row} = lock_npc(x, y, level, full, now_ms, Historic.regen_seconds(), true)
+    zero = fn m -> Map.new(m, fn {k, _} -> {k, 0} end) end
+
+    Repo.update_all(from(n in NpcState, where: n.x == ^x and n.y == ^y),
+      set: [
+        troops: if(args.empty, do: zero.(npc["troops"]), else: npc["troops"]),
+        forts: if(args.empty, do: zero.(npc["forts"]), else: npc["forts"]),
+        resources: npc["resources"],
+        loyalty: args.loyalty || Historic.loyalty(row.loyalty, to_ms(row.updated_at), now_ms),
+        updated_at: to_datetime(now_ms)
+      ]
+    )
   end
 
   # setHero: one hero in the target's cities, then its city's gold rate again (the salary follows the level).
@@ -1656,21 +1830,62 @@ defmodule Age3.Store.Pg do
     )
   end
 
-  # A march arriving at its NPC (or a made-up lord's town, fought the same way: Age3.Lord): the battle, as at the
-  # moment it arrived. The NPC is locked (after the city, as always) so two marches arriving at once fight one
-  # after the other. Saves what is left of the NPC, the hero's exp and a report, and sends the survivors home with
-  # their loot. Returns the task with the outcome added. Marches sent before lords' towns existed have no "target".
-  defp apply_task(city, %Task{kind: "march", data: %{"phase" => "out"} = d} = t) do
+  # A march arriving at its NPC (or a made-up lord's town or a free historic city, fought the same way: Age3.Lord,
+  # Age3.Historic): the battle, as at the moment it arrived. The NPC is locked (after the city, as always) so two
+  # marches arriving at once fight one after the other. Saves what is left of the NPC, the hero's exp and a
+  # report, and sends the survivors home with their loot; a historic city also loses loyalty and may be captured.
+  # Returns the task with the outcome added. Marches sent before lords' towns existed have no "target".
+  defp apply_task(city, %Task{kind: "march", data: %{"phase" => "out", "target" => "historic"} = d} = t) do
+    # someone captured it while this march was on its way: no battle, the army turns round
+    if city_at(d["x"], d["y"]) do
+      return_home(city, t, d["troops"], %{})
+      %{t | data: Map.merge(d, %{"won" => nil, "loot" => %{}})}
+    else
+      fight_npc(city, t, "historic")
+    end
+  end
+
+  defp apply_task(city, %Task{kind: "march", data: %{"phase" => "out"} = d} = t),
+    do: fight_npc(city, t, d["target"] || "npc")
+
+  # A march home: the troops rejoin the city, the hero is free again and the loot goes into storage (it can go
+  # over the cap, like a cheat's resources).
+  defp apply_task(city, %Task{kind: "march", data: %{"phase" => "back"} = d} = t) do
+    resnapshot(city, t.ends_at)
+    city = Repo.get!(City, city.id)
+    resources = Cheats.add_resources(city.resources, d["loot"] || %{})
+    troops = Enum.reduce(d["troops"], city.troops, fn {type, n}, acc -> Train.add(acc, type, n) end)
+    Repo.update_all(from(c in City, where: c.id == ^city.id), set: [resources: resources, troops: troops])
+
+    Repo.update_all(from(h in Hero, where: h.id == ^d["heroId"] and h.status == "marching"),
+      set: [status: "idle"]
+    )
+  end
+
+  defp fight_npc(city, %Task{data: d} = t, kind) do
     at_ms = to_ms(t.ends_at)
     {x, y, level} = {d["x"], d["y"], t.target_level}
-    lord? = d["target"] == "lord"
-    full = if lord?, do: Lord.full(x, y, level), else: Npc.full(level)
-    what = if lord?, do: Lord.name(x, y), else: "Lv#{level} NPC"
-    npc = lock_npc(x, y, level, full, at_ms)
+    historic? = kind == "historic"
+
+    {full, what, periods} =
+      case kind do
+        "lord" ->
+          {Lord.full(x, y, level), Lord.name(x, y), Data.npc_regen_seconds()}
+
+        "historic" ->
+          {Historic.full(x, y, level, Historic.day(at_ms)), Historic.name(x, y), Historic.regen_seconds()}
+
+        _ ->
+          {Npc.full(level), "Lv#{level} NPC", Data.npc_regen_seconds()}
+      end
+
+    {npc, row} = lock_npc(x, y, level, full, at_ms, periods, historic?)
     buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
     research = Research.in_city(research_of(city.player_id), buildings)
     hero = Repo.get(Hero, d["heroId"])
-    {defender, forts, settings} = Npc.battle(npc, level)
+
+    {defender, forts, settings} =
+      if historic?, do: Historic.battle(npc, level), else: Npc.battle(npc, level)
 
     attacker = %{
       Combat.default_army()
@@ -1688,27 +1903,59 @@ defmodule Age3.Store.Pg do
     loot = if won, do: March.loot(npc["resources"], March.load(survivors, research)), else: %{}
     left = Npc.after_battle(npc, result, loot)
 
+    # a historic city's loyalty: back up since its last battle, then down 3 for a win; at 0 a win captures it
+    {loyalty_report, captured} =
+      if historic? do
+        before = Historic.loyalty(row.loyalty, to_ms(row.updated_at), at_ms)
+        owned = Repo.aggregate(from(c in City, where: c.player_id == ^city.player_id), :count)
+        change = if won, do: Historic.after_win(before, owned), else: %{loyalty: before, captured: false}
+        after_ = if change.captured, do: Pvp.captured_loyalty(), else: change.loyalty
+        {%{"before" => before, "after" => after_, "captured" => change.captured}, change.captured}
+      else
+        {nil, false}
+      end
+
     Repo.update_all(from(n in NpcState, where: n.x == ^x and n.y == ^y),
-      set: [troops: left["troops"], forts: left["forts"], resources: left["resources"], updated_at: t.ends_at]
+      set: [
+        troops: left["troops"],
+        forts: left["forts"],
+        resources: left["resources"],
+        loyalty: if(loyalty_report, do: loyalty_report["after"], else: 100),
+        updated_at: t.ends_at
+      ]
     )
 
+    if captured, do: capture_historic(city.player_id, x, y, level, t.ends_at)
+
     hero_report = hero && gain_hero_exp(hero, March.hero_exp(result))
-    # lords' towns drop no medals
+    # lords' towns drop no medals; historic cities roll theirs for killing 5% of the garrison, won or lost
     medals =
-      if not lord? and Titles.full_clear?(won, npc, full, result), do: Titles.roll_npc(level), else: %{}
+      case kind do
+        "lord" -> %{}
+        "historic" -> if Historic.medals?(full, result), do: Titles.roll_historic(), else: %{}
+        _ -> if Titles.full_clear?(won, npc, full, result), do: Titles.roll_npc(level), else: %{}
+      end
 
     if medals != %{}, do: add_medals(city.player_id, medals)
+
+    outcome =
+      cond do
+        captured -> "Captured"
+        won -> "Victory against"
+        true -> "Defeat against"
+      end
 
     report =
       Repo.insert!(%Report{
         player_id: city.player_id,
         city_id: city.id,
-        title: "#{if won, do: "Victory", else: "Defeat"} against #{what} (#{x},#{y})",
+        title: "#{outcome} #{what} (#{x},#{y})",
         x: x,
         y: y,
         won: won,
         loot: loot,
         medals: medals,
+        loyalty: loyalty_report,
         hero: hero_report,
         result: Combat.to_json(result),
         fought_at: t.ends_at
@@ -1731,18 +1978,36 @@ defmodule Age3.Store.Pg do
     %{t | data: Map.merge(d, %{"won" => won, "reportId" => report.id, "loot" => loot, "medals" => medals})}
   end
 
-  # A march home: the troops rejoin the city, the hero is free again and the loot goes into storage (it can go
-  # over the cap, like a cheat's resources).
-  defp apply_task(city, %Task{kind: "march", data: %{"phase" => "back"} = d} = t) do
-    resnapshot(city, t.ends_at)
-    city = Repo.get!(City, city.id)
-    resources = Cheats.add_resources(city.resources, d["loot"] || %{})
-    troops = Enum.reduce(d["troops"], city.troops, fn {type, n}, acc -> Train.add(acc, type, n) end)
-    Repo.update_all(from(c in City, where: c.id == ^city.id), set: [resources: resources, troops: troops])
+  # A captured historic city (Age3.Historic): a new city of the attacker's on its tile, keeping its name, with
+  # Town Hall 10, Walls 10, four fields, a little of each resource and 50 people.
+  defp capture_historic(player_id, x, y, level, at) do
+    stock = Historic.captured_stock()
 
-    Repo.update_all(from(h in Hero, where: h.id == ^d["heroId"] and h.status == "marching"),
-      set: [status: "idle"]
+    resources =
+      Map.new(Game.starter_resources(), fn {k, v} -> {k, %{v | "amount" => stock.resources}} end)
+
+    city =
+      Repo.insert!(%City{
+        player_id: player_id,
+        name: Historic.name(x, y),
+        x: x,
+        y: y,
+        historic_level: level,
+        loyalty: Pvp.captured_loyalty(),
+        resources: resources,
+        population: %{"current" => stock.people, "max" => stock.people, "idle" => stock.people},
+        synced_at: at
+      })
+
+    Repo.insert_all(
+      Building,
+      for(
+        {slot, type, lv} <- Historic.captured_buildings(),
+        do: %{city_id: city.id, slot: slot, type: type, level: lv}
+      )
     )
+
+    resnapshot(Repo.get!(City, city.id), at)
   end
 
   # Medals go to the player the moment the battle is won (not when the march gets home). The player is locked after
@@ -1752,9 +2017,11 @@ defmodule Age3.Store.Pg do
     Repo.update_all(from(p in Player, where: p.id == ^player_id), set: [medals: Titles.add(medals, more)])
   end
 
-  # The NPC (or lord's town) at x, y as it stands at at_ms, locked for this transaction. full is what it holds
-  # when full. One never attacked gets its row now (full, as of at_ms), so there is always a row to lock.
-  defp lock_npc(x, y, level, full, at_ms) do
+  # The NPC (or lord's town or historic city) at x, y as it stands at at_ms, locked for this transaction, and its
+  # npc_states row. full is what it holds when full, periods how fast it refills (Age3.Npc.current/4); daily? makes
+  # it full again once a daily reset has passed since its last battle (historic cities). One never attacked gets
+  # its row now (full, as of at_ms), so there is always a row to lock.
+  defp lock_npc(x, y, level, full, at_ms, periods, daily?) do
     Repo.insert_all(
       NpcState,
       [
@@ -1773,8 +2040,17 @@ defmodule Age3.Store.Pg do
     )
 
     s = Repo.one!(from n in NpcState, where: n.x == ^x and n.y == ^y, lock: "FOR UPDATE")
-    saved = %{troops: s.troops, forts: s.forts, resources: s.resources, updated_at_ms: to_ms(s.updated_at)}
-    Npc.current(saved, full, at_ms)
+    saved_ms = to_ms(s.updated_at)
+
+    npc =
+      if daily? and Historic.day(saved_ms) < Historic.day(at_ms) do
+        full
+      else
+        saved = %{troops: s.troops, forts: s.forts, resources: s.resources, updated_at_ms: saved_ms}
+        Npc.current(saved, full, at_ms, periods)
+      end
+
+    {npc, s}
   end
 
   # The player's research (capped in this city) as the battle engine's technology.
@@ -1948,6 +2224,9 @@ defmodule Age3.Store.Pg do
       defenderHeroId: c.defender_hero_id,
       taxRate: c.tax_rate,
       comfortAt: c.comfort_at && to_ms(c.comfort_at),
+      historicLevel: c.historic_level,
+      policiesLeft:
+        c.historic_level && Historic.policies_left(c.historic_level, c.policies_used, c.policies_day, now_ms),
       buildings: Enum.map(town, &building_json(&1, busy)),
       fields: Enum.map(fields, &building_json(&1, busy)),
       troops: c.troops,
@@ -2043,6 +2322,7 @@ defmodule Age3.Store.Pg do
       medals: r.medals || %{},
       side: r.side,
       loyalty: r.loyalty,
+      policy: r.policy,
       hero: r.hero,
       read: r.read,
       foughtAt: to_ms(r.fought_at)

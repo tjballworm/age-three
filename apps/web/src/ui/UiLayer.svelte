@@ -7,6 +7,7 @@
   import TooltipLayer from './components/TooltipLayer.svelte';
   import BuildWindow from './windows/BuildWindow.svelte';
   import MarchWindow from './windows/MarchWindow.svelte';
+  import PolicyWindow from './windows/PolicyWindow.svelte';
   import TileWindow from './windows/TileWindow.svelte';
   import WindowHost from './windows/WindowHost.svelte';
 
@@ -42,6 +43,9 @@
     {/if}
     {#if game.marchTarget}
       <MarchWindow target={game.marchTarget} />
+    {/if}
+    {#if game.policyTarget}
+      <PolicyWindow target={game.policyTarget} />
     {/if}
     {#if game.buildSlot !== null}
       <BuildWindow slot={game.buildSlot} />

@@ -1,12 +1,18 @@
 <script lang="ts">
   import {
     FORT_NAME,
+    HISTORIC_FORTIFICATIONS,
+    HISTORIC_RESEARCH,
+    HISTORIC_RESOURCES,
+    HISTORIC_WALLS,
     TROOPS,
     TROOP_DATA,
     TROOPS_PER_RALLY_LEVEL,
     marchFood,
     marchLoad,
     marchSeconds,
+    historicRallyMultiplier,
+    historicSpec,
     npcSpec,
     researchInCity,
     stockAt,
@@ -20,23 +26,31 @@
   import Window from '$ui/components/Window.svelte';
   import { formatDuration, formatNumber } from '$ui/format';
 
-  // Sends an attack from the city on screen to an NPC city or another lord's city: pick the troops and an idle hero, see how long it
-  // takes, the food it eats and what it can carry back, then March. The numbers come from the same rules the
+  // Sends an attack from the city on screen to an NPC city, another lord's city or a historic city: pick the
+  // troops and an idle hero, see how long it takes, the food it eats and what it can carry back, then March. The numbers come from the same rules the
   // server uses (rules/march.ts); the server checks everything again and decides the battle when it arrives.
 
   let { target }: { target: WorldTile } = $props();
 
   const city = $derived(currentCity());
   /** Another lord's city (a player's, or a made-up town): no garrison to show, as there is no scouting yet. */
-  const lord = $derived(target.kind === 'city');
-  const npc = $derived(lord ? null : npcSpec(target.level));
-  const what = $derived(lord ? `${target.name} (${target.owner})` : `the Lv ${target.level} NPC`);
+  const lord = $derived(target.kind === 'city' || !!target.cityId);
+  /** A historic city: its garrison slots (each holds one of its types), ruler, walls and research 10. */
+  const hc = $derived(target.kind === 'historic' && !lord ? historicSpec(target.level) : undefined);
+  const npc = $derived(target.kind === 'npc' ? npcSpec(target.level) : undefined);
+  const what = $derived(
+    lord ? `${target.name} (${target.owner})` : hc ? `${target.name}` : `the Lv ${target.level} NPC`,
+  );
+  const hcLoot = Object.values(HISTORIC_RESOURCES).reduce((n, v) => n + v, 0);
   const rally = $derived(city.buildings.find((b) => b.type === 'rallyspot')?.level ?? 0);
   const academy = $derived(city.buildings.find((b) => b.type === 'academy')?.level ?? 0);
   const research = $derived(researchInCity(game.player.research, academy));
   const home = $derived(TROOPS.filter((t) => (city.troops?.[t] ?? 0) > 0));
   const idle = $derived((city.heroes ?? []).filter((h) => h.status === 'idle'));
-  const limit = $derived(rally * TROOPS_PER_RALLY_LEVEL);
+  /** A historic city you hold sends more (1.25x to 3x). */
+  const limit = $derived(
+    Math.floor(rally * TROOPS_PER_RALLY_LEVEL * historicRallyMultiplier(city.historicLevel)),
+  );
 
   let counts = $state<Partial<Record<TroopType, number>>>({});
   let heroId = $state('');
@@ -114,7 +128,7 @@
 </script>
 
 <Window
-  title={lord
+  title={lord || hc
     ? `Attack ${target.name} (${target.x},${target.y})`
     : `Attack Lv ${target.level} NPC (${target.x},${target.y})`}
   width={760}
@@ -195,6 +209,42 @@
           Scouting isn't built yet, so you can't see this lord's troops. With the gate closed only the walls
           defend; open, the whole garrison fights. A win plunders what the warehouses don't protect and takes
           3 loyalty. A win when loyalty is already 0 captures the city.
+        </p>
+      {:else if hc}
+        <h3>{target.name} <span class="note">Lv {target.level} historic city · when full</span></h3>
+        <table>
+          <tbody>
+            {#each hc.garrison as slot, i (i)}
+              <tr>
+                <td class="name">{slot.types.map((t) => TROOP_DATA[t].name).join(' or ')}</td>
+                <td
+                  >{slot.counts
+                    ? slot.types.map((t) => formatNumber(slot.counts?.[t] ?? slot.count)).join(' / ')
+                    : formatNumber(slot.count)}</td
+                >
+              </tr>
+            {/each}
+            {#each Object.entries(HISTORIC_FORTIFICATIONS) as [f, n] (f)}
+              <tr
+                ><td class="name">{FORT_NAME[f as keyof typeof FORT_NAME]}</td><td>{formatNumber(n ?? 0)}</td
+                ></tr
+              >
+            {/each}
+            <tr><td class="name">Walls</td><td>Lv {HISTORIC_WALLS}</td></tr>
+            <tr><td class="name">Research</td><td>Lv {HISTORIC_RESEARCH}</td></tr>
+            <tr
+              ><td class="name">Ruler</td><td
+                >Lv {hc.ruler.level} · ATK {hc.ruler.attack} · INT {hc.ruler.intelligence}</td
+              ></tr
+            >
+            <tr><td class="name">Resources</td><td>{formatNumber(hcLoot)}</td></tr>
+          </tbody>
+        </table>
+        <p class="note">
+          Where a row lists two or three troop types, this city holds one of them (picked again every day).
+          Each win takes 3 of its 100 loyalty, which climbs back a point every 3 minutes; a win at loyalty 0
+          captures it. Killing 5% of its garrison in one battle, won or lost, rolls for a Justice and a Nation
+          Medal. After a battle it refills over a day, and at 00:00 UTC it is full again.
         </p>
       {:else}
         <h3>Lv {target.level} NPC garrison <span class="note">when full</span></h3>

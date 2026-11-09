@@ -28,6 +28,33 @@ defmodule Age3.Game do
     end
   end
 
+  # the 16 states' Lv 16 capitals, row by row from the top left (STATES in packages/core/src/world/states.ts)
+  @capitals [
+              "Washington D.C.",
+              "Beijing",
+              "Loyang",
+              "Moscow",
+              "Prague",
+              "Berlin",
+              "Vienna",
+              "London",
+              "Paris"
+            ] ++
+              ["Rome", "Athens", "Cairo", "Ottawa", "Jerusalem", "Canberra", "Islamabad"]
+
+  @doc "The state (0-15, row by row from the top left) a tile on the map belongs to."
+  def state_at(x, y), do: div(Integer.mod(y, 800), 200) * 4 + div(Integer.mod(x, 800), 200)
+
+  @doc "The historic city's name at (x, y), as the map shows it (historicCityAt), or nil."
+  def historic_name(x, y) do
+    case historic_level(x, y) do
+      nil -> nil
+      18 -> "Atlantis"
+      16 -> Enum.at(@capitals, state_at(x, y))
+      _ -> "Historic City"
+    end
+  end
+
   @empty_lv14 [{693, 759}, {759, 759}]
   @lv12_clearance 9
 

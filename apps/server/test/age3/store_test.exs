@@ -678,6 +678,140 @@ defmodule Age3.Store.PgTest do
       assert lord.resources == Map.new(full["resources"], fn {k, v} -> {k, v - loot[k]} end)
     end
 
+    test "a historic city fights with its own garrison, ruler and fortifications" do
+      {id, city_id, hero_id, _npc, now} = warlord("Pilgrim")
+      city = Age3.Repo.get!(Age3.City, city_id)
+
+      {x, y} =
+        for(d <- 1..80, dx <- -d..d, dy <- [-d, d], do: {city.x + dx, city.y + dy})
+        |> Enum.map(fn {x, y} -> {Integer.mod(x, 800), Integer.mod(y, 800)} end)
+        |> Enum.find(fn {x, y} -> Age3.World.tile_at(x, y) == %{kind: "historic", level: 12} end)
+
+      assert {:ok, arrives} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 5000}, now)
+      {:ok, _, _, [out]} = Pg.state(id, now)
+      assert out.label == "Attack on Historic City (#{x},#{y})"
+
+      # 5,000 cavalry against over a million troops: lost, nothing taken; the hero walks home alone
+      {:ok, _, [home], [%{march: %{phase: "back", troops: troops}}]} = Pg.state(id, arrives)
+      assert home.troops["cavalry"] == 0 and troops == %{}
+      assert [%{id: report_id, won: false, loot: loot, title: title}] = Pg.reports(id)
+      assert title == "Defeat against Historic City (#{x},#{y})"
+      assert loot == %{}
+
+      {:ok, %{result: r}} = Pg.report(id, report_id)
+      full = Age3.Historic.full(x, y, 12, Age3.Historic.day(arrives))
+      defenders = Map.new(r["defender"]["troops"], &{&1["type"], &1["initial"]})
+      assert Map.take(defenders, Map.keys(full["troops"])) == full["troops"]
+
+      hc = Age3.Repo.get_by!(Age3.NpcState, x: x, y: y)
+      assert hc.level == 12
+      assert hc.forts != full["forts"]
+    end
+
+    # the nearest free Lv 12 historic city to the city
+    defp nearest_historic(city_id) do
+      city = Age3.Repo.get!(Age3.City, city_id)
+
+      for(d <- 1..80, dx <- -d..d, dy <- [-d, d], do: {city.x + dx, city.y + dy})
+      |> Enum.map(fn {x, y} -> {Integer.mod(x, 800), Integer.mod(y, 800)} end)
+      |> Enum.find(fn {x, y} -> Age3.World.tile_at(x, y) == %{kind: "historic", level: 12} end)
+    end
+
+    defp set_historic(id, city_id, x, y, loyalty, now) do
+      {:ok, args} =
+        Age3.Cheats.parse("setHistoric", %{"x" => x, "y" => y, "loyalty" => loyalty, "empty" => true})
+
+      {:ok, ^id} = Pg.cheat(id, {:city, city_id}, "setHistoric", args, now)
+      # a second each way, so it has no time to refill
+      {:ok, ^id} = Pg.cheat(id, {:city, city_id}, "instantMarch", %{on: true}, now)
+    end
+
+    test "a win takes 3 of a historic city's loyalty, which climbs back a point every 3 minutes" do
+      {id, city_id, hero_id, _npc, now} = warlord("Sieger")
+      {x, y} = nearest_historic(city_id)
+      set_historic(id, city_id, x, y, 50, now)
+      {:ok, arrives} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 5000}, now)
+      {:ok, _, [_], [_back]} = Pg.state(id, arrives)
+      assert [%{won: true, loyalty: loyalty}] = Pg.reports(id)
+      before = Age3.Historic.loyalty(50, now, arrives)
+      assert loyalty == %{"before" => before, "after" => before - 3, "captured" => false}
+      assert Age3.Repo.get_by!(Age3.NpcState, x: x, y: y).loyalty == before - 3
+    end
+
+    test "a win at loyalty 0 captures a historic city: a new city with its name, Town Hall 10 and four fields" do
+      {id, city_id, hero_id, _npc, now} = warlord("Conqueror")
+      {x, y} = nearest_historic(city_id)
+      {:error, "bad_message"} = Age3.Cheats.parse("setHistoric", %{"x" => x + 1, "y" => y, "loyalty" => 0})
+      set_historic(id, city_id, x, y, 0, now)
+      {:ok, arrives} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 5000}, now)
+      {:ok, _, cities, [_back]} = Pg.state(id, arrives)
+
+      assert [%{title: title, loyalty: %{"before" => 0, "captured" => true}}] = Pg.reports(id)
+      assert title == "Captured Historic City (#{x},#{y})"
+      hc = Enum.find(cities, &(&1.x == x and &1.y == y))
+      assert %{name: "Historic City", historicLevel: 12, policiesLeft: 4, troops: %{}} = hc
+      assert Enum.sort(Enum.map(hc.buildings, &{&1.type, &1.level})) == [{"townhall", 10}, {"walls", 10}]
+      assert Enum.sort(Enum.map(hc.fields, & &1.type)) == ~w(farm ironmine quarry sawmill)
+      assert_in_delta hc.resources["gold"]["amount"], 5000, 50
+
+      # now it is a player city on the map, attacked like any other
+      assert [%{historicLevel: 12, x: ^x, y: ^y}] =
+               Pg.lords(Ecto.UUID.generate())
+               |> Enum.filter(&(&1.historicLevel == 12 and &1.x == x and &1.y == y))
+
+      # policies: an Earl and above, on another lord's city in range, four a day
+      {other, other_city, _} = general("Vassal")
+      {nx, ny} = {Integer.mod(x + 5, 800), Integer.mod(y - 3, 800)}
+
+      move = fn cx, cy ->
+        Age3.City |> Age3.Repo.get!(other_city) |> Ecto.Changeset.change(x: cx, y: cy) |> Age3.Repo.update!()
+      end
+
+      move.(nx, ny)
+      {:ok, _, [target], _} = Pg.state(other, arrives)
+      gold = target.resources["gold"]["amount"]
+      assert {:error, "title_too_low"} = Pg.impose_policy(id, hc.id, nx, ny, "tax", arrives)
+      {:ok, ^id} = Pg.cheat(id, {:city, city_id}, "setTitle", %{changes: [title: "earl"]}, arrives)
+      assert {:error, "not_historic"} = Pg.impose_policy(id, city_id, nx, ny, "tax", arrives)
+      assert {:error, "bad_target"} = Pg.impose_policy(id, hc.id, x + 50, y, "tax", arrives)
+      assert :ok = Pg.impose_policy(id, hc.id, nx, ny, "tax", arrives)
+      {:ok, _, [target], _} = Pg.state(other, arrives)
+      assert_in_delta target.resources["gold"]["amount"], gold - floor(gold * 0.3), 1
+      {:ok, _, cities, _} = Pg.state(id, arrives)
+      held = Enum.find(cities, &(&1.id == hc.id))
+      assert held.policiesLeft == 3
+      assert held.resources["gold"]["amount"] > hc.resources["gold"]["amount"] + 0.29 * gold
+
+      {:ok, _} =
+        Pg.cheat(
+          other,
+          {:city, other_city},
+          "addTroops",
+          %{troops: %{"archer" => 1000, "warrior" => 10}},
+          arrives
+        )
+
+      assert :ok = Pg.impose_policy(id, hc.id, nx, ny, "draft", arrives)
+      assert :ok = Pg.impose_policy(id, hc.id, nx, ny, "disarm", arrives)
+      assert :ok = Pg.impose_policy(id, hc.id, nx, ny, "food", arrives)
+      assert {:error, "no_policies_left"} = Pg.impose_policy(id, hc.id, nx, ny, "population", arrives)
+      {:ok, _, [target], _} = Pg.state(other, arrives)
+      # 1,000 - 50 drafted - 95 disarmed
+      assert target.troops["archer"] == 855
+      {:ok, _, cities, _} = Pg.state(id, arrives)
+      assert Enum.find(cities, &(&1.id == hc.id)).troops == %{"archer" => 50}
+
+      assert Pg.reports(other) |> Enum.map(&{&1.side, &1.policy["policy"]}) |> Enum.sort() ==
+               [{"policied", "disarm"}, {"policied", "draft"}, {"policied", "food"}, {"policied", "tax"}]
+
+      # the next day there are four again
+      tomorrow = (Age3.Historic.day(arrives) + 1) * 86_400_000 + 1
+      assert :ok = Pg.impose_policy(id, hc.id, nx, ny, "population", tomorrow)
+      # out of range
+      move.(Integer.mod(x + 10, 800), y)
+      assert {:error, "out_of_range"} = Pg.impose_policy(id, hc.id, x + 10, y, "tax", tomorrow)
+    end
+
     test "instant march cheat: a second each way; errors" do
       {id, city_id, hero_id, {x, y}, now} = warlord("Flash")
       {:ok, _, [home], _} = Pg.state(id, now)

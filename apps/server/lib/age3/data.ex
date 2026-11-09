@@ -1,8 +1,8 @@
 defmodule Age3.Data do
   # Building, research and troop costs, times and requirements. priv/data/buildings.json, research.json,
-  # troops.json, npcs.json, medals.json and titles.json are copies of the files in packages/core/src/data: npm run
-  # sync-data at the repo root keeps them equal, and a web test fails if they differ. So the client shows exactly
-  # what the server charges.
+  # troops.json, npcs.json, historic-cities.json, medals.json and titles.json are copies of the files in
+  # packages/core/src/data: npm run sync-data at the repo root keeps them equal, and a web test fails if they
+  # differ. So the client shows exactly what the server charges.
   #
   # The files are read once at compile time and baked into this module; @external_resource makes mix recompile
   # the module whenever they change.
@@ -28,6 +28,10 @@ defmodule Age3.Data do
   @external_resource @medals_path
   @medals @medals_path |> File.read!() |> Jason.decode!()
 
+  @historic_path Path.expand("../../priv/data/historic-cities.json", __DIR__)
+  @external_resource @historic_path
+  @historic @historic_path |> File.read!() |> Jason.decode!()
+
   @titles_path Path.expand("../../priv/data/titles.json", __DIR__)
   @external_resource @titles_path
   @titles @titles_path |> File.read!() |> Jason.decode!()
@@ -40,6 +44,9 @@ defmodule Age3.Data do
     do: Enum.at(@medals["drops"]["npc"], level - 1)
 
   def npc_medal_drops(_level), do: %{}
+
+  @doc "Chance of each medal for a qualifying battle against a historic city (any level), e.g. %{\"justice\" => 0.4}."
+  def historic_medal_drops, do: @medals["drops"]["historic"]
 
   @doc "Ranks, lowest (civilian) first: maps with id, name, gold, townHall, medals and prestigeAward."
   def ranks, do: @titles["ranks"]
@@ -57,6 +64,27 @@ defmodule Age3.Data do
   end
 
   def npc(_level), do: nil
+
+  @doc """
+  A historic city of this level (12, 14, 16 or 18) from historic-cities.json, or nil: %{"ruler", "garrison",
+  "walls", "research", "forts", "resources"}. garrison is the file's list of slots (%{"types", "count", "counts"}).
+  """
+  def historic(level) do
+    case Enum.find(@historic["cities"], &(&1["level"] == level)) do
+      nil ->
+        nil
+
+      c ->
+        %{
+          "ruler" => c["ruler"],
+          "garrison" => c["garrison"],
+          "walls" => @historic["walls"],
+          "research" => @historic["research"],
+          "forts" => @historic["fortifications"],
+          "resources" => @historic["resources"]
+        }
+    end
+  end
 
   @doc "Seconds an NPC takes to refill its garrison and fortifications, and its resources, from empty."
   def npc_regen_seconds, do: {@npcs["garrisonRegenSeconds"], @npcs["resourceRegenSeconds"]}

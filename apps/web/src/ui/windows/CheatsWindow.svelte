@@ -91,6 +91,11 @@
   let loyalty = $state<number | null>(null);
   let grievance = $state<number | null>(null);
   const pct = (n: number | null) => Math.min(100, Math.max(0, whole(n)));
+
+  // a free historic city's loyalty and garrison (Atlantis by default)
+  let hcX = $state(0);
+  let hcY = $state(0);
+  let hcLoyalty = $state(0);
   function setLoyalty() {
     const a: { action: 'setLoyalty'; loyalty?: number; grievance?: number } = { action: 'setLoyalty' };
     if (loyalty !== null) a.loyalty = pct(loyalty);
@@ -411,6 +416,33 @@
             >Instant march: OFF (turn on)</Button
           >
         {/if}
+      </div>
+    </section>
+
+    <section>
+      <h3>Historic city <span class="note">one nobody holds, at x, y (Atlantis is 0, 0)</span></h3>
+      <div class="row">
+        <input type="number" aria-label="Historic city x" bind:value={hcX} />
+        <input type="number" aria-label="Historic city y" bind:value={hcY} />
+        <input type="number" min="0" max="100" aria-label="Historic city loyalty" bind:value={hcLoyalty} />
+        <Button
+          variant="blue"
+          disabled={!game.fromServer || sending}
+          onclick={() =>
+            cheat(
+              { action: 'setHistoric', x: whole(hcX), y: whole(hcY), loyalty: pct(hcLoyalty) },
+              `historic city's loyalty set to ${pct(hcLoyalty)}`,
+            )}>Set loyalty</Button
+        >
+        <Button
+          variant="blue"
+          disabled={!game.fromServer || sending}
+          onclick={() =>
+            cheat(
+              { action: 'setHistoric', x: whole(hcX), y: whole(hcY), empty: true },
+              'historic city emptied',
+            )}>Empty garrison</Button
+        >
       </div>
     </section>
 

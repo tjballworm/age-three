@@ -60,6 +60,8 @@ export const game = $state({
   selectedTile: null as WorldTile | null,
   /** NPC tile the March window is sending an attack to. */
   marchTarget: null as WorldTile | null,
+  /** Another lord's city the Policies window imposes a policy on (from one of your historic cities). */
+  policyTarget: null as WorldTile | null,
   /** Game server connection. While not online the game shows sample data. */
   connection: 'offline' as ConnectionStatus,
   /** True once the player and cities came from the server rather than sample data. */
@@ -128,12 +130,19 @@ export function selectTile(tile: WorldTile | null) {
     game.openWindow = null;
     game.buildSlot = null;
     game.marchTarget = null;
+    game.policyTarget = null;
   }
 }
 
 /** Opens the March window to attack this tile (closing the tile's window), or closes it with null. */
 export function openMarch(tile: WorldTile | null) {
   game.marchTarget = tile;
+  if (tile) game.selectedTile = null;
+}
+
+/** Opens the Policies window for this lord's city (closing the tile's window), or closes it with null. */
+export function openPolicy(tile: WorldTile | null) {
+  game.policyTarget = tile;
   if (tile) game.selectedTile = null;
 }
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { distance, stateAt, type WorldTile } from '@age3/core';
-  import { currentCity, game, openMarch, selectTile } from '$state/game.svelte';
+  import { currentCity, game, openMarch, openPolicy, selectTile } from '$state/game.svelte';
   import Button from '$ui/components/Button.svelte';
   import Window from '$ui/components/Window.svelte';
   import { KIND_LABEL, tileTitle } from '$ui/tile';
@@ -13,9 +13,20 @@
     here ? 'This is your current city' : `${distance(from, tile).toFixed(1)} tiles from ${from.name}`,
   );
 
-  // Actions per tile type. Entering your city and attacking NPCs and lords' cities work; the rest are placeholders.
+  // Actions per tile type. Entering your city, attacking NPCs, lords' cities and historic cities, and imposing
+  // policies from a historic city you hold work; the rest are placeholders.
   const actions = $derived.by((): { label: string; hint: string }[] => {
-    if (tile.mine) return [{ label: 'Enter City', hint: 'Open this city in Town view' }];
+    if (tile.mine)
+      return [
+        {
+          label: 'Enter City',
+          hint:
+            tile.kind === 'historic'
+              ? "Open this historic city in Town view. Impose policies from another lord's city tile."
+              : 'Open this city in Town view',
+        },
+      ];
+    const policy = { label: 'Impose Policy', hint: 'Take from this city with a historic city you hold' };
     switch (tile.kind) {
       case 'valley':
         return [
@@ -25,14 +36,24 @@
       case 'flat':
         return [{ label: 'Found City', hint: 'Build a new city here' }];
       case 'npc':
-      case 'historic':
         return [
           { label: 'Scout', hint: 'See the NPC garrison' },
-          {
-            label: 'Attack',
-            hint: tile.kind === 'npc' ? 'Send troops to plunder the NPC city' : 'Historic cities come later',
-          },
+          { label: 'Attack', hint: 'Send troops to plunder the NPC city' },
         ];
+      case 'historic':
+        return tile.cityId
+          ? [
+              { label: 'Scout', hint: "See this lord's troops and resources" },
+              { label: 'Attack', hint: 'Plunder it and lower its loyalty; at loyalty 0 a win captures it' },
+              policy,
+            ]
+          : [
+              { label: 'Scout', hint: 'See the garrison' },
+              {
+                label: 'Attack',
+                hint: 'Wear down its garrison; each win takes 3 loyalty and a win at loyalty 0 captures it',
+              },
+            ];
       case 'city':
         return [
           { label: 'Scout', hint: "See this lord's troops and resources" },
@@ -42,6 +63,7 @@
               ? 'Plunder it and lower its loyalty; at loyalty 0 a win captures it'
               : "Plunder this lord's town (it can't be captured)",
           },
+          ...(tile.cityId ? [policy] : []),
         ];
     }
   });
@@ -62,7 +84,7 @@
       <tbody>
         <tr><th>Type</th><td>{KIND_LABEL[tile.kind]}</td></tr>
         {#if tile.kind !== 'flat'}<tr><th>Level</th><td>{tile.level}</td></tr>{/if}
-        {#if tile.kind === 'city'}
+        {#if tile.kind === 'city' || tile.owner}
           <tr><th>Lord</th><td>{tile.owner}{tile.mine ? ' (you)' : ''}</td></tr>
           <tr><th>Alliance</th><td>{tile.alliance ?? '—'}</td></tr>
         {/if}
@@ -82,8 +104,12 @@
           </div>
           {#if a.label === 'Enter City'}
             <Button onclick={enterCity}>{a.label}</Button>
-          {:else if a.label === 'Attack' && (tile.kind === 'npc' || tile.kind === 'city')}
+          {:else if a.label === 'Attack'}
             <Button variant="red" disabled={!game.fromServer} onclick={() => openMarch(tile)}
+              >{a.label}</Button
+            >
+          {:else if a.label === 'Impose Policy'}
+            <Button variant="blue" disabled={!game.fromServer} onclick={() => openPolicy(tile)}
               >{a.label}</Button
             >
           {:else}

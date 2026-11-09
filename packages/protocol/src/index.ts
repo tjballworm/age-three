@@ -8,6 +8,7 @@ import type {
   LordCity,
   MedalCounts,
   Player,
+  PolicyId,
   ReportSummary,
   ResourceType,
   TechId,
@@ -94,6 +95,14 @@ export type MarchMessage = Envelope<
 >;
 /** Turn a march around before it arrives; it takes as long to come home as it has been out. Replies with state. */
 export type RecallMessage = Envelope<'recall', { cityId: string; taskId: string }>;
+/**
+ * A historic city you hold (cityId) imposes a policy on another lord's city at x, y in its draft area
+ * (historicInRange); needs the Earl title or above and a use left today (policiesLeft). Replies with state.
+ */
+export type ImposePolicyMessage = Envelope<
+  'imposePolicy',
+  { cityId: string; x: number; y: number; policy: PolicyId }
+>;
 /** The latest battle reports, newest first. Replies with `reports`. */
 export type GetReportsMessage = Envelope<'getReports', Record<string, never>>;
 /** One report with the whole battle; marks it read. Replies with `report`. */
@@ -167,7 +176,9 @@ export type CheatAction =
   /** Adds medals to the player (negative takes away, never below 0). */
   | { action: 'addMedals'; medals: MedalCounts }
   /** The player's rank and/or title (ids from RANKS / TITLES), set straight with nothing paid. */
-  | { action: 'setTitle'; rank?: string; title?: string };
+  | { action: 'setTitle'; rank?: string; title?: string }
+  /** A free historic city at x, y: set its loyalty (0-100) and/or empty its garrison and fortifications. */
+  | { action: 'setHistoric'; x: number; y: number; loyalty?: number; empty?: boolean };
 
 export type ClientMessage =
   | LoginMessage
@@ -192,6 +203,7 @@ export type ClientMessage =
   | SetGateMessage
   | MarchMessage
   | RecallMessage
+  | ImposePolicyMessage
   | GetReportsMessage
   | GetReportMessage
   | PromoteMessage
@@ -225,7 +237,8 @@ export type StateMessage = Envelope<'state', GameState>;
 export type TaskDoneMessage = Envelope<'taskDone', GameState & { task: TimedTask }>;
 export type ErrorMessage = Envelope<'error', { code: ErrorCode; message: string }>;
 export type ReportsMessage = Envelope<'reports', { reports: ReportSummary[] }>;
-export type ReportMessage = Envelope<'report', { report: ReportSummary & { result: BattleResult } }>;
+/** result is null for a policy report (no battle). */
+export type ReportMessage = Envelope<'report', { report: ReportSummary & { result: BattleResult | null } }>;
 
 export type ServerMessage =
   | WelcomeMessage
@@ -290,8 +303,16 @@ export type ErrorCode =
   | 'no_hero'
   /** a setHero cheat for a hero that isn't in the target's cities */
   | 'hero_not_found'
-  /** only NPC cities can be attacked for now */
+  /** nothing that can be attacked there (or no lord's city there for a policy) */
   | 'bad_target'
+  /** a policy from a city that isn't a historic city you hold */
+  | 'not_historic'
+  /** a policy without the Earl title or above */
+  | 'title_too_low'
+  /** a policy on a city outside the historic city's draft area */
+  | 'out_of_range'
+  /** a historic city that has used all its policies today (they come back at 00:00 UTC) */
+  | 'no_policies_left'
   /** recall on a march already coming home */
   | 'already_returning'
   /** a promotion without the medals it needs */

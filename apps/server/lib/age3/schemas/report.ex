@@ -19,6 +19,9 @@ defmodule Age3.Report do
     # a player city's loyalty: %{"before", "after", "captured"}; nil for NPC battles
     field :loyalty, :map
     field :hero, :map
+
+    # a policy report (side "policy" or "policied"): %{"policy", "from", "to", "taken"}; no battle, so no result
+    field :policy, :map
     field :result, :map
     field :read, :boolean, default: false
     field :fought_at, :utc_datetime_usec
