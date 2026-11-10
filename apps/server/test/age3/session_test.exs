@@ -188,6 +188,7 @@ defmodule Age3.SessionTest do
     assert [
              _,
              %{"type" => "state"},
+             %{"type" => "state"},
              %{"type" => "error", "payload" => %{"code" => "bad_target", "message" => target}},
              %{"type" => "error", "payload" => %{"code" => "bad_message"}},
              %{"type" => "state"},
@@ -199,6 +200,7 @@ defmodule Age3.SessionTest do
              run([
                login("secret123"),
                msg.("march", send),
+               msg.("march", Map.put(send, :camp, 30)),
                msg.("march", %{send | x: 11}),
                msg.("march", Map.delete(send, :heroId)),
                msg.("recall", %{cityId: "c1", taskId: "m1"}),
@@ -210,6 +212,8 @@ defmodule Age3.SessionTest do
 
     assert target =~ "NPC"
     assert_received {:wake, 61_000}
+    # the camp wave delays the attack
+    assert_received {:wake, 91_000}
     assert_received {:wake, 31_000}
   end
 

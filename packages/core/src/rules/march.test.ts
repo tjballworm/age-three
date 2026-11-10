@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { marchFood, marchLoad, marchSeconds, tilesPerHour } from './march';
+import { campSeconds, marchFood, marchLoad, marchSeconds, maxMarches, tilesPerHour } from './march';
 
 // The same numbers as apps/server/test/age3/march_test.exs, so client and server agree.
 describe('marches', () => {
@@ -16,5 +16,13 @@ describe('marches', () => {
     expect(marchFood({ warrior: 100_000 }, 3600)).toBe(200);
     expect(marchLoad({ warrior: 100 }, {})).toBe(2000);
     expect(marchLoad({ warrior: 100 }, { logistics: 5 })).toBe(3000);
+  });
+
+  it('a camp wave eats food too; one march out per Rally Spot level', () => {
+    expect(marchFood({ warrior: 100_000 }, 3600, 1800)).toBe(250);
+    expect(campSeconds(1, 2, 3)).toBe(3723);
+    expect(campSeconds(-1, 1.7, NaN)).toBe(60);
+    expect(maxMarches(0)).toBe(0);
+    expect(maxMarches(3)).toBe(3);
   });
 });

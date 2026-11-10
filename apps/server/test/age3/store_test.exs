@@ -579,7 +579,8 @@ defmodule Age3.Store.PgTest do
 
       # fewer troops at home eat less
       assert city.resources["food"]["perHour"] > food["perHour"]
-      assert {:error, "hero_busy"} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 1}, now)
+      # a Rally Spot Lv1 has one march out at a time (and the hero is busy too)
+      assert {:error, "too_many_marches"} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 1}, now)
 
       # arrived: the battle is won, the NPC is emptied and the march turns home
       {:ok, player, [city], [back]} = Pg.state(id, arrives)
@@ -810,6 +811,43 @@ defmodule Age3.Store.PgTest do
       # out of range
       move.(Integer.mod(x + 10, 800), y)
       assert {:error, "out_of_range"} = Pg.impose_policy(id, hc.id, x + 10, y, "tax", tomorrow)
+    end
+
+    test "one march out per Rally Spot level; a camp wave delays the attack and recall comes back at most a trip" do
+      {id, city_id, hero_id, {x, y}, now} = warlord("Camper")
+
+      second =
+        Age3.Repo.insert!(%Age3.Hero{
+          city_id: city_id,
+          name: "Paris",
+          level: 1,
+          politics: 1,
+          attack: 1,
+          intelligence: 1
+        })
+
+      {:ok, _, [before], _} = Pg.state(id, now)
+      assert {:ok, arrives} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 100}, now, 600)
+      {:ok, _, [city], [task]} = Pg.state(id, now)
+      seconds = task.march.seconds
+      assert task.march.camp == 600
+      assert arrives == now + (seconds + 600) * 1000
+      # the food covers the camp wave too
+      assert_in_delta city.resources["food"]["amount"],
+                      before.resources["food"]["amount"] - Age3.March.food(%{"cavalry" => 100}, seconds, 600),
+                      1
+
+      # the general's Rally Spot is Lv1: one march at a time, the way home included
+      assert {:error, "too_many_marches"} = Pg.march(id, city_id, x, y, second.id, %{"cavalry" => 1}, now)
+
+      # recalled while camping, it comes home in one trip's time, not the time it has been out
+      camping = now + (seconds + 300) * 1000
+      assert {:ok, home} = Pg.recall(id, city_id, task.id, camping)
+      assert home == camping + seconds * 1000
+      assert {:error, "too_many_marches"} = Pg.march(id, city_id, x, y, second.id, %{"cavalry" => 1}, camping)
+      {:ok, _, _, []} = Pg.state(id, home)
+      assert {:ok, _} = Pg.march(id, city_id, x, y, second.id, %{"cavalry" => 1}, home)
+      assert {:error, "bad_message"} = Pg.march(id, city_id, x, y, hero_id, %{"cavalry" => 1}, home, -5)
     end
 
     test "instant march cheat: a second each way; errors" do

@@ -12,6 +12,23 @@ export const MARCH_SPEED = 5;
 /** A Rally Spot sends at most this many troops per level. */
 export const TROOPS_PER_RALLY_LEVEL = 10_000;
 
+/** The longest camp wave a march can wait at its target before attacking, in seconds (24 hours). */
+export const MAX_CAMP_SECONDS = 24 * 3600;
+
+/**
+ * How many marches a city can have out at once (on the way there, camping or coming home): one per Rally Spot
+ * level (TJ, 2026-11-09).
+ */
+export function maxMarches(rallyLevel: number): number {
+  return Math.max(0, rallyLevel);
+}
+
+/** A camp wave of hours, minutes and seconds in seconds, each part a whole number of at least 0. */
+export function campSeconds(hours: number, minutes: number, seconds: number): number {
+  const part = (n: number) => Math.max(0, Math.trunc(Number.isFinite(n) ? n : 0));
+  return part(hours) * 3600 + part(minutes) * 60 + part(seconds);
+}
+
 type Research = Partial<Record<string, number>>;
 type Army = Partial<Record<TroopType, number>>;
 const lv = (research: Research, tech: string) => research[tech] ?? 0;
@@ -35,9 +52,12 @@ export function marchSeconds(from: Coord, to: Coord, troops: Army, research: Res
   return Math.max(1, Math.ceil((distance(from, to) / slowest) * 3600));
 }
 
-/** Food the army eats there and back, paid when it leaves: its upkeep per hour x the round trip, rounded up. */
-export function marchFood(troops: Army, seconds: number): number {
-  return Math.ceil((upkeep(troops) * 2 * seconds) / 3600);
+/**
+ * Food the army eats there and back, paid when it leaves: its upkeep per hour x (the round trip + the camp wave it
+ * waits at the target), rounded up.
+ */
+export function marchFood(troops: Army, seconds: number, camp = 0): number {
+  return Math.ceil((upkeep(troops) * (2 * seconds + camp)) / 3600);
 }
 
 /** Resources the army can carry back: each troop's load, +10% per Logistics level, rounded down. */
