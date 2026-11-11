@@ -171,4 +171,51 @@ defmodule Age3.Heroes do
   """
   def politics_bonus(nil), do: %{}
   def politics_bonus(politics), do: Map.new(~w(food lumber stone iron), &{&1, max(0, politics)})
+
+  @doc """
+  A mayor's stat applied to a task's time (wiki, Stats): construction and fortifications x0.995 per Politics
+  point, research x0.995 per Intelligence point, training x0.9986 per Attack point (the Age II rate). mayor is
+  the city's mayor or nil. At least 1 second.
+  """
+  def mayor_seconds(seconds, nil, _kind), do: seconds
+  def mayor_seconds(seconds, mayor, :build), do: speed(seconds, 0.995, mayor.politics)
+  def mayor_seconds(seconds, mayor, :research), do: speed(seconds, 0.995, mayor.intelligence)
+  def mayor_seconds(seconds, mayor, :train), do: speed(seconds, 0.9986, mayor.attack)
+
+  defp speed(seconds, rate, stat), do: max(1, round(seconds * :math.pow(rate, max(0, stat || 0))))
+
+  @doc """
+  Spends a hero's unspent points: add is %{"politics" => n, "attack" => n, "intelligence" => n} (any left out
+  are 0), each a whole number 0 or more, at most points in all. Returns {:ok, changes} for the hero's row, or
+  {:error, "bad_message"} / {:error, "not_enough_points"}.
+  """
+  def assign(hero, add) do
+    stats = ~w(politics attack intelligence)
+    adds = for s <- stats, do: Map.get(add, s, 0)
+
+    cond do
+      Enum.any?(Map.keys(add), &(&1 not in stats)) ->
+        {:error, "bad_message"}
+
+      not Enum.all?(adds, &(is_integer(&1) and &1 >= 0)) ->
+        {:error, "bad_message"}
+
+      Enum.sum(adds) == 0 ->
+        {:error, "bad_message"}
+
+      Enum.sum(adds) > hero.points ->
+        {:error, "not_enough_points"}
+
+      true ->
+        [p, a, i] = adds
+
+        {:ok,
+         [
+           points: hero.points - p - a - i,
+           politics: hero.politics + p,
+           attack: hero.attack + a,
+           intelligence: hero.intelligence + i
+         ]}
+    end
+  end
 end

@@ -5,6 +5,7 @@
     fortSeconds,
     fortSpace,
     fortSpaceUsed,
+    mayorSeconds,
     remaining,
     researchInCity,
     settleCity,
@@ -29,6 +30,7 @@
   const GATE_OPENS_AT = 5;
 
   const city = $derived(currentCity());
+  const mayor = $derived(city.heroes?.find((h) => h.status === 'mayor'));
   const loyalty = $derived(settleCity(city, game.syncedAt, clock.now).loyalty);
   const open = $derived(city.gateOpen ?? false);
   const forced = $derived(!open && loyalty <= GATE_OPENS_AT);
@@ -161,7 +163,11 @@
               {#each RESOURCE_TYPES.filter((r) => spec.cost[r]) as r (r)}
                 <span><ResourceIcon type={r} size={14} />{formatNumber(spec.cost[r]!)}</span>
               {/each}
-              <span>⏱ {formatDuration(fortSeconds(f, 1, techLevel(research, 'construction')) * 1000)}</span>
+              <span
+                >⏱ {formatDuration(
+                  mayorSeconds(fortSeconds(f, 1, techLevel(research, 'construction')), mayor, 'build') * 1000,
+                )}</span
+              >
             </td>
             <td class="order">
               {#if why}

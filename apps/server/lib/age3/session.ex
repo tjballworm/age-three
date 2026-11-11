@@ -96,6 +96,7 @@ defmodule Age3.Session do
               "hire",
               "dismiss",
               "setMayor",
+              "assignPoints",
               "march",
               "recall",
               "setGarrison",
@@ -449,6 +450,16 @@ defmodule Age3.Session do
   defp handle("abandonValley", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid valley."), session}
 
+  # Spend a hero's stat points: {cityId, heroId, politics?, attack?, intelligence?}, each a number to add.
+  defp handle("assignPoints", %{"cityId" => city_id, "heroId" => hero_id} = p, id, session)
+       when is_binary(city_id) and is_binary(hero_id) do
+    add = Map.take(p, ~w(politics attack intelligence))
+    command(id, session, &session.store.assign_points(session.player_id, city_id, hero_id, add, &1))
+  end
+
+  defp handle("assignPoints", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid point assignment."), session}
+
   # The hero who leads a city's defence: {cityId, heroId} (null for nobody).
   defp handle("setDefender", %{"cityId" => city_id} = payload, id, session) when is_binary(city_id) do
     hero_id = payload["heroId"]
@@ -485,7 +496,7 @@ defmodule Age3.Session do
        when is_binary(city_id) and ladder in ["rank", "title"] do
     now = session.now.()
 
-    case session.store.promote(session.player_id, city_id, String.to_existing_atom(ladder), now) do
+    case session.store.promote(session.player_id, city_id, if(ladder == "rank", do: :rank, else: :title), now) do
       :ok -> state_reply(id, session, now)
       {:error, code} -> {error(id, code, message(code)), session}
     end
@@ -617,6 +628,7 @@ defmodule Age3.Session do
   defp slot_key(_slot), do: nil
 
   defp message("not_enough_resources"), do: "Not enough resources."
+  defp message("not_enough_points"), do: "The hero doesn't have that many points."
   defp message("no_wall_space"), do: "Not enough fortified space on the walls."
   defp message("fort_queue_full"), do: "The walls' queue is full."
   defp message("comfort_cooldown"), do: "The people were comforted less than 15 minutes ago."

@@ -241,6 +241,18 @@ defmodule Age3.Store do
             ) ::
               :ok | {:error, code :: String.t()}
 
+  @doc """
+  Spends a hero's stat points: add is %{"politics" => n, "attack" => n, "intelligence" => n}. A mayor's new
+  Politics changes the city's production at once.
+  """
+  @callback assign_points(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              hero_id :: String.t(),
+              add :: map,
+              now_ms :: integer
+            ) :: :ok | {:error, code :: String.t()}
+
   @doc "Stops a construction that hasn't finished and refunds its whole cost."
   @callback cancel_build(
               player_id :: String.t(),
@@ -426,6 +438,7 @@ defmodule Age3.Store.Pg do
           if plan.type == "academy" and researching?(city.id), do: Repo.rollback("academy_busy")
 
           save_resources(city, Build.spend(resources, plan.cost), now_ms)
+          seconds = Heroes.mayor_seconds(plan.seconds, mayor_of(city.id), :build)
 
           Repo.insert!(%Task{
             city_id: city.id,
@@ -436,7 +449,7 @@ defmodule Age3.Store.Pg do
             target_level: plan.level,
             cost: plan.cost,
             started_at: now,
-            ends_at: to_datetime(now_ms + plan.seconds * 1000)
+            ends_at: to_datetime(now_ms + seconds * 1000)
           })
 
         {:error, code} ->
@@ -490,6 +503,7 @@ defmodule Age3.Store.Pg do
       case Research.check(buildings, research, resources, tech) do
         {:ok, plan} ->
           save_resources(city, Build.spend(resources, plan.cost), now_ms)
+          seconds = Heroes.mayor_seconds(plan.seconds, mayor_of(city.id), :research)
 
           Repo.insert!(%Task{
             city_id: city.id,
@@ -499,7 +513,7 @@ defmodule Age3.Store.Pg do
             target_level: plan.level,
             cost: plan.cost,
             started_at: now,
-            ends_at: to_datetime(now_ms + plan.seconds * 1000)
+            ends_at: to_datetime(now_ms + seconds * 1000)
           })
 
         {:error, code} ->
@@ -539,6 +553,7 @@ defmodule Age3.Store.Pg do
         {:ok, plan} ->
           save_resources(city, Build.spend(resources, plan.cost), now_ms, plan.population)
           starts_ms = Enum.reduce(queue, now_ms, &max(&2, to_ms(&1.ends_at)))
+          seconds = Heroes.mayor_seconds(plan.seconds, mayor_of(city.id), :train)
 
           Repo.insert!(%Task{
             city_id: city.id,
@@ -549,7 +564,7 @@ defmodule Age3.Store.Pg do
             target_level: count,
             cost: plan.cost,
             started_at: to_datetime(starts_ms),
-            ends_at: to_datetime(starts_ms + plan.seconds * 1000)
+            ends_at: to_datetime(starts_ms + seconds * 1000)
           })
 
         {:error, code} ->
@@ -617,9 +632,11 @@ defmodule Age3.Store.Pg do
     do: cancel(player_id, city_id, task_id, "fort", now_ms)
 
   # The mayor's Politics in a city (0 without a mayor): it speeds up construction (x0.995 per point).
-  defp mayor_politics(city_id),
-    do:
-      Repo.one(from(h in Hero, where: h.city_id == ^city_id and h.status == "mayor", select: h.politics)) || 0
+  defp mayor_politics(city_id), do: (mayor_of(city_id) || %{politics: 0}).politics
+
+  # A city's mayor, or nil: its Politics, Attack and Intelligence speed up the city's builds, training and
+  # research (Heroes.mayor_seconds/3).
+  defp mayor_of(city_id), do: Repo.one(from(h in Hero, where: h.city_id == ^city_id and h.status == "mayor"))
 
   @impl true
   def cancel_train(player_id, city_id, task_id, now_ms),
@@ -904,6 +921,27 @@ defmodule Age3.Store.Pg do
       )
 
       if hero, do: Repo.update_all(from(h in Hero, where: h.id == ^hero.id), set: [status: "mayor"])
+      # the mayor's Politics adds to production
+      resnapshot(city, to_datetime(now_ms))
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def assign_points(player_id, city_id, hero_id, add, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      hero = find_hero(city.id, hero_id) || Repo.rollback("bad_message")
+      if hero.status == "captive", do: Repo.rollback("hero_busy")
+
+      case Heroes.assign(hero, add) do
+        {:ok, changes} -> Repo.update_all(from(h in Hero, where: h.id == ^hero.id), set: changes)
+        {:error, code} -> Repo.rollback(code)
+      end
+
+      if hero.status == "mayor", do: resnapshot(city, to_datetime(now_ms))
     end)
     |> ok()
   end
@@ -1519,7 +1557,9 @@ defmodule Age3.Store.Pg do
     )
 
     Repo.update_all(
-      from(t in Task, where: t.city_id == ^city.id and not fragment("coalesce(?->>'phase', '') = 'stationed'", t.data)),
+      from(t in Task,
+        where: t.city_id == ^city.id and not fragment("coalesce(?->>'phase', '') = 'stationed'", t.data)
+      ),
       set: [ends_at: now]
     )
 

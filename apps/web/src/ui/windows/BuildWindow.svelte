@@ -13,6 +13,7 @@
     techLevel,
     type BuildingType,
     type TechId,
+    mayorSeconds,
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game, openBuild, type BuildSlot } from '$state/game.svelte';
@@ -34,6 +35,7 @@
   let { slot }: { slot: BuildSlot } = $props();
 
   const city = $derived(currentCity());
+  const mayor = $derived(city.heroes?.find((h) => h.status === 'mayor'));
   const isField = $derived(typeof slot === 'string' && slot.startsWith('f'));
   /** The slot as the server names it, which is how tasks refer to it. */
   const key = $derived(String(slot));
@@ -169,7 +171,8 @@
       {#each RESOURCE_TYPES.filter((r) => lv.cost[r] > 0) as r (r)}
         <span><ResourceIcon type={r} size={14} /> {formatNumber(lv.cost[r])}</span>
       {/each}
-      <span>⏱ {formatDuration(buildSeconds(lv.seconds, research) * 1000)}</span>
+      <span>⏱ {formatDuration(mayorSeconds(buildSeconds(lv.seconds, research), mayor, 'build') * 1000)}</span
+      >
     </span>
   {/if}
 {/snippet}

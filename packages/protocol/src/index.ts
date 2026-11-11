@@ -68,6 +68,15 @@ export type TrainMessage = Envelope<
 /** Stop a training batch (running or waiting) and get its cost and people back. The reply is a `state` message. */
 export type CancelTrainMessage = Envelope<'cancelTrain', { cityId: string; taskId: string }>;
 /**
+ * Spend a hero's stat points (from levelling up): each field is how many to add to that stat, all of them at most
+ * the hero's `points`. A mayor's Politics adds 1% production per point and speeds up building (x0.995 per point),
+ * Attack speeds up training (x0.9986), Intelligence research (x0.995). The reply is a `state` message.
+ */
+export type AssignPointsMessage = Envelope<
+  'assignPoints',
+  { cityId: string; heroId: string; politics?: number; attack?: number; intelligence?: number }
+>;
+/**
  * Build `count` of a wall fortification (trap, abatis, tower, log, trebuchet). Each takes wall space (the walls
  * give 1,000 at Lv1 up to 55,000 at Lv10), costs resources now and needs a walls level and research. The batch
  * joins the end of the walls' queue (as many batches as the walls level). The reply is a `state` message.
@@ -228,6 +237,7 @@ export type ClientMessage =
   | TrainMessage
   | CancelTrainMessage
   | BuildFortMessage
+  | AssignPointsMessage
   | CancelFortMessage
   | HireMessage
   | RefreshInnMessage
@@ -379,4 +389,6 @@ export type ErrorCode =
   /** fortifications that don't fit in the space the walls have left */
   | 'no_wall_space'
   /** the walls' fortification queue already has as many batches as the walls level */
-  | 'fort_queue_full';
+  | 'fort_queue_full'
+  /** spending more stat points than the hero has */
+  | 'not_enough_points';

@@ -7,7 +7,8 @@
   import HeroStatsRow from './HeroStatsRow.svelte';
 
   // The Feasting Hall half of its window: the city's heroes, with Appoint Mayor and Dismiss. A mayor stays home
-  // (mayor bonuses come later); only idle heroes can be dismissed or appointed. Dismissing can't be undone, so it
+  // and speeds up the city with their stats (Politics: +1% production per point and faster building, Attack:
+  // faster training, Intelligence: faster research); only idle heroes can be dismissed or appointed. Dismissing can't be undone, so it
   // asks once more first. Any free hero can also be the city's defender, who leads its troops when it is attacked.
   // Captives come with a captured city: persuade them for their hiring fee, or release them.
 
@@ -48,6 +49,15 @@
     send(() => command({ type: 'dismiss', payload: { cityId: city.id, heroId } }));
   const defend = (heroId: string | null) =>
     send(() => command({ type: 'setDefender', payload: { cityId: city.id, heroId } }));
+  /** Points go into these; a mayor's speed up the city (Politics: building and production, Attack: training,
+   * Intelligence: research). */
+  const STAT_NAMES = [
+    ['politics', 'Pol'],
+    ['attack', 'Atk'],
+    ['intelligence', 'Int'],
+  ] as const;
+  const spend = (hero: CityHero, stat: (typeof STAT_NAMES)[number][0], n: number) =>
+    send(() => command({ type: 'assignPoints', payload: { cityId: city.id, heroId: hero.id, [stat]: n } }));
   const persuade = (heroId: string) =>
     send(() => command({ type: 'persuade', payload: { cityId: city.id, heroId } }));
 </script>
@@ -77,7 +87,16 @@
             <div style:width="{Math.min(100, (hero.exp / Math.max(1, hero.expToNext)) * 100)}%"></div>
           </div>
           {#if hero.points > 0}<span class="points"
-              >{hero.points} stat point{hero.points > 1 ? 's' : ''} to spend (soon)</span
+              >{hero.points} stat point{hero.points > 1 ? 's' : ''} to spend:
+              {#each STAT_NAMES as [stat, label] (stat)}
+                <button
+                  type="button"
+                  class="spend"
+                  disabled={!game.fromServer || sending || hero.status === 'captive'}
+                  title="Add 1 to {label} (shift-click: all {hero.points})"
+                  onclick={(e) => spend(hero, stat, e.shiftKey ? hero.points : 1)}>+{label}</button
+                >
+              {/each}</span
             >{/if}
         </div>
         <div class="stats"><HeroStatsRow {hero} /></div>
@@ -226,6 +245,13 @@
   .exp > div {
     height: 100%;
     background: linear-gradient(90deg, #c9a227, #f3d27a);
+  }
+  .spend {
+    margin-left: 4px;
+    padding: 0 5px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
   }
   .points {
     color: var(--ok);

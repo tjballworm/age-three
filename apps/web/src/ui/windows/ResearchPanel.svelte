@@ -12,6 +12,7 @@
     type BuildingType,
     type TechId,
     type TechSpec,
+    mayorSeconds,
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game } from '$state/game.svelte';
@@ -32,6 +33,7 @@
   ];
 
   const city = $derived(currentCity());
+  const mayor = $derived(city.heroes?.find((h) => h.status === 'mayor'));
   const research = $derived(game.player.research);
   const techsIn = (group: TechSpec['group']) =>
     (Object.keys(TECHS) as TechId[]).filter((id) => TECHS[id].group === group);
@@ -159,7 +161,7 @@
                 {#each RESOURCE_TYPES.filter((r) => next.cost[r] > 0) as r (r)}
                   <span><ResourceIcon type={r} size={13} /> {formatNumber(next.cost[r])}</span>
                 {/each}
-                <span>⏱ {formatDuration(next.seconds * 1000)}</span>
+                <span>⏱ {formatDuration(mayorSeconds(next.seconds, mayor, 'research') * 1000)}</span>
               </span>
             {/if}
             {#if lv > academy}<span class="tip-note">Counts as Lv {academy} in this city.</span>{/if}

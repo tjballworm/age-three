@@ -241,6 +241,33 @@ defmodule Age3.SessionTest do
     assert_received {:wake, 1_000}
   end
 
+  test "buildFort, cancelFort and assignPoints" do
+    msg = fn type, payload ->
+      Jason.encode!(%{type: type, id: 2, payload: Map.put(payload, :cityId, "c1")})
+    end
+
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "no_wall_space"}},
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}},
+             %{"type" => "state"},
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "not_enough_points"}}
+           ] =
+             run([
+               login("secret123"),
+               msg.("buildFort", %{fort: "trap", count: 10}),
+               msg.("buildFort", %{fort: "trap", count: 99_999_999}),
+               msg.("buildFort", %{fort: "trap", count: "10"}),
+               msg.("cancelFort", %{taskId: "t1"}),
+               msg.("assignPoints", %{heroId: "h1", politics: 1}),
+               msg.("assignPoints", %{heroId: "h1", attack: 9})
+             ])
+
+    assert_received {:wake, 61_000}
+  end
+
   test "cancelResearch" do
     cancel = fn task ->
       Jason.encode!(%{type: "cancelResearch", id: 2, payload: %{cityId: "c1", taskId: task}})

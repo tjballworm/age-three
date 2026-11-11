@@ -81,6 +81,10 @@ defmodule Age3.FakeStore do
   def cancel_forts(_player_id, _city_id, "t1", _now_ms), do: :ok
   def cancel_forts(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
 
+  @impl true
+  def assign_points(_player_id, _city_id, "h1", %{"politics" => 1}, _now_ms), do: :ok
+  def assign_points(_player_id, _city_id, _hero_id, _add, _now_ms), do: {:error, "not_enough_points"}
+
   # task "t1" has under 5 minutes left; "t2" has more
   @impl true
   def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok
