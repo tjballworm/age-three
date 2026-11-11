@@ -484,7 +484,6 @@ export interface QuestStatus {
   reward: {
     resources?: Partial<Record<ResourceType, number>>;
     items?: Record<string, number>;
-    prestige?: number;
   };
   done: boolean;
   claimed: boolean;

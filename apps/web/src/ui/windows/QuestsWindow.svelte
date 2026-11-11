@@ -56,7 +56,6 @@
   function rewardText(q: QuestStatus): string {
     const parts = Object.entries(q.reward.resources ?? {}).map(([r, n]) => `${formatNumber(n ?? 0)} ${r}`);
     for (const [id, n] of Object.entries(q.reward.items ?? {})) parts.push(`${n} × ${ITEMS[id]?.name ?? id}`);
-    if (q.reward.prestige) parts.push(`${formatNumber(q.reward.prestige)} prestige`);
     return parts.join(', ');
   }
 </script>

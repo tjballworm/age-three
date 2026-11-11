@@ -407,7 +407,7 @@ defmodule Age3.Store.Pg do
     Pvp,
     Report,
     Repo,
-    Prestige,
+    Honor,
     Quests,
     Research,
     Task,
@@ -1225,8 +1225,7 @@ defmodule Age3.Store.Pg do
       player
       |> Ecto.Changeset.change(
         quests: [quest_id | player.quests],
-        items: Items.give(player.items, reward["items"]),
-        prestige: player.prestige + (reward["prestige"] || 0)
+        items: Items.give(player.items, reward["items"])
       )
       |> Repo.update!()
     end)
@@ -2908,7 +2907,6 @@ defmodule Age3.Store.Pg do
       for t <- tasks do
         city = Repo.get!(City, city_id)
         applied = apply_task(city, t)
-        if t.kind in ["build", "research", "train", "fort"], do: award(city.player_id, t.cost)
         Repo.delete!(t)
         # read again: a returning march has already added its loot to a new snapshot
         resnapshot(Repo.get!(City, city_id), t.ends_at)
@@ -3046,7 +3044,6 @@ defmodule Age3.Store.Pg do
     result =
       Combat.simulate(%{attacker: attacker, defender: defender, fortifications: forts, settings: settings})
 
-    battle_points(city.player_id, nil, result)
     won = result.winner == :attacker
     survivors = for s <- result.attacker.troops, s.survived > 0, into: %{}, do: {s.type, s.survived}
     loot = if won, do: March.loot(npc["resources"], March.load(survivors, research)), else: %{}
@@ -3265,7 +3262,6 @@ defmodule Age3.Store.Pg do
     result =
       Combat.simulate(%{attacker: attacker, defender: defender, fortifications: forts, settings: settings})
 
-    battle_points(city.player_id, nil, result)
     won = result.winner == :attacker
     survivors = for s <- result.attacker.troops, s.survived > 0, into: %{}, do: {s.type, s.survived}
 
@@ -3428,61 +3424,29 @@ defmodule Age3.Store.Pg do
   defp combat_hero(h),
     do: %{level: h.level, attack: h.attack, intelligence: h.intelligence, leadership: h.level, stars: h.stars}
 
-  # Gives the hero exp and returns what the report shows about them.
-  # Prestige for something finished (Age3.Prestige): its cost per Town Hall level the player has.
-  defp award(player_id, cost) do
-    add_points(player_id, Prestige.for_cost(cost || %{}, town_halls(player_id)), 0)
-  end
+  # A player battle's honor for both sides (Age3.Honor); battles with NPCs change none. Prestige isn't earned
+  # yet (TJ is reworking it).
+  defp battle_points(_att_player, nil, _result), do: :ok
 
-  # A battle's prestige for both sides (an NPC side has none) and, between players, honor.
   defp battle_points(att_player, def_player, result) do
-    {att_lost, def_lost} = Prestige.losses(result)
-
-    add_points(
-      att_player,
-      Prestige.battle(att_lost, def_lost, town_halls(att_player)),
-      honor(def_player, att_lost, def_lost)
-    )
-
-    if def_player,
-      do:
-        add_points(
-          def_player,
-          Prestige.battle(def_lost, att_lost, town_halls(def_player)),
-          Prestige.honor(def_lost, att_lost)
-        )
+    {att_lost, def_lost} = Honor.losses(result)
+    add_honor(att_player, Honor.change(att_lost, def_lost))
+    add_honor(def_player, Honor.change(def_lost, att_lost))
   end
 
-  defp honor(nil, _own, _enemy), do: 0
-  defp honor(_def, own, enemy), do: Prestige.honor(own, enemy)
+  defp add_honor(_player_id, 0), do: :ok
 
-  defp add_points(_player_id, 0, 0), do: :ok
-
-  defp add_points(player_id, prestige, honor) do
+  defp add_honor(player_id, honor) do
     Repo.update_all(
       from(p in Player,
         where: p.id == ^player_id,
-        update: [
-          set: [
-            prestige: fragment("greatest(0, ? + ?)", p.prestige, ^prestige),
-            honor: fragment("greatest(0, ? + ?)", p.honor, ^honor)
-          ]
-        ]
+        update: [set: [honor: fragment("greatest(0, ? + ?)", p.honor, ^honor)]]
       ),
       []
     )
   end
 
-  defp town_halls(player_id),
-    do:
-      Repo.one(
-        from b in Building,
-          join: c in City,
-          on: c.id == b.city_id,
-          where: c.player_id == ^player_id and b.type == "townhall",
-          select: sum(b.level)
-      ) || 1
-
+  # Gives the hero exp and returns what the report shows about them.
   defp gain_hero_exp(hero, exp) do
     up = Heroes.gain_exp(hero, exp)
     hero |> Ecto.Changeset.change(level: up.level, exp: up.exp, points: up.points) |> Repo.update!()

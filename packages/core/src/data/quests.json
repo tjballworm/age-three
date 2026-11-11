@@ -1,5 +1,5 @@
 {
-  "_source": "Routine quests after the Age II wiki's Routine_Quest page (targets and rewards trimmed; tunable). goal: building {type, level} (any city), research {tech, level}, troops {type, count} (all cities now), townHall level, population (one city's limit), prestige, cities, valleys, heroes, mayor, alliance, title. reward: resources, items and prestige, paid into the city chosen when claiming.",
+  "_source": "Routine quests after the Age II wiki's Routine_Quest page (targets and rewards trimmed; tunable). goal: building {type, level} (any city), research {tech, level}, troops {type, count} (all cities now), townHall level, population (one city's limit), prestige, cities, valleys, heroes, mayor, alliance, title. reward: resources and items, paid into the city chosen when claiming.",
   "quests": [
     {"id": "cottage1", "category": "economy", "name": "A Roof Overhead", "goal": {"building": {"type": "cottage", "level": 1}}, "reward": {"resources": {"food": 200, "lumber": 1000, "stone": 200, "iron": 200}, "items": {"speed15m": 1}}},
     {"id": "cottage2", "category": "economy", "name": "Room to Grow", "goal": {"building": {"type": "cottage", "level": 2}}, "reward": {"resources": {"food": 500, "lumber": 2000, "stone": 500, "iron": 500}}},
@@ -10,7 +10,7 @@
     {"id": "townhall2", "category": "routine", "name": "Town Hall Lv2", "goal": {"townHall": 2}, "reward": {"resources": {"food": 2500, "lumber": 6500, "stone": 5500, "iron": 2500}, "items": {"speed1h": 1}}},
     {"id": "townhall3", "category": "routine", "name": "Town Hall Lv3", "goal": {"townHall": 3}, "reward": {"resources": {"food": 5000, "lumber": 13000, "stone": 11000, "iron": 5000}}},
     {"id": "townhall4", "category": "routine", "name": "Town Hall Lv4", "goal": {"townHall": 4}, "reward": {"resources": {"food": 10000, "lumber": 26000, "stone": 22000, "iron": 10000}}},
-    {"id": "townhall5", "category": "routine", "name": "Town Hall Lv5", "goal": {"townHall": 5}, "reward": {"resources": {"food": 20000, "lumber": 50000, "stone": 50000, "iron": 20000}, "prestige": 500}},
+    {"id": "townhall5", "category": "routine", "name": "Town Hall Lv5", "goal": {"townHall": 5}, "reward": {"resources": {"food": 20000, "lumber": 50000, "stone": 50000, "iron": 20000}}},
     {"id": "population1k", "category": "economy", "name": "Continuous Development", "goal": {"population": 1000}, "reward": {"resources": {"food": 1000, "lumber": 4000, "stone": 1000, "iron": 1000}}},
     {"id": "academy1", "category": "routine", "name": "Academy", "goal": {"building": {"type": "academy", "level": 1}}, "reward": {"resources": {"food": 150, "lumber": 2500, "stone": 1500, "iron": 200}, "items": {"speed1h": 1}}},
     {"id": "agriculture1", "category": "economy", "name": "Agriculture", "goal": {"research": {"tech": "agriculture", "level": 1}}, "reward": {"resources": {"gold": 2000}}},
@@ -26,9 +26,9 @@
     {"id": "embassy1", "category": "routine", "name": "Embassy", "goal": {"building": {"type": "embassy", "level": 1}}, "reward": {"resources": {"food": 500, "lumber": 2000, "stone": 1000, "iron": 500}}},
     {"id": "alliance", "category": "routine", "name": "Join an Alliance", "goal": {"alliance": true}, "reward": {"resources": {"gold": 5000}}},
     {"id": "marketplace1", "category": "economy", "name": "Marketplace", "goal": {"building": {"type": "marketplace", "level": 1}}, "reward": {"resources": {"food": 1500, "lumber": 1500, "stone": 1500, "iron": 1500}}},
-    {"id": "valley1", "category": "military", "name": "Conquering", "goal": {"valleys": 1}, "reward": {"resources": {"gold": 5000, "food": 5000, "lumber": 5000, "stone": 5000, "iron": 5000}, "prestige": 100}},
-    {"id": "city2", "category": "routine", "name": "Satellite City", "goal": {"cities": 2}, "reward": {"resources": {"gold": 50000}, "prestige": 100}},
+    {"id": "valley1", "category": "military", "name": "Conquering", "goal": {"valleys": 1}, "reward": {"resources": {"gold": 5000, "food": 5000, "lumber": 5000, "stone": 5000, "iron": 5000}}},
+    {"id": "city2", "category": "routine", "name": "Satellite City", "goal": {"cities": 2}, "reward": {"resources": {"gold": 50000}}},
     {"id": "prestige1k", "category": "routine", "name": "Rising Star", "goal": {"prestige": 1000}, "reward": {"items": {"chest": 1}}},
-    {"id": "knight", "category": "routine", "name": "Knighthood", "goal": {"title": "knight"}, "reward": {"items": {"chest": 2}, "prestige": 200}}
+    {"id": "knight", "category": "routine", "name": "Knighthood", "goal": {"title": "knight"}, "reward": {"items": {"chest": 2}}}
   ]
 }
