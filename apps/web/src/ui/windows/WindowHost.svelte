@@ -3,6 +3,7 @@
   import Button from '$ui/components/Button.svelte';
   import Tabs from '$ui/components/Tabs.svelte';
   import Window from '$ui/components/Window.svelte';
+  import AllianceWindow from './AllianceWindow.svelte';
   import CheatsWindow from './CheatsWindow.svelte';
   import CityOverview from './CityOverview.svelte';
   import HeroesOverview from './HeroesOverview.svelte';
@@ -61,6 +62,8 @@
       {#key tab}<ReportsWindow
           tab={tab === 'Scouting' ? 'scouting' : tab === 'Missions' ? 'missions' : 'battles'}
         />{/key}
+    {:else if game.openWindow === 'alliance'}
+      <AllianceWindow {tab} />
     {:else if game.openWindow === 'leaderboard'}
       <LeaderboardPlaceholder board={tab} />
     {:else}

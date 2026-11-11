@@ -3,6 +3,8 @@
 import type {
   BattleResult,
   BuildingType,
+  AllianceInfo,
+  AllianceRank,
   City,
   FortType,
   Ladder,
@@ -147,6 +149,24 @@ export type AbandonValleyMessage = Envelope<'abandonValley', { cityId: string; x
 export type SetGarrisonMessage = Envelope<'setGarrison', { cityId: string; allow: boolean }>;
 /** The latest battle reports, newest first. Replies with `reports`. */
 export type GetReportsMessage = Envelope<'getReports', Record<string, never>>;
+/** The Alliance window's contents. Replies with `alliance`. */
+export type GetAllianceMessage = Envelope<'getAlliance', Record<string, never>>;
+/**
+ * One alliance action; replies with `alliance` (or an error). Founding pays 10,000 gold from a city with Embassy
+ * Lv2; joining needs an Embassy. Officers and up invite and accept, Presbyters and up remove lower ranks, Vice
+ * Hosts and up set lower ranks, diplomacy and the description; the Host hands over (rank 'host') or disbands.
+ */
+export type AllianceActionMessage = Envelope<
+  'alliance',
+  | { action: 'create'; cityId: string; name: string }
+  | { action: 'apply'; name: string }
+  | { action: 'cancel' | 'accept' | 'reject'; requestId: string }
+  | { action: 'invite' | 'kick'; player: string }
+  | { action: 'setRank'; player: string; rank: AllianceRank }
+  | { action: 'diplomacy'; name: string; status: 'friendly' | 'neutral' | 'hostile' }
+  | { action: 'describe'; text: string }
+  | { action: 'leave' | 'disband' }
+>;
 /** One report with the whole battle; marks it read. Replies with `report`. */
 export type GetReportMessage = Envelope<'getReport', { reportId: string }>;
 /**
@@ -253,6 +273,8 @@ export type ClientMessage =
   | ImposePolicyMessage
   | GetReportsMessage
   | GetReportMessage
+  | GetAllianceMessage
+  | AllianceActionMessage
   | PromoteMessage
   | CheatMessage;
 
@@ -288,6 +310,8 @@ export type ReportsMessage = Envelope<'reports', { reports: ReportSummary[] }>;
 /** result is null for a policy report (no battle). */
 export type ReportMessage = Envelope<'report', { report: ReportSummary & { result: BattleResult | null } }>;
 
+export type AllianceReply = Envelope<'alliance', AllianceInfo>;
+
 export type ServerMessage =
   | WelcomeMessage
   | PongMessage
@@ -295,7 +319,8 @@ export type ServerMessage =
   | TaskDoneMessage
   | ErrorMessage
   | ReportsMessage
-  | ReportMessage;
+  | ReportMessage
+  | AllianceReply;
 
 export type ErrorCode =
   | 'bad_message'
@@ -392,4 +417,18 @@ export type ErrorCode =
   /** the walls' fortification queue already has as many batches as the walls level */
   | 'fort_queue_full'
   /** spending more stat points than the hero has */
-  | 'not_enough_points';
+  | 'not_enough_points'
+  /** joining or founding an alliance while in one */
+  | 'already_in_alliance'
+  /** joining an alliance without an Embassy */
+  | 'no_embassy'
+  /** an alliance that doesn't exist, or an alliance action while in none */
+  | 'no_alliance'
+  /** an alliance name that isn't 3 to 20 letters, digits, spaces, - or _ */
+  | 'bad_name'
+  | 'name_taken'
+  /** the alliance has as many members as the host's Embassy allows (10 per level) */
+  | 'alliance_full'
+  | 'not_a_member'
+  /** attacking or scouting your own alliance, or one yours calls friendly */
+  | 'friendly';

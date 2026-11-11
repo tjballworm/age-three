@@ -120,6 +120,8 @@ export interface LordCity extends Coord {
   owner: string;
   ownerId: string;
   alliance?: string | null;
+  /** How your alliance sees theirs: the same alliance, friendly or hostile (null: neutral or none). */
+  relation?: 'alliance' | 'friendly' | 'hostile' | null;
   /** 12-18 when the city is a captured historic city. */
   historicLevel?: number | null;
 }
@@ -388,4 +390,40 @@ export interface ScoutSeen {
   gateOpen?: boolean;
   /** A held valley: the city holding it. */
   holder?: string;
+}
+
+/** Alliance ranks, lowest first. */
+export type AllianceRank = 'member' | 'officer' | 'presbyter' | 'vice' | 'host';
+
+export interface AllianceMember {
+  id: string;
+  name: string;
+  rank: AllianceRank;
+  prestige: number;
+  cities: number;
+}
+
+/** What the Alliance window shows (the server's `alliance` reply). */
+export interface AllianceInfo {
+  alliance: {
+    id: string;
+    name: string;
+    description: string;
+    /** Your rank. */
+    rank: AllianceRank;
+    members: AllianceMember[];
+    /** 10 per level of the host's best Embassy. */
+    memberCap: number;
+    diplomacy: { id: string; name: string; status: 'friendly' | 'hostile' }[];
+    /** Applications to join (only shown to Officers and up). */
+    applications: { id: string; player: string; prestige: number }[];
+  } | null;
+  /** Alliances inviting you. */
+  invites: { id: string; alliance: string }[];
+  /** Alliances you applied to. */
+  applied: { id: string; alliance: string }[];
+  /** Your best Embassy level (1 to join, 2 to found). */
+  embassy: number;
+  /** The biggest alliances. */
+  alliances: { id: string; name: string; members: number; prestige: number; host: string | null }[];
 }

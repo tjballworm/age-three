@@ -85,6 +85,16 @@ defmodule Age3.MissionsTest do
 
   defp settle(l, at), do: Pg.state(l.id, at)
 
+  # puts these lords in one new alliance
+  defp ally(name, lords) do
+    alliance = Repo.insert!(%Age3.Alliance{name: name})
+    ids = Enum.map(lords, & &1.id)
+
+    Repo.update_all(from(p in Age3.Player, where: p.id in ^ids),
+      set: [alliance_id: alliance.id, alliance: name, alliance_rank: "member"]
+    )
+  end
+
   describe "scouting" do
     test "an NPC: enough scouts see the garrison, too few die; no Beacon Tower sees nothing" do
       l = lord("Spymaster")
@@ -202,7 +212,7 @@ defmodule Age3.MissionsTest do
       target = {b.city.x, b.city.y}
       assert {:error, "not_allied"} = march(a, target, %{"cavalry" => 100}, %{"mission" => "reinforce"})
 
-      Repo.update_all(Age3.Player, set: [alliance: "Friends"])
+      ally("Friends", [a, b])
       assert {:error, "not_allied"} = march(a, target, %{"cavalry" => 100}, %{"mission" => "reinforce"})
       Repo.update_all(from(c in City, where: c.id == ^b.city.id), set: [allow_garrison: true])
 
@@ -296,8 +306,7 @@ defmodule Age3.MissionsTest do
         set: [forts: %{"trap" => 1000}, allow_garrison: true]
       )
 
-      Repo.update_all(Age3.Player, set: [alliance: "Pact"])
-      Repo.update_all(from(p in Age3.Player, where: p.id == ^a.id), set: [alliance: nil])
+      ally("Pact", [b, c])
       {:ok, at} = march(c, {b.city.x, b.city.y}, %{"cavalry" => 100}, %{"mission" => "reinforce"})
       settle(c, at)
       :ok = Pg.set_gate(b.id, b.city.id, true, at)

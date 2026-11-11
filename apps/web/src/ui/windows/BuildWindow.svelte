@@ -24,6 +24,7 @@
   import Window from '$ui/components/Window.svelte';
   import { formatDuration, formatNumber } from '$ui/format';
   import { tooltip } from '$ui/tooltip.svelte';
+  import EmbassyPanel from './EmbassyPanel.svelte';
   import HallPanel from './HallPanel.svelte';
   import InnPanel from './InnPanel.svelte';
   import ResearchPanel from './ResearchPanel.svelte';
@@ -133,10 +134,10 @@
           : 'Empty plot',
   );
   /**
-   * The Academy, Barracks, Inn, Feasting Hall and Walls get one window: the building and its Upgrade on top, what
+   * The Academy, Barracks, Inn, Feasting Hall, Walls and Embassy get one window: the building and its Upgrade on top, what
    * it does below.
    */
-  const PANELS = ['academy', 'barracks', 'inn', 'feastinghall', 'walls'] as const;
+  const PANELS = ['academy', 'barracks', 'inn', 'feastinghall', 'walls', 'embassy'] as const;
   type Panel = (typeof PANELS)[number];
   const panel = $derived(
     standing && (PANELS as readonly string[]).includes(standing.type) ? (standing.type as Panel) : null,
@@ -160,6 +161,10 @@
     walls: {
       icon: 'walls',
       text: 'The walls guard your city; open the gate to send your troops out to fight, or close it and let the walls hold.',
+    },
+    embassy: {
+      icon: 'alliance',
+      text: 'The Embassy lets you join (Lv1) or found (Lv2) an alliance, and hosts allied troops: one wave per level.',
     },
   } as const;
 </script>
@@ -226,6 +231,8 @@
         <HallPanel />
       {:else if panel === 'walls'}
         <WallsPanel />
+      {:else if panel === 'embassy'}
+        <EmbassyPanel />
       {:else if typeof slot === 'number'}
         <TrainPanel plot={slot} />
       {/if}

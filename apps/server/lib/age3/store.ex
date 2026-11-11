@@ -253,6 +253,20 @@ defmodule Age3.Store do
               now_ms :: integer
             ) :: :ok | {:error, code :: String.t()}
 
+  @doc """
+  What the Alliance window shows: the player's alliance (members, ranks, diplomacy, applications for officers),
+  their invitations and applications, their best Embassy level and the biggest alliances.
+  """
+  @callback alliance_info(player_id :: String.t()) :: map
+
+  @doc """
+  One alliance action (Age3.AllianceStore.action/3): "create" {cityId, name} pays 10,000 gold from a city with
+  Embassy Lv2; the others are apply, cancel, invite, accept, reject, leave, kick, setRank, diplomacy, describe
+  and disband.
+  """
+  @callback alliance_action(player_id :: String.t(), action :: String.t(), args :: map, now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
   @doc "Stops a construction that hasn't finished and refunds its whole cost."
   @callback cancel_build(
               player_id :: String.t(),
@@ -272,6 +286,8 @@ defmodule Age3.Store.Pg do
 
   alias Age3.{
     Accounts,
+    AllianceStore,
+    Alliances,
     Build,
     Building,
     Cheats,
@@ -817,10 +833,57 @@ defmodule Age3.Store.Pg do
           owner: p.name,
           ownerId: p.id,
           alliance: p.alliance,
+          allianceId: p.alliance_id,
           historicLevel: c.historic_level
         }
     )
+    |> then(fn lords ->
+      # how the player's alliance sees each one's: "alliance", "friendly", "hostile" or nil (the map's flags)
+      {mine, diplomacy} = AllianceStore.my_diplomacy(player_id)
+
+      Enum.map(lords, fn l ->
+        l |> Map.delete(:allianceId) |> Map.put(:relation, Alliances.relation(mine, l.allianceId, diplomacy))
+      end)
+    end)
   end
+
+  # Alliances (Age3.AllianceStore). Founding one pays 10,000 gold from a city with Embassy Lv2.
+  @impl true
+  def alliance_info(player_id), do: AllianceStore.info(player_id)
+
+  @impl true
+  def alliance_action(player_id, "create", %{"cityId" => city_id, "name" => name}, now_ms)
+      when is_binary(city_id) do
+    arrivals([city_id], to_datetime(now_ms))
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      player = Repo.one!(from p in Player, where: p.id == ^player_id, lock: "FOR UPDATE")
+
+      embassy =
+        Repo.one(
+          from(b in Building, where: b.city_id == ^city.id and b.type == "embassy", select: max(b.level))
+        ) ||
+          0
+
+      if embassy < 2, do: Repo.rollback("requirement_not_met")
+      resources = settled(city, now_ms).resources
+      cost = %{"gold" => Alliances.create_gold()}
+
+      case Build.affordable(resources, cost) do
+        :ok -> save_resources(city, Build.spend(resources, cost), now_ms)
+        {:error, code} -> Repo.rollback(code)
+      end
+
+      AllianceStore.create(player, name)
+    end)
+    |> ok()
+  end
+
+  def alliance_action(player_id, action, args, _now_ms) when action != "create",
+    do: AllianceStore.action(player_id, action, args)
+
+  def alliance_action(_player_id, _action, _args, _now_ms), do: {:error, "bad_message"}
 
   @impl true
   def set_tax(player_id, city_id, tax_rate, now_ms) do
@@ -1115,8 +1178,16 @@ defmodule Age3.Store.Pg do
   # else's city (an ally whose Embassy takes garrisons and has room).
   defp mission_allowed("attack", {:valley, _level}, city, _player, x, y) do
     case Repo.one(from v in ValleyHold, where: v.x == ^x and v.y == ^y, preload: :city) do
-      %ValleyHold{city: %City{player_id: owner}} when owner == city.player_id -> Repo.rollback("own_valley")
-      _ -> :ok
+      %ValleyHold{city: %City{player_id: owner}} when owner == city.player_id ->
+        Repo.rollback("own_valley")
+
+      # alliance members' and friendly alliances' valleys are safe
+      %ValleyHold{city: %City{player_id: owner}} ->
+        if AllianceStore.relation(city.player_id, owner) in ["alliance", "friendly"],
+          do: Repo.rollback("friendly")
+
+      _ ->
+        :ok
     end
 
     town_hall =
@@ -1144,6 +1215,13 @@ defmodule Age3.Store.Pg do
   defp mission_allowed("reinforce", {:city, %City{player_id: owner} = host}, city, _player, _x, _y)
        when owner != city.player_id do
     unless can_garrison?(host, city.player_id), do: Repo.rollback("not_allied")
+  end
+
+  # no attacking or scouting your own alliance's members, or alliances yours calls friendly
+  defp mission_allowed(mission, {:city, %City{player_id: owner}}, city, _player, _x, _y)
+       when mission in ["attack", "scout"] do
+    if AllianceStore.relation(city.player_id, owner) in ["alliance", "friendly"],
+      do: Repo.rollback("friendly")
   end
 
   defp mission_allowed(_mission, _target, _city, _player, _x, _y), do: :ok
@@ -2058,12 +2136,7 @@ defmodule Age3.Store.Pg do
   # Are these two players allies (the same alliance)? A player is their own ally.
   defp allies?(a, a), do: true
 
-  defp allies?(a, b) do
-    case Repo.all(from p in Player, where: p.id in ^[a, b], select: p.alliance) do
-      [x, x] when x != nil -> true
-      _ -> false
-    end
-  end
+  defp allies?(a, b), do: AllianceStore.relation(a, b) == "alliance"
 
   # The battle at a player city (both locked). Fights with the city as it stands, takes loot and loyalty, maybe
   # captures it, writes a report for each side and sends the survivors home. Returns the task with the outcome

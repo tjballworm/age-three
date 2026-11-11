@@ -104,6 +104,8 @@ defmodule Age3.Session do
               "imposePolicy",
               "promote",
               "getReports",
+              "getAlliance",
+              "alliance",
               "getReport",
               "cheat"
             ],
@@ -357,6 +359,27 @@ defmodule Age3.Session do
 
   defp handle("imposePolicy", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid policy."), session}
+
+  # The Alliance window's contents: replies "alliance" {alliance, invites, applied, embassy, alliances}.
+  defp handle("getAlliance", _payload, id, session),
+    do: {reply(id, "alliance", session.store.alliance_info(session.player_id)), session}
+
+  # An alliance action: {action, ...} (Age3.AllianceStore.action/3; "create" also takes cityId and name). Replies
+  # "alliance" like getAlliance; the player's alliance name in the state changes with the next state.
+  defp handle("alliance", %{"action" => action} = payload, id, session) when is_binary(action) do
+    case session.store.alliance_action(
+           session.player_id,
+           action,
+           Map.delete(payload, "action"),
+           session.now.()
+         ) do
+      :ok -> {reply(id, "alliance", session.store.alliance_info(session.player_id)), session}
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("alliance", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid alliance action."), session}
 
   # The latest battle reports, without the battles: replies "reports" {reports: [...]}.
   defp handle("getReports", _payload, id, session),
@@ -629,6 +652,14 @@ defmodule Age3.Session do
   defp slot_key(_slot), do: nil
 
   defp message("not_enough_resources"), do: "Not enough resources."
+  defp message("already_in_alliance"), do: "Already in an alliance."
+  defp message("no_embassy"), do: "Build an Embassy first."
+  defp message("no_alliance"), do: "No such alliance."
+  defp message("bad_name"), do: "Alliance names are 3 to 20 letters, numbers, spaces, - or _."
+  defp message("name_taken"), do: "That name is taken."
+  defp message("alliance_full"), do: "The alliance is full: the host's Embassy allows 10 members per level."
+  defp message("not_a_member"), do: "They aren't in your alliance."
+  defp message("friendly"), do: "You can't attack your own alliance or one yours calls friendly."
   defp message("not_enough_points"), do: "The hero doesn't have that many points."
   defp message("no_wall_space"), do: "Not enough fortified space on the walls."
   defp message("fort_queue_full"), do: "The walls' queue is full."
@@ -687,7 +718,7 @@ defmodule Age3.Session do
 
   defp message("already_returning"), do: "That march is already on its way back."
   defp message("not_enough_medals"), do: "Not enough medals."
-  defp message("rank_too_low"), do: "Your rank is too low for that title."
+  defp message("rank_too_low"), do: "Your rank is too low for that."
   defp message(_code), do: "Not a valid request."
 
   defp welcome(id, player_id, token, session) do
