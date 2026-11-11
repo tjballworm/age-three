@@ -7,7 +7,7 @@
   import CheatsWindow from './CheatsWindow.svelte';
   import CityOverview from './CityOverview.svelte';
   import HeroesOverview from './HeroesOverview.svelte';
-  import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
+  import LeaderboardWindow from './LeaderboardWindow.svelte';
   import LordMedals from './LordMedals.svelte';
   import LordProfile from './LordProfile.svelte';
   import MailWindow from './MailWindow.svelte';
@@ -71,7 +71,7 @@
     {:else if game.openWindow === 'alliance'}
       <AllianceWindow {tab} />
     {:else if game.openWindow === 'leaderboard'}
-      <LeaderboardPlaceholder board={tab} />
+      <LeaderboardWindow board={tab} />
     {:else}
       <div class="placeholder">
         <div class="caption">{def.title} · {tab}</div>

@@ -253,6 +253,9 @@ defmodule Age3.Store do
               now_ms :: integer
             ) :: :ok | {:error, code :: String.t()}
 
+  @doc "The top 100 of a leaderboard: \"player\" (prestige), \"hero\" (level) or \"alliance\" (members' prestige)."
+  @callback leaderboard(board :: String.t()) :: [map]
+
   @doc """
   The Marketplace seen from a city: its Marketplace level, the best 5 buy and sell prices per resource (with the
   last trade's price) and the player's open orders.
@@ -344,6 +347,7 @@ defmodule Age3.Store.Pg do
 
   alias Age3.{
     Accounts,
+    Alliance,
     AllianceStore,
     Alliances,
     Build,
@@ -371,6 +375,7 @@ defmodule Age3.Store.Pg do
     Pvp,
     Report,
     Repo,
+    Prestige,
     Research,
     Task,
     Scout,
@@ -1096,6 +1101,66 @@ defmodule Age3.Store.Pg do
     end)
     |> ok()
   end
+
+  # Leaderboards: the top 100 players (prestige), heroes (level, then exp) and alliances (members' prestige).
+  @impl true
+  def leaderboard("player") do
+    Repo.all(
+      from p in Player,
+        left_join: c in City,
+        on: c.player_id == p.id,
+        group_by: p.id,
+        order_by: [desc: p.prestige, asc: p.name],
+        limit: 100,
+        select: %{
+          name: p.name,
+          alliance: p.alliance,
+          prestige: p.prestige,
+          honor: p.honor,
+          cities: count(c.id)
+        }
+    )
+    |> ranked()
+  end
+
+  def leaderboard("hero") do
+    Repo.all(
+      from h in Hero,
+        join: c in City,
+        on: c.id == h.city_id,
+        join: p in Player,
+        on: p.id == c.player_id,
+        where: h.status != "captive",
+        order_by: [desc: h.level, desc: h.exp, asc: h.name],
+        limit: 100,
+        select: %{
+          name: h.name,
+          lord: p.name,
+          level: h.level,
+          attack: h.attack,
+          politics: h.politics,
+          intelligence: h.intelligence
+        }
+    )
+    |> ranked()
+  end
+
+  def leaderboard("alliance") do
+    Repo.all(
+      from a in Alliance,
+        join: p in Player,
+        on: p.alliance_id == a.id,
+        group_by: a.id,
+        order_by: [desc: sum(p.prestige), asc: a.name],
+        limit: 100,
+        select: %{name: a.name, members: count(p.id), prestige: sum(p.prestige)}
+    )
+    |> ranked()
+  end
+
+  def leaderboard(_board), do: []
+
+  defp ranked(rows), do: rows |> Enum.with_index(1) |> Enum.map(fn {r, i} -> Map.put(r, :rank, i) end)
 
   # Chat and mail (Age3.Social).
   @impl true
@@ -2448,6 +2513,7 @@ defmodule Age3.Store.Pg do
     result =
       Combat.simulate(%{attacker: attacker, defender: defender, fortifications: forts, settings: settings})
 
+    battle_points(att.player_id, def.player_id, result)
     won = result.winner == :attacker
     survivors = for s <- result.attacker.troops, s.survived > 0, into: %{}, do: {s.type, s.survived}
 
@@ -2685,7 +2751,9 @@ defmodule Age3.Store.Pg do
 
     done =
       for t <- tasks do
-        applied = apply_task(Repo.get!(City, city_id), t)
+        city = Repo.get!(City, city_id)
+        applied = apply_task(city, t)
+        if t.kind in ["build", "research", "train", "fort"], do: award(city.player_id, t.cost)
         Repo.delete!(t)
         # read again: a returning march has already added its loot to a new snapshot
         resnapshot(Repo.get!(City, city_id), t.ends_at)
@@ -2823,6 +2891,7 @@ defmodule Age3.Store.Pg do
     result =
       Combat.simulate(%{attacker: attacker, defender: defender, fortifications: forts, settings: settings})
 
+    battle_points(city.player_id, nil, result)
     won = result.winner == :attacker
     survivors = for s <- result.attacker.troops, s.survived > 0, into: %{}, do: {s.type, s.survived}
     loot = if won, do: March.loot(npc["resources"], March.load(survivors, research)), else: %{}
@@ -3041,6 +3110,7 @@ defmodule Age3.Store.Pg do
     result =
       Combat.simulate(%{attacker: attacker, defender: defender, fortifications: forts, settings: settings})
 
+    battle_points(city.player_id, nil, result)
     won = result.winner == :attacker
     survivors = for s <- result.attacker.troops, s.survived > 0, into: %{}, do: {s.type, s.survived}
 
@@ -3204,6 +3274,60 @@ defmodule Age3.Store.Pg do
     do: %{level: h.level, attack: h.attack, intelligence: h.intelligence, leadership: h.level, stars: h.stars}
 
   # Gives the hero exp and returns what the report shows about them.
+  # Prestige for something finished (Age3.Prestige): its cost per Town Hall level the player has.
+  defp award(player_id, cost) do
+    add_points(player_id, Prestige.for_cost(cost || %{}, town_halls(player_id)), 0)
+  end
+
+  # A battle's prestige for both sides (an NPC side has none) and, between players, honor.
+  defp battle_points(att_player, def_player, result) do
+    {att_lost, def_lost} = Prestige.losses(result)
+
+    add_points(
+      att_player,
+      Prestige.battle(att_lost, def_lost, town_halls(att_player)),
+      honor(def_player, att_lost, def_lost)
+    )
+
+    if def_player,
+      do:
+        add_points(
+          def_player,
+          Prestige.battle(def_lost, att_lost, town_halls(def_player)),
+          Prestige.honor(def_lost, att_lost)
+        )
+  end
+
+  defp honor(nil, _own, _enemy), do: 0
+  defp honor(_def, own, enemy), do: Prestige.honor(own, enemy)
+
+  defp add_points(_player_id, 0, 0), do: :ok
+
+  defp add_points(player_id, prestige, honor) do
+    Repo.update_all(
+      from(p in Player,
+        where: p.id == ^player_id,
+        update: [
+          set: [
+            prestige: fragment("greatest(0, ? + ?)", p.prestige, ^prestige),
+            honor: fragment("greatest(0, ? + ?)", p.honor, ^honor)
+          ]
+        ]
+      ),
+      []
+    )
+  end
+
+  defp town_halls(player_id),
+    do:
+      Repo.one(
+        from b in Building,
+          join: c in City,
+          on: c.id == b.city_id,
+          where: c.player_id == ^player_id and b.type == "townhall",
+          select: sum(b.level)
+      ) || 1
+
   defp gain_hero_exp(hero, exp) do
     up = Heroes.gain_exp(hero, exp)
     hero |> Ecto.Changeset.change(level: up.level, exp: up.exp, points: up.points) |> Repo.update!()
@@ -3344,8 +3468,8 @@ defmodule Age3.Store.Pg do
       unreadReports: unread_reports(p.id),
       unreadMail: Social.unread(p.id),
       allianceRank: p.alliance_rank,
-      # not stored yet; the backlog has it derived from prestige
-      rank: 0
+      # the player's place by prestige (backlog 2: derived, never stored)
+      rank: Repo.aggregate(from(o in Player, where: o.prestige > ^p.prestige), :count) + 1
     }
   end
 

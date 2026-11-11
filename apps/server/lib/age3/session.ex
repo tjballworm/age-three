@@ -105,6 +105,7 @@ defmodule Age3.Session do
               "promote",
               "getReports",
               "getAlliance",
+              "getLeaderboard",
               "getMarket",
               "marketOrder",
               "cancelOrder",
@@ -368,6 +369,14 @@ defmodule Age3.Session do
 
   defp handle("imposePolicy", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid policy."), session}
+
+  # A leaderboard: {board: "player" | "hero" | "alliance"}. Replies "leaderboard" {board, rows}.
+  defp handle("getLeaderboard", %{"board" => board}, id, session)
+       when board in ["player", "hero", "alliance"],
+       do: {reply(id, "leaderboard", %{board: board, rows: session.store.leaderboard(board)}), session}
+
+  defp handle("getLeaderboard", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid leaderboard."), session}
 
   # The Marketplace from a city: {cityId}. Replies "market" {level, books, orders}.
   defp handle("getMarket", %{"cityId" => city_id}, id, session) when is_binary(city_id) do

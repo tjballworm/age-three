@@ -129,6 +129,9 @@ defmodule Age3.FakeStore do
   @impl true
   def cancel_order(_player_id, _city_id, _order_id, _now_ms), do: :ok
 
+  @impl true
+  def leaderboard(board), do: [%{rank: 1, name: board}]
+
   # task "t1" has under 5 minutes left; "t2" has more
   @impl true
   def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok

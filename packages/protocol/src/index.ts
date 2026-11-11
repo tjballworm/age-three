@@ -153,6 +153,8 @@ export type AbandonValleyMessage = Envelope<'abandonValley', { cityId: string; x
 export type SetGarrisonMessage = Envelope<'setGarrison', { cityId: string; allow: boolean }>;
 /** The latest battle reports, newest first. Replies with `reports`. */
 export type GetReportsMessage = Envelope<'getReports', Record<string, never>>;
+/** The top 100 of a leaderboard. Replies with `leaderboard`. */
+export type GetLeaderboardMessage = Envelope<'getLeaderboard', { board: 'player' | 'hero' | 'alliance' }>;
 /** The Marketplace from a city. Replies with `market`. */
 export type GetMarketMessage = Envelope<'getMarket', { cityId: string }>;
 /**
@@ -306,6 +308,7 @@ export type ClientMessage =
   | GetReportMessage
   | GetAllianceMessage
   | AllianceActionMessage
+  | GetLeaderboardMessage
   | GetMarketMessage
   | MarketOrderMessage
   | CancelOrderMessage
@@ -355,6 +358,14 @@ export type ChatLineMessage = Envelope<'chat', ChatMessage>;
 export type ChatHistoryMessage = Envelope<'chatHistory', { messages: ChatMessage[] }>;
 export type MailboxMessage = Envelope<'mail', { inbox: Mail[]; sent: Mail[] }>;
 export type MarketMessage = Envelope<'market', MarketView>;
+/** Rows ranked from 1: players (prestige), heroes (level) or alliances (members' prestige). */
+export type LeaderboardMessage = Envelope<
+  'leaderboard',
+  {
+    board: 'player' | 'hero' | 'alliance';
+    rows: (Record<string, string | number | null> & { rank: number })[];
+  }
+>;
 
 export type ServerMessage =
   | WelcomeMessage
@@ -368,7 +379,8 @@ export type ServerMessage =
   | ChatLineMessage
   | ChatHistoryMessage
   | MailboxMessage
-  | MarketMessage;
+  | MarketMessage
+  | LeaderboardMessage;
 
 export type ErrorCode =
   | 'bad_message'
