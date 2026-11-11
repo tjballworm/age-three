@@ -6,6 +6,7 @@ import type {
   City,
   Ladder,
   LordCity,
+  MarchMission,
   MedalCounts,
   Player,
   PolicyId,
@@ -85,11 +86,16 @@ export type PersuadeMessage = Envelope<'persuade', { cityId: string; heroId: str
 /** Opens or closes the Rally Spot's gate. Closed, the troops stay out of battles. Replies with state. */
 export type SetGateMessage = Envelope<'setGate', { cityId: string; open: boolean }>;
 /**
- * Attack the NPC city at x, y with an idle hero and troops from the city. The troops, hero and the trip's food
- * (marchFood) leave now; the battle is fought when the march arrives (a taskDone with `march.won`), then it comes
- * home with the loot. Needs a Rally Spot (10,000 troops per level, one march out at a time per level). `camp` is
- * the camp wave: seconds (0 to 24 hours, 0 if left out) the army waits at the target before it attacks; the food
- * covers it. Replies with state.
+ * Send a march from a city to x, y. `mission` (default 'attack'):
+ * - 'attack': an NPC, lord's town, historic city, another player's city or a valley (a win takes it); needs an
+ *   idle hero. `camp` is the camp wave: seconds (0 to 24 hours) the army waits at the target before it attacks.
+ * - 'scout': anything but your own cities; needs scouts, a hero is optional (their Intelligence helps).
+ * - 'transport': any player's city, your own too; `cargo` is what it delivers (up to the troops' load).
+ * - 'reinforce': one of your cities (the troops move there), or an ally's whose Embassy takes garrisons.
+ * - 'found': an empty flat; takes 250 workers and 10,000 of each resource and builds a city there.
+ * The troops, hero, cargo and the trip's food (marchFood) leave now; the mission happens when the march arrives
+ * (a taskDone with `march.won`) and a report follows. Needs a Rally Spot (10,000 troops per level, one march out
+ * at a time per level). Replies with state.
  */
 export type MarchMessage = Envelope<
   'march',
@@ -97,14 +103,16 @@ export type MarchMessage = Envelope<
     cityId: string;
     x: number;
     y: number;
-    heroId: string;
+    heroId?: string | null;
     troops: Partial<Record<TroopType, number>>;
+    mission?: MarchMission;
     camp?: number;
+    cargo?: Partial<Record<ResourceType, number>>;
   }
 >;
 /**
  * Turn a march around before it attacks (on its way or camping); it takes as long to come home as it has been on
- * the road, at most one trip's time. Replies with state.
+ * the road, at most one trip's time. Troops stationed in an ally's city come the whole way home. Replies with state.
  */
 export type RecallMessage = Envelope<'recall', { cityId: string; taskId: string }>;
 /**
@@ -115,6 +123,10 @@ export type ImposePolicyMessage = Envelope<
   'imposePolicy',
   { cityId: string; x: number; y: number; policy: PolicyId }
 >;
+/** Gives up a valley the city holds (and its bonus). Replies with state. */
+export type AbandonValleyMessage = Envelope<'abandonValley', { cityId: string; x: number; y: number }>;
+/** The Embassy's "let allies garrison this city" box. Replies with state. */
+export type SetGarrisonMessage = Envelope<'setGarrison', { cityId: string; allow: boolean }>;
 /** The latest battle reports, newest first. Replies with `reports`. */
 export type GetReportsMessage = Envelope<'getReports', Record<string, never>>;
 /** One report with the whole battle; marks it read. Replies with `report`. */
@@ -215,6 +227,8 @@ export type ClientMessage =
   | SetGateMessage
   | MarchMessage
   | RecallMessage
+  | AbandonValleyMessage
+  | SetGarrisonMessage
   | ImposePolicyMessage
   | GetReportsMessage
   | GetReportMessage
@@ -336,4 +350,18 @@ export type ErrorCode =
   /** comfort less than 15 minutes after the last one in that city */
   | 'comfort_cooldown'
   /** a march to one of your own cities */
-  | 'own_city';
+  | 'own_city'
+  /** a scout march with no scouts */
+  | 'no_scouts'
+  /** a Found City march without 250 workers */
+  | 'not_enough_workers'
+  /** a transport carrying more than its troops' load */
+  | 'too_much_cargo'
+  /** attacking a valley one of your cities holds */
+  | 'own_valley'
+  /** the city already holds as many valleys as its Town Hall level */
+  | 'valley_cap'
+  /** founding a city when your title allows no more */
+  | 'city_cap'
+  /** reinforcing someone who isn't an ally, or whose Embassy doesn't take (more) garrisons */
+  | 'not_allied';

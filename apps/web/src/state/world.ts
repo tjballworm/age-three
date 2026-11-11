@@ -55,6 +55,17 @@ export const world = generateWorld({ seed: WORLD_SEED, reserved: asTiles(sampleC
  * scene keeps its reference).
  */
 export function placeMyCities(cities: City[], player: Player, lords: LordCity[] = []) {
-  const reserved = [...lordTiles(lords), ...asTiles(cities, player)];
+  const valleys: WorldTile[] = cities.flatMap((c) =>
+    (c.valleys ?? []).map((v) => ({
+      x: v.x,
+      y: v.y,
+      kind: 'valley' as const,
+      level: v.level,
+      terrain: v.terrain,
+      heldBy: c.name,
+      heldByMe: true,
+    })),
+  );
+  const reserved = [...lordTiles(lords), ...valleys, ...asTiles(cities, player)];
   world.tiles = generateWorld({ seed: WORLD_SEED, reserved }).tiles;
 }

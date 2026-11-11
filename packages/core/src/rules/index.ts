@@ -6,6 +6,7 @@ import type { Coord } from '../types';
 export * from './timing';
 export * from './march';
 export * from './loyalty';
+export * from './scout';
 
 /** Shortest distance between two tiles on the wrapping world, in tiles. */
 export function distance(a: Coord, b: Coord): number {

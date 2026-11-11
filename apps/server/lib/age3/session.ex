@@ -96,6 +96,8 @@ defmodule Age3.Session do
               "setMayor",
               "march",
               "recall",
+              "setGarrison",
+              "abandonValley",
               "imposePolicy",
               "promote",
               "getReports",
@@ -270,26 +272,34 @@ defmodule Age3.Session do
   defp handle("setMayor", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid mayor appointment."), session}
 
-  # Attack the NPC city at x, y: {cityId, x, y, heroId, troops: {warrior: 100, ...}, camp}. The troops, hero and
-  # the trip's food leave now; the battle happens when the march arrives (after camping `camp` seconds, 0 if left
-  # out), and a report follows. Replies with the new state.
+  # Send a march from a city to x, y: {cityId, x, y, heroId, troops: {warrior: 100, ...}, mission, camp, cargo}.
+  # mission is "attack" (the default; needs a hero), "scout" (needs scouts, hero optional), "transport" (cargo:
+  # resources to deliver), "reinforce" or "found" (250 workers and 10,000 of each resource build a city on a
+  # flat). The troops, hero, cargo and the trip's food leave now; the mission happens when the march arrives
+  # (after camping `camp` seconds for an attack), and a report follows. Replies with the new state.
   defp handle(
          "march",
-         %{"cityId" => city_id, "x" => x, "y" => y, "heroId" => hero_id, "troops" => %{} = troops} = payload,
+         %{"cityId" => city_id, "x" => x, "y" => y, "troops" => %{} = troops} = payload,
          id,
          session
        )
-       when is_binary(city_id) and is_integer(x) and is_integer(y) and is_binary(hero_id) do
+       when is_binary(city_id) and is_integer(x) and is_integer(y) do
     now = session.now.()
-    camp = Map.get(payload, "camp", 0)
+    hero_id = payload["heroId"]
 
-    case session.store.march(session.player_id, city_id, x, y, hero_id, troops, now, camp) do
-      {:ok, ends_at} ->
-        session.wake.(ends_at)
-        state_reply(id, session, now)
+    opts = %{
+      "camp" => Map.get(payload, "camp", 0),
+      "mission" => Map.get(payload, "mission", "attack"),
+      "cargo" => Map.get(payload, "cargo")
+    }
 
-      {:error, code} ->
-        {error(id, code, message(code)), session}
+    with true <- is_binary(hero_id) or is_nil(hero_id),
+         {:ok, ends_at} <- session.store.march(session.player_id, city_id, x, y, hero_id, troops, now, opts) do
+      session.wake.(ends_at)
+      state_reply(id, session, now)
+    else
+      false -> {error(id, "bad_message", "Not a valid march."), session}
+      {:error, code} -> {error(id, code, message(code)), session}
     end
   end
 
@@ -403,6 +413,22 @@ defmodule Age3.Session do
 
   defp handle("setGate", _payload, id, session),
     do: {error(id, "bad_message", "Open or close the gate with true or false."), session}
+
+  # The Embassy's "let allies garrison this city" box: {cityId, allow}.
+  defp handle("setGarrison", %{"cityId" => city_id, "allow" => allow}, id, session)
+       when is_binary(city_id) and is_boolean(allow),
+       do: command(id, session, &session.store.set_garrison(session.player_id, city_id, allow, &1))
+
+  defp handle("setGarrison", _payload, id, session),
+    do: {error(id, "bad_message", "Tick or untick with true or false."), session}
+
+  # Give up a valley a city holds: {cityId, x, y}.
+  defp handle("abandonValley", %{"cityId" => city_id, "x" => x, "y" => y}, id, session)
+       when is_binary(city_id) and is_integer(x) and is_integer(y),
+       do: command(id, session, &session.store.abandon_valley(session.player_id, city_id, x, y, &1))
+
+  defp handle("abandonValley", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid valley."), session}
 
   # The hero who leads a city's defence: {cityId, heroId} (null for nobody).
   defp handle("setDefender", %{"cityId" => city_id} = payload, id, session) when is_binary(city_id) do
@@ -526,6 +552,17 @@ defmodule Age3.Session do
     end
   end
 
+  # A command that changes the game: run it at now and reply with the new state, or the error.
+  defp command(id, session, fun) do
+    now = session.now.()
+
+    case fun.(now) do
+      :ok -> state_reply(id, session, now)
+      {:ok, _} -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
   # One clock reading: resources are settled to exactly the serverTime the client projects from.
   defp state_reply(id, session, now) do
     case session.store.state(session.player_id, now) do
@@ -582,6 +619,16 @@ defmodule Age3.Session do
     do: "All this city's marches are out. Each Rally Spot level sends one march at a time."
 
   defp message("not_enough_troops"), do: "Not enough troops in the city."
+  defp message("no_scouts"), do: "A scouting march needs at least one scout."
+  defp message("not_enough_workers"), do: "Founding a city takes 250 workers."
+  defp message("too_much_cargo"), do: "The troops can't carry that much. Send more, or transporters."
+  defp message("own_valley"), do: "You already hold that valley."
+
+  defp message("valley_cap"),
+    do: "This city holds as many valleys as its Town Hall level. Upgrade it or abandon one."
+
+  defp message("city_cap"), do: "Your title doesn't allow another city yet."
+  defp message("not_allied"), do: "You can only reinforce an ally whose Embassy takes garrisons and has room."
   defp message("no_troops"), do: "Choose some troops to send."
   defp message("no_hero"), do: "Choose a hero to lead the march."
   defp message("hero_not_found"), do: "That hero isn't in those cities any more."

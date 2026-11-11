@@ -164,4 +164,11 @@ defmodule Age3.Heroes do
       b -> b.level
     end
   end
+
+  @doc """
+  A mayor's Politics as more production (%) for each field resource (wiki, Stats: +1% per point); nil (no mayor)
+  gives none.
+  """
+  def politics_bonus(nil), do: %{}
+  def politics_bonus(politics), do: Map.new(~w(food lumber stone iron), &{&1, max(0, politics)})
 end

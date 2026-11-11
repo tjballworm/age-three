@@ -1,0 +1,74 @@
+{
+  "_source": "Evony Age II wiki: Walls, Trap, Abatis, Archer's Tower, Rolling log, Defensive Trebuchet (fetched 2026-11-02).",
+  "spaces": [1000, 3000, 6000, 10000, 15000, 21000, 28000, 36000, 45000, 55000],
+  "forts": {
+    "trap": {
+      "name": "Trap",
+      "space": 1,
+      "cost": {
+        "food": 50,
+        "lumber": 500,
+        "stone": 100,
+        "iron": 50
+      },
+      "seconds": 60,
+      "walls": 1,
+      "research": {}
+    },
+    "abatis": {
+      "name": "Abatis",
+      "space": 2,
+      "cost": {
+        "food": 100,
+        "lumber": 1200,
+        "iron": 150
+      },
+      "seconds": 120,
+      "walls": 2,
+      "research": {
+        "metalCasting": 1
+      }
+    },
+    "tower": {
+      "name": "Archer's Tower",
+      "space": 3,
+      "cost": {
+        "food": 200,
+        "lumber": 2000,
+        "stone": 1500,
+        "iron": 500
+      },
+      "seconds": 180,
+      "walls": 3,
+      "research": {
+        "archery": 3
+      }
+    },
+    "log": {
+      "name": "Rolling Log",
+      "space": 4,
+      "cost": {
+        "food": 300,
+        "lumber": 6000
+      },
+      "seconds": 360,
+      "walls": 5,
+      "research": {
+        "metalCasting": 5
+      }
+    },
+    "trebuchet": {
+      "name": "Defensive Trebuchet",
+      "space": 5,
+      "cost": {
+        "food": 600,
+        "stone": 8000
+      },
+      "seconds": 600,
+      "walls": 7,
+      "research": {
+        "metalCasting": 6
+      }
+    }
+  }
+}

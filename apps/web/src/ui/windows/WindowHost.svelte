@@ -18,7 +18,7 @@
     items: { title: 'Items', tabs: ['All', 'Speed-ups', 'Resources', 'Chests'] },
     quests: { title: 'Quests', tabs: ['Routine', 'Military', 'Economy'] },
     alliance: { title: 'Alliance', tabs: ['Info', 'Members', 'Diplomacy'] },
-    reports: { title: 'Reports', tabs: ['Battles', 'Scouting', 'Trade'] },
+    reports: { title: 'Reports', tabs: ['Battles', 'Scouting', 'Missions'] },
     mail: { title: 'Mail', tabs: ['Inbox', 'Sent', 'Compose'] },
     leaderboard: { title: 'Leaderboard', tabs: ['Player', 'Hero', 'Alliance'] },
     shop: { title: 'Shop', tabs: ['Featured', 'Speed-ups', 'Resources', 'Chests'] },
@@ -57,8 +57,10 @@
       <HeroesOverview />
     {:else if game.openWindow === 'cheats'}
       <CheatsWindow page={tab === 'Buildings & research' ? 'buildings' : 'resources'} />
-    {:else if game.openWindow === 'reports' && tab === 'Battles'}
-      <ReportsWindow />
+    {:else if game.openWindow === 'reports'}
+      {#key tab}<ReportsWindow
+          tab={tab === 'Scouting' ? 'scouting' : tab === 'Missions' ? 'missions' : 'battles'}
+        />{/key}
     {:else if game.openWindow === 'leaderboard'}
       <LeaderboardPlaceholder board={tab} />
     {:else}

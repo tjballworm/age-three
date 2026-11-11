@@ -9,7 +9,17 @@
     TROOPS,
     TROOP_DATA,
     TROOPS_PER_RALLY_LEVEL,
+    FOUND_CARGO,
+    FOUND_WORKERS,
+    RESOURCE_TYPES,
+    SCOUTS_PER_LEVEL,
+    TERRAINS,
+    VALLEY_GARRISONS,
     campSeconds,
+    reliefMultiplier,
+    scoutDetail,
+    scoutLevel,
+    valleyBonus,
     marchFood,
     marchLoad,
     marchSeconds,
@@ -19,6 +29,7 @@
     npcSpec,
     researchInCity,
     stockAt,
+    type ResourceType,
     type TroopType,
     type WorldTile,
   } from '@age3/core';
@@ -29,22 +40,37 @@
   import Window from '$ui/components/Window.svelte';
   import { formatDuration, formatNumber } from '$ui/format';
 
-  // Sends an attack from the city on screen to an NPC city, another lord's city or a historic city: pick the
-  // troops, an idle hero and an optional camp wave (time the army waits at the target before it attacks), see how
-  // long it takes, the food it eats and what it can carry back, then March. A city sends one march at a time per
-  // Rally Spot level. The numbers come from the same rules the server uses (rules/march.ts); the server checks
-  // everything again and decides the battle when it arrives.
+  // Sends a march from the city on screen: an attack (on an NPC, a lord's city, a historic city or a valley), a
+  // scout, a transport, reinforcements or settlers to found a city. Pick the troops, a hero (attacks need one,
+  // scouts may take one), a camp wave for attacks, the cargo for a transport; see how long it takes, the food it
+  // eats and what it can carry, then March. A city sends one march at a time per Rally Spot level. The numbers
+  // come from the same rules the server uses (rules/march.ts, rules/scout.ts); the server checks everything
+  // again and decides what happens when it arrives.
 
   let { target }: { target: WorldTile } = $props();
 
   const city = $derived(currentCity());
+  const mission = $derived(game.marchMission);
+  const valley = $derived(target.kind === 'valley');
+  /** Attacks need a hero; scouts may take one (their Intelligence helps); other missions go without. */
+  const heroMode = $derived(mission === 'attack' ? 'needed' : mission === 'scout' ? 'optional' : 'none');
   /** Another lord's city (a player's, or a made-up town): no garrison to show, as there is no scouting yet. */
   const lord = $derived(target.kind === 'city' || !!target.cityId);
   /** A historic city: its garrison slots (each holds one of its types), ruler, walls and research 10. */
   const hc = $derived(target.kind === 'historic' && !lord ? historicSpec(target.level) : undefined);
   const npc = $derived(target.kind === 'npc' ? npcSpec(target.level) : undefined);
+  const beacon = $derived(city.buildings.find((b) => b.type === 'beacontower')?.level ?? 0);
+  const relief = $derived(city.buildings.find((b) => b.type === 'reliefstation')?.level ?? 0);
   const what = $derived(
-    lord ? `${target.name} (${target.owner})` : hc ? `${target.name}` : `the Lv ${target.level} NPC`,
+    lord
+      ? `${target.name} (${target.owner})`
+      : hc
+        ? `${target.name}`
+        : valley
+          ? `the Lv ${target.level} valley`
+          : target.kind === 'flat'
+            ? 'the flat'
+            : `the Lv ${target.level} NPC`,
   );
   const hcLoot = Object.values(HISTORIC_RESOURCES).reduce((n, v) => n + v, 0);
   const rally = $derived(city.buildings.find((b) => b.type === 'rallyspot')?.level ?? 0);
@@ -61,6 +87,7 @@
   const slots = $derived(maxMarches(rally));
 
   let counts = $state<Partial<Record<TroopType, number>>>({});
+  let cargo = $state<Partial<Record<ResourceType, number | null>>>({});
   let heroId = $state('');
   let campH = $state<number | null>(null);
   let campM = $state<number | null>(null);
@@ -81,10 +108,32 @@
     ) as Partial<Record<TroopType, number>>,
   );
   const total = $derived(Object.values(army).reduce((n, v) => n + (v ?? 0), 0));
+  /** Transports and reinforcements go faster with a Relief Station. */
+  const speedup = $derived(mission === 'transport' || mission === 'reinforce' ? reliefMultiplier(relief) : 1);
   const seconds = $derived(
-    game.player.instantMarch && total ? 1 : marchSeconds(city, target, army, research),
+    game.player.instantMarch && total
+      ? 1
+      : total
+        ? Math.max(1, Math.ceil(marchSeconds(city, target, army, research) / speedup))
+        : 0,
   );
-  const camp = $derived(campSeconds(campH ?? 0, campM ?? 0, campS ?? 0));
+  const camp = $derived(mission === 'attack' ? campSeconds(campH ?? 0, campM ?? 0, campS ?? 0) : 0);
+  /** What the march carries there: a transport's cargo, or a new city's resources. */
+  const carried = $derived(
+    mission === 'found'
+      ? ({ ...FOUND_CARGO } as Partial<Record<ResourceType, number>>)
+      : mission === 'transport'
+        ? (Object.fromEntries(
+            RESOURCE_TYPES.map((r) => [r, Math.max(0, Math.trunc(cargo[r] ?? 0))]).filter(([, n]) => n),
+          ) as Partial<Record<ResourceType, number>>)
+        : {},
+  );
+  const carriedTotal = $derived(Object.values(carried).reduce((n, v) => n + (v ?? 0), 0));
+  const hero = $derived(idle.find((h) => h.id === heroId));
+  const scouting = $derived(
+    scoutLevel(research.informatics ?? 0, beacon, heroMode === 'none' ? 0 : hero?.intelligence),
+  );
+  const stockNow = (r: ResourceType) => stockAt(city.resources[r], game.syncedAt, clock.now);
   const food = $derived(marchFood(army, seconds, camp));
   const load = $derived(marchLoad(army, research));
   const foodNow = $derived(stockAt(city.resources.food, game.syncedAt, clock.now));
@@ -92,22 +141,30 @@
 
   const problem = $derived(
     !game.fromServer
-      ? 'Attacking needs the game server.'
+      ? 'Marching needs the game server.'
       : rally === 0
         ? 'Build a Rally Spot to send troops out.'
         : out >= slots
           ? `All ${slots} of this city's marches are out. Each Rally Spot level sends one at a time.`
           : camp > MAX_CAMP_SECONDS
             ? 'A camp wave can be 24 hours at most.'
-            : !idle.length
+            : heroMode === 'needed' && !idle.length
               ? 'No idle hero in this city. Hire one at the Inn.'
               : total === 0
                 ? 'Choose some troops to send.'
                 : total > limit
                   ? `Too many troops: your Rally Spot Lv ${rally} sends ${formatNumber(limit)}.`
-                  : food > foodNow
-                    ? 'Not enough food for the trip.'
-                    : '',
+                  : mission === 'scout' && !(army.scout ?? 0)
+                    ? 'A scouting march needs scouts.'
+                    : mission === 'found' && (army.worker ?? 0) < FOUND_WORKERS
+                      ? `Founding a city takes ${FOUND_WORKERS} workers.`
+                      : carriedTotal > load
+                        ? `The troops can carry ${formatNumber(load)}. Send more, or transporters.`
+                        : RESOURCE_TYPES.some(
+                              (r) => (carried[r] ?? 0) + (r === 'food' ? food : 0) > stockNow(r),
+                            ) || food > foodNow
+                          ? 'Not enough resources for the trip.'
+                          : '',
   );
 
   function max(t: TroopType) {
@@ -119,6 +176,26 @@
     openMarch(null);
   }
 
+  const VERB = {
+    attack: 'to attack',
+    scout: 'to scout',
+    transport: 'with resources for',
+    reinforce: 'to reinforce',
+    found: 'to found a city near',
+  } as const;
+  const TITLE = {
+    attack: 'Attack',
+    scout: 'Scout',
+    transport: 'Transport to',
+    reinforce: 'Reinforce',
+    found: 'Found a city at',
+  } as const;
+
+  function maxCargo(r: ResourceType) {
+    const others = carriedTotal - (carried[r] ?? 0);
+    cargo[r] = Math.max(0, Math.min(Math.floor(stockNow(r)) - (r === 'food' ? food : 0), load - others));
+  }
+
   async function send() {
     error = '';
     sending = true;
@@ -127,12 +204,21 @@
     try {
       await command({
         type: 'march',
-        payload: { cityId: city.id, x: target.x, y: target.y, heroId, troops: army, camp },
+        payload: {
+          cityId: city.id,
+          x: target.x,
+          y: target.y,
+          heroId: heroMode === 'none' ? null : heroId || null,
+          troops: army,
+          mission,
+          camp,
+          ...(mission === 'transport' ? { cargo: carried } : {}),
+        },
       });
       postChat(
         'system',
         null,
-        `${formatNumber(sent)} troops set off for ${what} at (${target.x},${target.y}).`,
+        `${formatNumber(sent)} troops set off ${VERB[mission]} ${what} at (${target.x},${target.y}).`,
       );
       close();
     } catch (e) {
@@ -145,8 +231,12 @@
 
 <Window
   title={lord || hc
-    ? `Attack ${target.name} (${target.x},${target.y})`
-    : `Attack Lv ${target.level} NPC (${target.x},${target.y})`}
+    ? `${TITLE[mission]} ${target.name} (${target.x},${target.y})`
+    : valley
+      ? `${TITLE[mission]} Lv ${target.level} valley (${target.x},${target.y})`
+      : target.kind === 'flat'
+        ? `${mission === 'found' ? TITLE.found : TITLE[mission]} (${target.x},${target.y})`
+        : `${TITLE[mission]} Lv ${target.level} NPC (${target.x},${target.y})`}
   width={760}
   height={540}
   onclose={close}
@@ -181,80 +271,187 @@
         <p class="note">No troops in this city. Train some at the Barracks.</p>
       {/if}
 
-      <div class="heroes">
-        <span class="caption">Hero <span class="note">click one to lead the march</span></span>
-        <div class="cards" role="radiogroup" aria-label="Hero">
-          {#each idle as h (h.id)}
-            <button
-              type="button"
-              class="card"
-              class:picked={h.id === heroId}
-              role="radio"
-              aria-checked={h.id === heroId}
-              onclick={() => (heroId = h.id)}
+      {#if heroMode !== 'none'}
+        <div class="heroes">
+          <span class="caption"
+            >Hero <span class="note"
+              >{heroMode === 'optional'
+                ? 'optional: their Intelligence helps the scouts (click again to send none)'
+                : 'click one to lead the march'}</span
+            ></span
+          >
+          <div class="cards" role="radiogroup" aria-label="Hero">
+            {#each idle as h (h.id)}
+              <button
+                type="button"
+                class="card"
+                class:picked={h.id === heroId}
+                role="radio"
+                aria-checked={h.id === heroId}
+                onclick={() => (heroId = heroMode === 'optional' && heroId === h.id ? '' : h.id)}
+              >
+                <span class="face">{h.name[0]}</span>
+                <span class="who">
+                  <b>{h.name}</b>
+                  <span
+                    >Lv {h.level} · ATK {h.attack} · INT {h.intelligence}{h.stars > 0
+                      ? ` · ★ ${h.stars}`
+                      : ''}</span
+                  >
+                </span>
+              </button>
+            {:else}
+              <p class="note">No idle hero in this city. Hire one at the Inn.</p>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      {#if mission === 'transport'}
+        <div class="cargo">
+          <span class="caption">Cargo <span class="note">what the troops carry there</span></span>
+          {#each RESOURCE_TYPES as r (r)}
+            <label
+              >{r}
+              <input type="number" min="0" placeholder="0" bind:value={cargo[r]} aria-label="{r} to carry" />
+              <Button small variant="blue" tabindex={-1} onclick={() => maxCargo(r)}>Max</Button></label
             >
-              <span class="face">{h.name[0]}</span>
-              <span class="who">
-                <b>{h.name}</b>
-                <span
-                  >Lv {h.level} · ATK {h.attack} · INT {h.intelligence}{h.stars > 0
-                    ? ` · ★ ${h.stars}`
-                    : ''}</span
-                >
-              </span>
-            </button>
-          {:else}
-            <p class="note">No idle hero in this city. Hire one at the Inn.</p>
           {/each}
         </div>
-      </div>
+      {:else if mission === 'found'}
+        <p class="note">
+          Founding takes {FOUND_WORKERS} workers (they settle the city) and
+          {formatNumber(FOUND_CARGO.food)} each of food, lumber, stone and iron, which become its first stock.
+          Your title allows {game.player.cityCap ?? 1}
+          {(game.player.cityCap ?? 1) === 1 ? 'city' : 'cities'}.
+        </p>
+      {/if}
 
-      <div class="camp">
-        <span class="caption">Camp wave <span class="note">wait at the target before attacking</span></span>
-        <label
-          ><input type="number" min="0" max="24" placeholder="0" bind:value={campH} aria-label="Camp hours" />
-          h</label
-        >
-        <label
-          ><input
-            type="number"
-            min="0"
-            max="59"
-            placeholder="0"
-            bind:value={campM}
-            aria-label="Camp minutes"
-          /> m</label
-        >
-        <label
-          ><input
-            type="number"
-            min="0"
-            max="59"
-            placeholder="0"
-            bind:value={campS}
-            aria-label="Camp seconds"
-          /> s</label
-        >
-      </div>
+      {#if mission === 'attack'}
+        <div class="camp">
+          <span class="caption">Camp wave <span class="note">wait at the target before attacking</span></span>
+          <label
+            ><input
+              type="number"
+              min="0"
+              max="24"
+              placeholder="0"
+              bind:value={campH}
+              aria-label="Camp hours"
+            />
+            h</label
+          >
+          <label
+            ><input
+              type="number"
+              min="0"
+              max="59"
+              placeholder="0"
+              bind:value={campM}
+              aria-label="Camp minutes"
+            /> m</label
+          >
+          <label
+            ><input
+              type="number"
+              min="0"
+              max="59"
+              placeholder="0"
+              bind:value={campS}
+              aria-label="Camp seconds"
+            /> s</label
+          >
+        </div>
+      {/if}
 
       <div class="summary">
         <span>Troops <b>{formatNumber(total)} / {formatNumber(limit)}</b></span>
         <span class:short={out >= slots}>Marches out <b>{out} / {slots}</b></span>
         <span>Travel <b>{total ? formatDuration(seconds * 1000) : '—'}</b> each way</span>
-        <span>Attacks in <b>{total ? formatDuration((seconds + camp) * 1000) : '—'}</b></span>
+        <span
+          >{mission === 'attack' ? 'Attacks in' : 'Arrives in'}
+          <b>{total ? formatDuration((seconds + camp) * 1000) : '—'}</b></span
+        >
         <span class:short={food > foodNow}>Food <b>{formatNumber(food)}</b></span>
-        <span>Can carry <b>{formatNumber(load)}</b></span>
+        <span class:short={carriedTotal > load}
+          >Can carry <b>{formatNumber(load)}</b>{#if carriedTotal}&nbsp;· carrying {formatNumber(
+              carriedTotal,
+            )}{/if}</span
+        >
+        {#if speedup > 1}<span>Relief Station <b>{speedup}x</b> faster</span>{/if}
+        {#if mission === 'scout'}<span class:short={scouting === 0}>Scout level <b>{scouting}</b></span>{/if}
       </div>
       {#if game.player.instantMarch}<p class="note">Instant march is on (cheat): one second each way.</p>{/if}
     </div>
 
     <div class="side enemy">
-      {#if lord}
+      {#if mission === 'scout'}
+        <p class="note">
+          Scout level {scouting} = the lower of your Informatics ({research.informatics ?? 0}) and Beacon
+          Tower ({beacon}), plus 1 for every 25 of the hero's Intelligence (at most 2).
+          {#if scouting === 0}Without both, scouts see nothing and die.{/if}
+          {#if lord}
+            Against a lord's city the owner's Informatics and defending hero make it harder to read; with its
+            gate open its scouts fight yours, and you need more than it has.
+          {:else if target.kind !== 'flat'}
+            A level {target.level} target needs {formatNumber(SCOUTS_PER_LEVEL * target.level)} scouts or they
+            all die. At this level you would see {scoutDetail(scouting, target.level) === 'exact'
+              ? 'exact numbers'
+              : scoutDetail(scouting, target.level) === 'approx'
+                ? 'rounded numbers'
+                : 'only which troops are there'}.
+          {/if}
+        </p>
+      {:else if mission === 'transport' || mission === 'reinforce'}
+        <h3>{target.name ?? ''} <span class="note">{target.owner ?? ''}</span></h3>
+        <p class="note">
+          {#if mission === 'transport'}
+            The cargo goes into its storage (even above the cap) and the troops come straight back.
+          {:else if target.mine}
+            The troops move there for good.
+          {:else}
+            Your troops stay in this ally's city and fight for it while its gate is open, eating its food.
+            Recall them from your march list. Only allies whose Embassy takes garrisons (one wave per Embassy
+            level) accept them.
+          {/if}
+          {#if speedup > 1}Your Relief Station makes it {speedup}x faster.{/if}
+        </p>
+      {:else if mission === 'found'}
+        <h3>Empty flat</h3>
+        <p class="note">If someone builds here first, everything comes back.</p>
+      {:else if valley && target.terrain}
+        <h3>
+          Lv {target.level}
+          {TERRAINS[target.terrain].name}
+          <span class="note"
+            >+{valleyBonus(target.terrain, target.level)}% {TERRAINS[target.terrain].resource}</span
+          >
+        </h3>
+        {#if target.heldBy}
+          <p class="note">Held by {target.heldBy}. Nobody guards a held valley, so a win takes it.</p>
+        {:else}
+          <table>
+            <tbody>
+              {#each Object.entries(VALLEY_GARRISONS[target.level - 1] ?? {}) as [t, n] (t)}
+                <tr><td class="name">{TROOP_DATA[t as TroopType].name}</td><td>{formatNumber(n ?? 0)}</td></tr
+                >
+              {/each}
+            </tbody>
+          </table>
+        {/if}
+        <p class="note">
+          A win takes it for {city.name} if the city holds fewer valleys than its Town Hall level ({city
+            .valleys?.length ?? 0} held). It refills over an hour after a battle.
+        </p>
+      {/if}
+      {#if mission !== 'attack'}
+        <!-- nothing more to show for other missions -->
+      {:else if lord}
         <h3>{target.name} <span class="note">Lv {target.level} · {target.owner}</span></h3>
         <p class="note">
-          Scouting isn't built yet, so you can't see this lord's troops. With the gate closed only the walls
-          defend; open, the whole garrison fights. A win plunders what the warehouses don't protect and takes
-          3 loyalty. A win when loyalty is already 0 captures the city.
+          Scout it first to see its troops. With the gate closed only the walls and fortifications defend;
+          open, the whole garrison (and any allies stationed there) fights. A win plunders what the warehouses
+          don't protect and takes 3 loyalty. A win when loyalty is already 0 captures the city.
         </p>
       {:else if hc}
         <h3>{target.name} <span class="note">Lv {target.level} historic city · when full</span></h3>
@@ -292,10 +489,10 @@
           captures it. Killing 5% of its garrison in one battle, won or lost, rolls for a Justice and a Nation
           Medal. After a battle it refills over a day, and at 00:00 UTC it is full again.
         </p>
-      {:else}
+      {:else if npc}
         <h3>Lv {target.level} NPC garrison <span class="note">when full</span></h3>
       {/if}
-      {#if npc}
+      {#if npc && mission === 'attack'}
         <table>
           <tbody>
             {#each Object.entries(npc.troops) as [t, n] (t)}
@@ -323,7 +520,9 @@
   {#snippet footer()}
     {#if error || problem}<span class="error" role="alert">{error || problem}</span>{/if}
     <Button variant="dark" onclick={close}>Cancel</Button>
-    <Button variant="red" disabled={!!problem || sending} onclick={send}>March</Button>
+    <Button variant={mission === 'attack' ? 'red' : 'blue'} disabled={!!problem || sending} onclick={send}
+      >March</Button
+    >
   {/snippet}
 </Window>
 
@@ -373,6 +572,21 @@
     border: 1px solid #6d8aa8;
     border-radius: 4px;
     font: inherit;
+  }
+  .cargo {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .cargo label {
+    display: grid;
+    grid-template-columns: 60px 1fr auto;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--navy);
+    text-transform: capitalize;
   }
   .camp {
     display: flex;

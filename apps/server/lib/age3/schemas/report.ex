@@ -22,6 +22,10 @@ defmodule Age3.Report do
 
     # a policy report (side "policy" or "policied"): %{"policy", "from", "to", "taken"}; no battle, so no result
     field :policy, :map
+    # a scout report (kind "scout"): what was seen (Age3.Scout.report/2); no battle, so no result
+    field :scout, :map
+    # "battle" (with a result), "scout", "transport", "reinforce", "found" or "valley" (a mission's report)
+    field :kind, :string, default: "battle"
     field :result, :map
     field :read, :boolean, default: false
     field :fought_at, :utc_datetime_usec

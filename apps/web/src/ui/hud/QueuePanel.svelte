@@ -21,6 +21,7 @@
     train: 'train',
     research: 'research',
     march: 'march',
+    fort: 'walls',
   };
 
   /** Only building construction and upgrades (not walls) with 5 minutes or less left get a free Speedup button. */
@@ -30,7 +31,10 @@
    * A march still on its way (or camping) can be called back; it takes as long to come home as it has been out, at
    * most one trip.
    */
-  const canRecall = (t: TimedTask) => game.fromServer && t.kind === 'march' && t.march?.phase === 'out';
+  const canRecall = (t: TimedTask) =>
+    game.fromServer && t.kind === 'march' && (t.march?.phase === 'out' || t.march?.phase === 'stationed');
+  /** Troops staying in an ally's city until recalled: no end time. */
+  const stationed = (t: TimedTask) => t.kind === 'march' && t.march?.phase === 'stationed';
   /** A march waiting out its camp wave at the target. */
   const camping = (t: TimedTask) =>
     t.kind === 'march' &&
@@ -71,10 +75,12 @@
     <div class="rows">
       {#each rows as task (task.id)}
         <div class="row" title={task.label}>
-          <ProgressBar value={progress(task, clock.now)} tone={task.kind} />
+          <ProgressBar value={stationed(task) ? 1 : progress(task, clock.now)} tone={task.kind} />
           <span class="ic"><Icon name={ICON[task.kind]} size={14} stroke={2.2} /></span>
           <span class="label">{task.label}{camping(task) ? ' (camping)' : ''}</span>
-          <span class="time">{formatDuration(remaining(task, clock.now))}</span>
+          <span class="time"
+            >{stationed(task) ? 'stationed' : formatDuration(remaining(task, clock.now))}</span
+          >
           {#if canRecall(task)}
             <button class="speedup" type="button" onclick={() => recall(task)}>Recall</button>
           {/if}

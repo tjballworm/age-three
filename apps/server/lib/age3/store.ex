@@ -163,19 +163,21 @@ defmodule Age3.Store do
             ) :: :ok | {:error, code :: String.t()}
 
   @doc """
-  Sends an attack from one of the player's cities to the NPC city at x, y with hero_id and troops
-  (%{"warrior" => 100}), taking the troops, hero and the trip's food now (Age3.March). camp is the camp wave in
-  seconds: the army waits that long at the target before it attacks. Returns when it attacks.
+  Sends a march from one of the player's cities to x, y with hero_id (nil for none) and troops
+  (%{"warrior" => 100}), taking the troops, hero, cargo and the trip's food now (Age3.March). opts:
+  %{"mission" => "attack" | "scout" | "transport" | "reinforce" | "found", "camp" => seconds the army waits at
+  the target before it attacks, "cargo" => resources a transport delivers}; a bare integer is a camp wave.
+  Returns when it arrives.
   """
   @callback march(
               player_id :: String.t(),
               city_id :: String.t(),
               x :: integer,
               y :: integer,
-              hero_id :: String.t(),
+              hero_id :: String.t() | nil,
               troops :: map,
               now_ms :: integer,
-              camp :: non_neg_integer
+              opts :: map | non_neg_integer
             ) :: {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
 
   @doc """
@@ -197,6 +199,19 @@ defmodule Age3.Store do
   """
   @callback recall(player_id :: String.t(), city_id :: String.t(), task_id :: String.t(), now_ms :: integer) ::
               {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
+
+  @doc "Ticks or unticks the Embassy's \"let allies garrison this city\" box."
+  @callback set_garrison(player_id :: String.t(), city_id :: String.t(), allow :: boolean, now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
+  @doc "Gives up a valley the city holds; its bonus stops."
+  @callback abandon_valley(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              x :: integer,
+              y :: integer,
+              now_ms :: integer
+            ) :: :ok | {:error, code :: String.t()}
 
   @doc "The player's latest battle reports, newest first, without the battle details."
   @callback reports(player_id :: String.t()) :: [map]
@@ -246,8 +261,11 @@ defmodule Age3.Store.Pg do
     Repo,
     Research,
     Task,
+    Scout,
     Titles,
     Train,
+    Valley,
+    ValleyHold,
     World
   }
 
@@ -622,6 +640,33 @@ defmodule Age3.Store.Pg do
   end
 
   @impl true
+  def set_garrison(player_id, city_id, allow, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      Repo.update_all(from(c in City, where: c.id == ^city.id), set: [allow_garrison: allow])
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def abandon_valley(player_id, city_id, x, y, now_ms) do
+    now = to_datetime(now_ms)
+    arrivals([city_id], now)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      complete_due(city.id, now)
+      {n, _} = Repo.delete_all(from v in ValleyHold, where: v.city_id == ^city.id and v.x == ^x and v.y == ^y)
+      if n == 0, do: Repo.rollback("bad_message")
+      # its bonus stops now
+      resnapshot(Repo.get!(City, city.id), now)
+    end)
+    |> ok()
+  end
+
+  @impl true
   def set_defender(player_id, city_id, hero_id, now_ms) do
     arrivals([city_id], to_datetime(now_ms))
 
@@ -825,10 +870,19 @@ defmodule Age3.Store.Pg do
   # Marches. Sending takes the troops, the hero and the trip's food from the city now; the battle is fought when
   # the march task ends (complete_due), which then starts a second task for the way back. See Age3.March.
 
+  # A stationed reinforcement never ends by itself: its lord recalls it.
+  @never ~U[9999-01-01 00:00:00.000000Z]
+
   @impl true
-  def march(player_id, city_id, x, y, hero_id, troops, now_ms, camp \\ 0) do
+  def march(player_id, city_id, x, y, hero_id, troops, now_ms, opts \\ %{})
+
+  def march(player_id, city_id, x, y, hero_id, troops, now_ms, camp) when is_integer(camp),
+    do: march(player_id, city_id, x, y, hero_id, troops, now_ms, %{"camp" => camp})
+
+  def march(player_id, city_id, x, y, hero_id, troops, now_ms, opts) do
     now = to_datetime(now_ms)
     arrivals([city_id], now)
+    mission = opts["mission"] || "attack"
 
     Repo.transaction(fn ->
       city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
@@ -836,14 +890,26 @@ defmodule Age3.Store.Pg do
       buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
       player = Repo.get!(Player, player_id)
       research = Research.in_city(player.research, buildings)
-      hero = find_hero(city.id, hero_id)
+      hero = hero_id && (find_hero(city.id, hero_id) || Repo.rollback("no_hero"))
       resources = settled(city, now_ms).resources
       food = resources["food"]["amount"]
+      stock = Map.new(resources, fn {k, v} -> {k, v["amount"]} end)
 
-      target = Pvp.target(city_at(x, y), World.tile_at(x, y), player_id)
+      target = March.target(mission, city_at(x, y), World.tile_at(x, y), player_id)
+      mission_allowed(mission, target, city, player, x, y)
       marches = Repo.aggregate(from(t in Task, where: t.city_id == ^city.id and t.kind == "march"), :count)
       rally = Historic.rally_multiplier(city.historic_level)
-      opts = [rally_multiplier: rally, marches: marches, camp: camp]
+      relief = March.relief(Build.level_of(buildings, "reliefstation"))
+
+      opts = [
+        mission: mission,
+        rally_multiplier: rally,
+        marches: marches,
+        camp: opts["camp"] || 0,
+        cargo: opts["cargo"],
+        stock: stock,
+        relief: relief
+      ]
 
       case March.check(
              buildings,
@@ -859,31 +925,34 @@ defmodule Age3.Store.Pg do
            ) do
         {:ok, plan} ->
           seconds = if player.instant_march, do: 1, else: plan.seconds
-          save_resources(city, Build.spend(resources, %{"food" => plan.food}), now_ms)
+          spent = Map.update(plan.cargo, "food", plan.food, &(&1 + plan.food))
+          save_resources(city, Build.spend(resources, spent), now_ms)
 
           Repo.update_all(from(c in City, where: c.id == ^city.id),
             set: [troops: March.take(city.troops, plan.troops)]
           )
 
-          Repo.update_all(from(h in Hero, where: h.id == ^hero.id), set: [status: "marching"])
+          if hero, do: Repo.update_all(from(h in Hero, where: h.id == ^hero.id), set: [status: "marching"])
           # fewer troops at home eat less food
           resnapshot(Repo.get!(City, city.id), now)
 
           Repo.insert!(%Task{
             city_id: city.id,
             kind: "march",
-            label: attack_label(target, x, y),
-            target_type: "attack",
+            label: march_label(mission, target, x, y),
+            target_type: mission,
             target_level: plan.level || elem(target, 1).level,
             target_city_id: with({:city, c} <- target, do: c.id, else: (_ -> nil)),
-            cost: %{"food" => plan.food},
+            cost: spent,
             data: %{
               "phase" => "out",
+              "mission" => mission,
               "x" => x,
               "y" => y,
-              "heroId" => hero.id,
-              "heroName" => hero.name,
+              "heroId" => hero && hero.id,
+              "heroName" => hero && hero.name,
               "troops" => plan.troops,
+              "cargo" => plan.cargo,
               "seconds" => seconds,
               "camp" => plan.camp,
               "target" => Atom.to_string(elem(target, 0))
@@ -903,10 +972,77 @@ defmodule Age3.Store.Pg do
     end
   end
 
+  # Checks a mission needs the database for, inside the march's transaction: valleys (the city's cap, not your
+  # own), founding (the title's city cap, counting Found City marches already out) and reinforcing someone
+  # else's city (an ally whose Embassy takes garrisons and has room).
+  defp mission_allowed("attack", {:valley, _level}, city, _player, x, y) do
+    case Repo.one(from v in ValleyHold, where: v.x == ^x and v.y == ^y, preload: :city) do
+      %ValleyHold{city: %City{player_id: owner}} when owner == city.player_id -> Repo.rollback("own_valley")
+      _ -> :ok
+    end
+
+    town_hall =
+      Repo.one(from(b in Building, where: b.city_id == ^city.id and b.slot == "townhall", select: b.level))
+
+    if valley_count(city.id) >= Valley.cap(town_hall || 0), do: Repo.rollback("valley_cap")
+  end
+
+  defp mission_allowed("found", _target, _city, player, _x, _y) do
+    cities = Repo.aggregate(from(c in City, where: c.player_id == ^player.id), :count)
+
+    founding =
+      Repo.aggregate(
+        from(t in Task,
+          join: c in City,
+          on: c.id == t.city_id,
+          where: c.player_id == ^player.id and t.kind == "march" and t.target_type == "found"
+        ),
+        :count
+      )
+
+    if cities + founding >= Titles.city_cap(player.title), do: Repo.rollback("city_cap")
+  end
+
+  defp mission_allowed("reinforce", {:city, %City{player_id: owner} = host}, city, _player, _x, _y)
+       when owner != city.player_id do
+    unless can_garrison?(host, city.player_id), do: Repo.rollback("not_allied")
+  end
+
+  defp mission_allowed(_mission, _target, _city, _player, _x, _y), do: :ok
+
+  # Can player_id station troops in host (another player's city)? Only an ally's, and only while its Embassy
+  # takes garrisons and has room for one more (a wave per Embassy level).
+  defp can_garrison?(host, player_id) do
+    embassy =
+      Repo.one(
+        from(b in Building, where: b.city_id == ^host.id and b.type == "embassy", select: max(b.level))
+      ) || 0
+
+    stationed =
+      Repo.aggregate(
+        from(t in Task,
+          where: t.target_city_id == ^host.id and t.kind == "march" and t.target_type == "reinforce"
+        ),
+        :count
+      )
+
+    host.allow_garrison and allies?(host.player_id, player_id) and stationed < embassy
+  end
+
+  defp valley_count(city_id), do: Repo.aggregate(from(v in ValleyHold, where: v.city_id == ^city_id), :count)
+
+  defp march_label("attack", target, x, y), do: attack_label(target, x, y)
+  defp march_label("scout", {:city, c}, x, y), do: "Scouting #{c.name} (#{x},#{y})"
+  defp march_label("scout", _target, x, y), do: "Scouting (#{x},#{y})"
+  defp march_label("transport", {:city, c}, x, y), do: "Transport to #{c.name} (#{x},#{y})"
+  defp march_label("reinforce", {:city, c}, x, y), do: "Reinforcing #{c.name} (#{x},#{y})"
+  defp march_label("found", _target, x, y), do: "Founding a city at (#{x},#{y})"
+
   defp attack_label({:city, c}, x, y), do: "Attack on #{c.name} (#{x},#{y})"
   defp attack_label({:npc, level}, x, y), do: "Attack on Lv#{level} NPC (#{x},#{y})"
   defp attack_label({:lord, _level}, x, y), do: "Attack on #{Lord.name(x, y)} (#{x},#{y})"
   defp attack_label({:historic, _level}, x, y), do: "Attack on #{Historic.name(x, y)} (#{x},#{y})"
+  defp attack_label({:valley, level}, x, y), do: "Attack on Lv#{level} valley (#{x},#{y})"
 
   # Policies: a held historic city takes from another lord's city in its draft area (Age3.Historic). Both cities
   # are locked in id order (like an arriving attack), settled to now, and both lords get a report.
@@ -1046,14 +1182,18 @@ defmodule Age3.Store.Pg do
       city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
       complete_due(city.id, now)
       task = find_task(city.id, task_id, ["march"]) || Repo.rollback("bad_message")
-      if task.data["phase"] != "out", do: Repo.rollback("already_returning")
-      # a march camping at its target is a whole trip from home, not further
-      back_ms = max(1000, min(now_ms - to_ms(task.started_at), task.data["seconds"] * 1000))
+      if task.data["phase"] not in ["out", "stationed"], do: Repo.rollback("already_returning")
+      # a march camping at its target is a whole trip from home, not further; troops stationed in an ally's
+      # city come back the whole way
+      back_ms =
+        if task.data["phase"] == "stationed",
+          do: task.data["seconds"] * 1000,
+          else: max(1000, min(now_ms - to_ms(task.started_at), task.data["seconds"] * 1000))
 
       task
       |> Ecto.Changeset.change(
         label: "Returning from (#{task.data["x"]},#{task.data["y"]})",
-        data: Map.merge(task.data, %{"phase" => "back", "loot" => %{}}),
+        data: Map.merge(task.data, %{"phase" => "back", "loot" => task.data["cargo"] || %{}}),
         target_city_id: nil,
         started_at: now,
         ends_at: to_datetime(now_ms + back_ms)
@@ -1091,6 +1231,8 @@ defmodule Age3.Store.Pg do
                 :side,
                 :loyalty,
                 :policy,
+                :scout,
+                :kind,
                 :hero,
                 :read,
                 :fought_at
@@ -1518,7 +1660,7 @@ defmodule Age3.Store.Pg do
         complete_due(t.city_id, t.ends_at)
         complete_due(t.target_city_id, t.ends_at)
         attacker = Repo.get!(City, t.city_id)
-        {task, players} = attack_city(attacker, Repo.get!(City, t.target_city_id), t)
+        {task, players} = at_city(attacker, Repo.get!(City, t.target_city_id), t)
         Repo.delete!(t)
         resnapshot(Repo.get!(City, attacker.id), t.ends_at)
         {task, attacker.player_id, players}
@@ -1528,6 +1670,255 @@ defmodule Age3.Store.Pg do
   # Pushes a player's new state to their open games (none in tests, where nothing is registered).
   defp tell(player_id, reason) do
     if Process.whereis(Age3.Players), do: Age3.Session.notify(player_id, reason)
+  end
+
+  # A march arriving at a player's city (both locked), by its mission. Returns the task with the outcome added and
+  # the other players whose games changed.
+  defp at_city(att, def, %Task{data: d} = t) do
+    case d["mission"] || "attack" do
+      "attack" -> attack_city(att, def, t)
+      "scout" -> scout_city(att, def, t)
+      "transport" -> deliver(att, def, t)
+      "reinforce" -> reinforce(att, def, t)
+    end
+  end
+
+  # Scouting a player's city (Age3.Scout): what the sender's Informatics, Beacon Tower and hero can see of it,
+  # against the owner's Informatics and defending hero; with its gate open, its scouts fight yours. Both get a
+  # report; the scouted lord only learns who looked and whether it worked.
+  defp scout_city(%City{player_id: owner} = att, %City{player_id: owner}, %Task{data: d} = t) do
+    # captured on the way: nothing to scout any more
+    return_home(att, t, d["troops"], %{})
+    {%{t | data: Map.merge(d, %{"won" => nil, "loot" => %{}})}, []}
+  end
+
+  defp scout_city(att, def, %Task{data: d} = t) do
+    at_ms = to_ms(t.ends_at)
+    s = scout_level(att, d)
+    def_buildings = Repo.all(from b in Building, where: b.city_id == ^def.id)
+    def_research = Research.in_city(research_of(def.player_id), def_buildings)
+    guard = defending_hero(def)
+    open? = Pvp.gate_open?(def.gate_open, def.loyalty)
+    garrison = defending_troops(def)
+    level = Scout.city_level(def_research, guard && guard.intelligence)
+    sent = Map.get(d["troops"], "scout", 0)
+    outcome = Scout.outcome(s, sent, {:city, if(open?, do: Map.get(garrison, "scout", 0))})
+
+    seen =
+      if outcome == :ok do
+        %{resources: resources} = settled(def, at_ms)
+
+        Scout.report(
+          %{
+            "resources" => Map.new(resources, fn {k, v} -> {k, v["amount"]} end),
+            "walls" => Enum.find_value(def_buildings, 0, &(&1.slot == "walls" && &1.level)),
+            "troops" => garrison,
+            "forts" => def.forts || %{},
+            "research" => def_research,
+            "gateOpen" => open?,
+            "buildings" =>
+              for(
+                b <- Enum.sort_by(def_buildings, & &1.slot),
+                do: %{"type" => b.type, "level" => b.level, "slot" => b.slot}
+              ),
+            "heroes" =>
+              Repo.all(
+                from h in Hero,
+                  where: h.city_id == ^def.id,
+                  select: %{"name" => h.name, "level" => h.level, "status" => h.status}
+              )
+          },
+          Scout.detail(s, level)
+        )
+      end
+
+    names = player_names([att.player_id, def.player_id])
+    where = "#{def.name} (#{def.x},#{def.y})"
+    report = scout_report(att, t, outcome, seen, where)
+
+    mission_report(
+      def,
+      t,
+      "scout",
+      "scouted",
+      outcome == :ok,
+      if(outcome == :ok,
+        do: "#{names[att.player_id]} scouted #{where}",
+        else: "#{names[att.player_id]} failed to scout #{where}"
+      ),
+      %{scout: %{"by" => names[att.player_id], "failed" => outcome != :ok}}
+    )
+
+    return_home(att, t, scouts_back(d["troops"], outcome), %{})
+
+    {%{t | data: Map.merge(d, %{"won" => outcome == :ok, "reportId" => report.id, "loot" => %{}})},
+     [def.player_id]}
+  end
+
+  # A transport arriving: its cargo goes into the city's storage (it can go over the cap, like loot), the troops
+  # turn round empty. Both lords get a report.
+  defp deliver(att, def, %Task{data: d} = t) do
+    cargo = d["cargo"] || %{}
+    resnapshot(def, t.ends_at)
+    def = Repo.get!(City, def.id)
+
+    Repo.update_all(from(c in City, where: c.id == ^def.id),
+      set: [resources: Cheats.add_resources(def.resources, cargo)]
+    )
+
+    names = player_names([att.player_id, def.player_id])
+    where = "#{def.name} (#{def.x},#{def.y})"
+    report = mission_report(att, t, "transport", "attack", true, "Delivered to #{where}", %{loot: cargo})
+
+    if def.player_id != att.player_id do
+      mission_report(def, t, "transport", "defence", true, "#{names[att.player_id]} delivered to #{where}", %{
+        loot: cargo
+      })
+    end
+
+    return_home(att, t, d["troops"], %{})
+    {%{t | data: Map.merge(d, %{"won" => true, "reportId" => report.id, "loot" => %{}})}, [def.player_id]}
+  end
+
+  # Reinforcements arriving. Into one of your own cities: the troops join it for good. Into an ally's city: they
+  # stay there (a "stationed" march with no end) and fight for it while its gate is open, eating its food, until
+  # their lord recalls them; if the ally no longer takes them they turn round.
+  defp reinforce(%City{player_id: owner} = att, %City{player_id: owner} = def, %Task{data: d} = t) do
+    troops = Enum.reduce(d["troops"], def.troops, fn {type, n}, acc -> Train.add(acc, type, n) end)
+    Repo.update_all(from(c in City, where: c.id == ^def.id), set: [troops: troops])
+    resnapshot(Repo.get!(City, def.id), t.ends_at)
+    where = "#{def.name} (#{def.x},#{def.y})"
+    report = mission_report(att, t, "reinforce", "attack", true, "Troops arrived in #{where}", %{})
+    {%{t | data: Map.merge(d, %{"won" => true, "reportId" => report.id, "loot" => %{}})}, []}
+  end
+
+  defp reinforce(att, def, %Task{data: d} = t) do
+    where = "#{def.name} (#{def.x},#{def.y})"
+
+    if can_garrison?(def, att.player_id) do
+      Repo.insert!(%Task{
+        city_id: att.id,
+        kind: "march",
+        label: "Stationed in #{where}",
+        target_type: "reinforce",
+        target_level: t.target_level,
+        target_city_id: def.id,
+        cost: %{},
+        data: Map.merge(d, %{"phase" => "stationed", "hostName" => def.name}),
+        started_at: t.ends_at,
+        ends_at: @never
+      })
+
+      resnapshot(Repo.get!(City, def.id), t.ends_at)
+      names = player_names([att.player_id, def.player_id])
+      report = mission_report(att, t, "reinforce", "attack", true, "Troops stationed in #{where}", %{})
+
+      mission_report(
+        def,
+        t,
+        "reinforce",
+        "defence",
+        true,
+        "#{names[att.player_id]}'s troops arrived in #{where}",
+        %{}
+      )
+
+      {%{t | data: Map.merge(d, %{"won" => true, "reportId" => report.id, "loot" => %{}})}, [def.player_id]}
+    else
+      report =
+        mission_report(att, t, "reinforce", "attack", false, "#{where} no longer takes your troops", %{})
+
+      return_home(att, t, d["troops"], %{})
+      {%{t | data: Map.merge(d, %{"won" => false, "reportId" => report.id, "loot" => %{}})}, []}
+    end
+  end
+
+  # Troops of other players stationed in a city: their stationed marches.
+  defp stationed_in(city_id) do
+    Repo.all(
+      from t in Task,
+        where:
+          t.target_city_id == ^city_id and t.kind == "march" and
+            fragment("?->>'phase' = 'stationed'", t.data)
+    )
+  end
+
+  # Everything that fights for a city with its gate open: its own troops and its allies' stationed ones.
+  defp defending_troops(city) do
+    Enum.reduce(stationed_in(city.id), city.troops || %{}, fn t, acc ->
+      Enum.reduce(t.data["troops"], acc, fn {type, n}, a -> Train.add(a, type, n) end)
+    end)
+  end
+
+  # The troops a city feeds: its own and its allies' stationed ones.
+  defp fed_troops(city_id, troops) do
+    Enum.reduce(stationed_in(city_id), troops || %{}, fn t, acc ->
+      Enum.reduce(t.data["troops"], acc, fn {type, n}, a -> Train.add(a, type, n) end)
+    end)
+  end
+
+  # The scout level of a march from city (Age3.Scout.level/3): its Informatics and Beacon Tower, and its hero.
+  defp scout_level(city, d) do
+    buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+    research = Research.in_city(research_of(city.player_id), buildings)
+    hero = d["heroId"] && Repo.get(Hero, d["heroId"])
+
+    Scout.level(
+      Research.level_of(research, "informatics"),
+      Build.level_of(buildings, "beacontower"),
+      hero && hero.intelligence
+    )
+  end
+
+  # What comes home from a scout: everything, or everything but the scouts after a failure.
+  defp scouts_back(troops, :ok), do: troops
+  defp scouts_back(troops, _failed), do: Map.delete(troops, "scout")
+
+  defp scout_report(city, t, outcome, seen, where) do
+    {title, scout} =
+      case outcome do
+        :ok -> {"Scouted #{where}", seen}
+        {:error, why} -> {"Scouting failed at #{where}", %{"failed" => why}}
+      end
+
+    mission_report(city, t, "scout", "scout", outcome == :ok, title, %{scout: scout})
+  end
+
+  # A report with no battle, for a mission (kind) that arrived: side "attack"/"defence"/"scout"/"scouted".
+  defp mission_report(city, t, kind, side, won, title, extra) do
+    Repo.insert!(
+      struct(
+        Report,
+        Map.merge(
+          %{
+            player_id: city.player_id,
+            city_id: city.id,
+            title: title,
+            x: t.data["x"],
+            y: t.data["y"],
+            won: won,
+            kind: kind,
+            side: side,
+            loot: %{},
+            fought_at: t.ends_at
+          },
+          extra
+        )
+      )
+    )
+  end
+
+  defp player_names(ids),
+    do: Map.new(Repo.all(from p in Player, where: p.id in ^Enum.uniq(ids), select: {p.id, p.name}))
+
+  # Are these two players allies (the same alliance)? A player is their own ally.
+  defp allies?(a, a), do: true
+
+  defp allies?(a, b) do
+    case Repo.all(from p in Player, where: p.id in ^[a, b], select: p.alliance) do
+      [x, x] when x != nil -> true
+      _ -> false
+    end
   end
 
   # The battle at a player city (both locked). Fights with the city as it stands, takes loot and loyalty, maybe
@@ -1854,6 +2245,15 @@ defmodule Age3.Store.Pg do
     end
   end
 
+  defp apply_task(city, %Task{kind: "march", data: %{"phase" => "out", "mission" => "scout"}} = t),
+    do: scout_tile(city, t)
+
+  defp apply_task(city, %Task{kind: "march", data: %{"phase" => "out", "mission" => "found"}} = t),
+    do: found_city(city, t)
+
+  defp apply_task(city, %Task{kind: "march", data: %{"phase" => "out", "target" => "valley"}} = t),
+    do: fight_valley(city, t)
+
   defp apply_task(city, %Task{kind: "march", data: %{"phase" => "out"} = d} = t),
     do: fight_npc(city, t, d["target"] || "npc")
 
@@ -1866,28 +2266,33 @@ defmodule Age3.Store.Pg do
     troops = Enum.reduce(d["troops"], city.troops, fn {type, n}, acc -> Train.add(acc, type, n) end)
     Repo.update_all(from(c in City, where: c.id == ^city.id), set: [resources: resources, troops: troops])
 
-    Repo.update_all(from(h in Hero, where: h.id == ^d["heroId"] and h.status == "marching"),
-      set: [status: "idle"]
-    )
+    if d["heroId"] do
+      Repo.update_all(from(h in Hero, where: h.id == ^d["heroId"] and h.status == "marching"),
+        set: [status: "idle"]
+      )
+    end
+  end
+
+  # What an NPC-like target (an NPC, a lord's town or a free historic city) holds when full, its name and how
+  # fast it refills.
+  defp npc_spec(kind, x, y, level, at_ms) do
+    case kind do
+      "lord" ->
+        {Lord.full(x, y, level), Lord.name(x, y), Data.npc_regen_seconds()}
+
+      "historic" ->
+        {Historic.full(x, y, level, Historic.day(at_ms)), Historic.name(x, y), Historic.regen_seconds()}
+
+      _ ->
+        {Npc.full(level), "Lv#{level} NPC", Data.npc_regen_seconds()}
+    end
   end
 
   defp fight_npc(city, %Task{data: d} = t, kind) do
     at_ms = to_ms(t.ends_at)
     {x, y, level} = {d["x"], d["y"], t.target_level}
     historic? = kind == "historic"
-
-    {full, what, periods} =
-      case kind do
-        "lord" ->
-          {Lord.full(x, y, level), Lord.name(x, y), Data.npc_regen_seconds()}
-
-        "historic" ->
-          {Historic.full(x, y, level, Historic.day(at_ms)), Historic.name(x, y), Historic.regen_seconds()}
-
-        _ ->
-          {Npc.full(level), "Lv#{level} NPC", Data.npc_regen_seconds()}
-      end
-
+    {full, what, periods} = npc_spec(kind, x, y, level, at_ms)
     {npc, row} = lock_npc(x, y, level, full, at_ms, periods, historic?)
     buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
     research = Research.in_city(research_of(city.player_id), buildings)
@@ -1985,6 +2390,210 @@ defmodule Age3.Store.Pg do
     })
 
     %{t | data: Map.merge(d, %{"won" => won, "reportId" => report.id, "loot" => loot, "medals" => medals})}
+  end
+
+  # Scouting a tile that isn't a player's city (Age3.Scout): an NPC, a lord's town or a free historic city (what
+  # it holds now, as an attack would find it), a valley (its garrison, or who holds it) or a flat (nothing). The
+  # scouts come home either way, less the scouts themselves after a failure.
+  defp scout_tile(city, %Task{data: d} = t) do
+    at_ms = to_ms(t.ends_at)
+    {x, y, level} = {d["x"], d["y"], t.target_level}
+    s = scout_level(city, d)
+    sent = Map.get(d["troops"], "scout", 0)
+
+    {target, what, name} =
+      case d["target"] do
+        "flat" ->
+          {:flat, %{}, "flat"}
+
+        "valley" ->
+          case Repo.one(from v in ValleyHold, where: v.x == ^x and v.y == ^y, preload: :city) do
+            %ValleyHold{city: holder} ->
+              {{:level, level}, %{"troops" => %{}, "holder" => holder.name}, "Lv#{level} valley"}
+
+            nil ->
+              {npc, _row} = lock_npc(x, y, level, Valley.full(level), at_ms, valley_periods(), false)
+              {{:level, level}, %{"troops" => npc["troops"]}, "Lv#{level} valley"}
+          end
+
+        kind ->
+          {full, name, periods} = npc_spec(kind, x, y, level, at_ms)
+          {npc, _row} = lock_npc(x, y, level, full, at_ms, periods, kind == "historic")
+
+          walls = if kind == "historic", do: full["walls"] || 10, else: level
+
+          {{:level, level},
+           %{
+             "resources" => npc["resources"],
+             "walls" => walls,
+             "troops" => npc["troops"],
+             "forts" => npc["forts"],
+             "research" => %{"all" => if(kind == "historic", do: 10, else: level)}
+           }, name}
+      end
+
+    outcome = Scout.outcome(s, sent, target)
+
+    seen =
+      if outcome == :ok do
+        l = with {:level, l} <- target, do: l, else: (_ -> 0)
+        report = Scout.report(what, Scout.detail(s, l))
+        if what["holder"], do: Map.put(report, "holder", what["holder"]), else: report
+      end
+
+    report = scout_report(city, t, outcome, seen, "#{name} (#{x},#{y})")
+    return_home(city, t, scouts_back(d["troops"], outcome), %{})
+    %{t | data: Map.merge(d, %{"won" => outcome == :ok, "reportId" => report.id, "loot" => %{}})}
+  end
+
+  defp valley_periods, do: {Data.valley_regen_seconds(), Data.valley_regen_seconds()}
+
+  # Founding a city on a flat (wiki: 250 workers and 10,000 of each resource): the workers settle it and the
+  # resources become its stock; any other troops go home. If someone built there first, or the player can't hold
+  # another city any more, everything comes back.
+  defp found_city(city, %Task{data: d} = t) do
+    {x, y} = {d["x"], d["y"]}
+    player = Repo.get!(Player, city.player_id)
+    cities = Repo.aggregate(from(c in City, where: c.player_id == ^player.id), :count)
+    free? = city_at(x, y) == nil and World.tile_at(x, y).kind == "flat" and not Game.historic_city?(x, y)
+
+    if free? and cities < Titles.city_cap(player.title) do
+      cargo = d["cargo"] || %{}
+
+      resources =
+        Map.new(Game.starter_resources(), fn {k, v} -> {k, %{v | "amount" => Map.get(cargo, k, 0)}} end)
+
+      new =
+        Repo.insert!(%City{
+          player_id: player.id,
+          name: "#{player.name}'s City #{cities + 1}",
+          x: x,
+          y: y,
+          resources: resources,
+          population: Game.starter_population(),
+          synced_at: t.ends_at
+        })
+
+      Repo.insert_all(Building, [
+        %{city_id: new.id, slot: "townhall", type: "townhall", level: 1},
+        %{city_id: new.id, slot: "walls", type: "walls", level: 1}
+      ])
+
+      resnapshot(Repo.get!(City, new.id), t.ends_at)
+      report = mission_report(city, t, "found", "attack", true, "Founded #{new.name} (#{x},#{y})", %{})
+      rest = Map.update!(d["troops"], "worker", &(&1 - March.found_workers()))
+      rest = for {k, n} <- rest, n > 0, into: %{}, do: {k, n}
+      if rest != %{}, do: return_home(city, t, rest, %{})
+      %{t | data: Map.merge(d, %{"won" => true, "reportId" => report.id, "loot" => %{}})}
+    else
+      why = if free?, do: "you hold as many cities as your title allows", else: "the land is taken"
+
+      report =
+        mission_report(city, t, "found", "attack", false, "Couldn't found a city at (#{x},#{y}): #{why}", %{})
+
+      return_home(city, t, d["troops"], d["cargo"] || %{})
+      %{t | data: Map.merge(d, %{"won" => false, "reportId" => report.id, "loot" => %{}})}
+    end
+  end
+
+  # An attack on a valley (Age3.Valley). A free valley fights with its garrison (refilling like an NPC's); a held
+  # one has nobody in it, so the attack wins at once and takes it from its holder, who gets a report. A win takes
+  # the valley for the attacking city if it holds fewer than its Town Hall level.
+  defp fight_valley(city, %Task{data: d} = t) do
+    at_ms = to_ms(t.ends_at)
+    {x, y, level} = {d["x"], d["y"], t.target_level}
+
+    holder =
+      Repo.one(from v in ValleyHold, where: v.x == ^x and v.y == ^y, lock: "FOR UPDATE", preload: :city)
+
+    {garrison, npc} =
+      if holder do
+        {%{}, nil}
+      else
+        {npc, _row} = lock_npc(x, y, level, Valley.full(level), at_ms, valley_periods(), false)
+        {npc["troops"], npc}
+      end
+
+    buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+    research = Research.in_city(research_of(city.player_id), buildings)
+    hero = d["heroId"] && Repo.get(Hero, d["heroId"])
+    {defender, forts, settings} = Valley.battle(garrison, level)
+
+    attacker = %{
+      Combat.default_army()
+      | troops: d["troops"],
+        tech: combat_tech(research),
+        hero: combat_hero(hero),
+        heal_percent: 0
+    }
+
+    result =
+      Combat.simulate(%{attacker: attacker, defender: defender, fortifications: forts, settings: settings})
+
+    won = result.winner == :attacker
+    survivors = for s <- result.attacker.troops, s.survived > 0, into: %{}, do: {s.type, s.survived}
+
+    if npc do
+      left = Npc.after_battle(npc, result, %{})
+
+      Repo.update_all(from(n in NpcState, where: n.x == ^x and n.y == ^y),
+        set: [troops: left["troops"], updated_at: t.ends_at]
+      )
+    end
+
+    town_hall = Build.level_of(buildings, "townhall")
+    own? = holder != nil and holder.city.player_id == city.player_id
+    took = won and not own? and valley_count(city.id) < Valley.cap(town_hall)
+    terrain = World.terrain(x, y)
+    name = "Lv#{level} #{Data.terrain(terrain)["name"]}"
+
+    if took do
+      if holder do
+        # its old city loses the bonus from its next snapshot on (refresh_stale), so no second city is locked here
+        Repo.delete!(holder)
+        mission_report(holder.city, t, "valley", "defence", false, "Lost the #{name} (#{x},#{y})", %{})
+      end
+
+      Repo.insert!(%ValleyHold{
+        city_id: city.id,
+        x: x,
+        y: y,
+        level: level,
+        terrain: terrain,
+        taken_at: t.ends_at
+      })
+    end
+
+    hero_report = hero && gain_hero_exp(hero, March.hero_exp(result))
+
+    title =
+      cond do
+        took ->
+          "Took the #{name} (#{x},#{y})"
+
+        won ->
+          "Victory at the #{name} (#{x},#{y}), but #{city.name} holds all the valleys its Town Hall allows"
+
+        true ->
+          "Defeat at the #{name} (#{x},#{y})"
+      end
+
+    report =
+      Repo.insert!(%Report{
+        player_id: city.player_id,
+        city_id: city.id,
+        title: title,
+        x: x,
+        y: y,
+        won: won,
+        loot: %{},
+        hero: hero_report,
+        result: Combat.to_json(result),
+        fought_at: t.ends_at
+      })
+
+    return_home(city, t, survivors, %{})
+    %{t | data: Map.merge(d, %{"won" => won, "reportId" => report.id, "loot" => %{}})}
   end
 
   # A captured historic city (Age3.Historic): a new city of the attacker's on its tile, keeping its name, with
@@ -2116,9 +2725,10 @@ defmodule Age3.Store.Pg do
                 buildings,
                 tax_rate,
                 research_of(city.player_id),
-                troops,
+                fed_troops(city.id, troops),
                 salary_of(city.id),
-                people
+                people,
+                production_bonus(city.id)
               ),
             population: people,
             loyalty: loyalty,
@@ -2127,6 +2737,19 @@ defmodule Age3.Store.Pg do
           changes
         )
     )
+  end
+
+  # More production (%) per resource for a city, on top of research: its valleys (Age3.Valley.bonuses/1) and its
+  # mayor's Politics (+1% of the fields' production per point, wiki: Stats).
+  defp production_bonus(city_id) do
+    valleys =
+      Repo.all(
+        from v in ValleyHold, where: v.city_id == ^city_id, select: %{terrain: v.terrain, level: v.level}
+      )
+
+    mayor = Repo.one(from h in Hero, where: h.city_id == ^city_id and h.status == "mayor", select: h.politics)
+
+    Map.merge(Valley.bonuses(valleys), Heroes.politics_bonus(mayor), fn _k, a, b -> a + b end)
   end
 
   # The city as it stands at at_ms (%{resources, population, loyalty}), worked out from its snapshot.
@@ -2144,9 +2767,10 @@ defmodule Age3.Store.Pg do
         city.buildings,
         city.tax_rate,
         research_of(city.player_id),
-        city.troops,
+        fed_troops(city.id, city.troops),
         salary_of(city.id),
-        city.population
+        city.population,
+        production_bonus(city.id)
       ) != city.resources or
         Economy.max_population(city.buildings) != city.population["max"]
 
@@ -2239,10 +2863,28 @@ defmodule Age3.Store.Pg do
       buildings: Enum.map(town, &building_json(&1, busy)),
       fields: Enum.map(fields, &building_json(&1, busy)),
       troops: c.troops,
+      forts: c.forts || %{},
+      allowGarrison: c.allow_garrison,
+      valleys:
+        for(
+          v <- Repo.all(from v in ValleyHold, where: v.city_id == ^c.id, order_by: [v.y, v.x]),
+          do: %{x: v.x, y: v.y, level: v.level, terrain: v.terrain}
+        ),
+      garrisons:
+        for(
+          t <- stationed_in(c.id),
+          do: %{taskId: t.id, cityId: t.city_id, troops: t.data["troops"], owner: owner_name(t.city_id)}
+        ),
       heroes: Enum.map(c.heroes, &hero_json/1),
       inn: inn_json(c.inn)
     }
   end
+
+  defp owner_name(city_id),
+    do:
+      Repo.one(
+        from c in City, join: p in Player, on: p.id == c.player_id, where: c.id == ^city_id, select: p.name
+      )
 
   defp hero_json(h) do
     %{
@@ -2315,6 +2957,9 @@ defmodule Age3.Store.Pg do
       loot: d["loot"] || %{},
       seconds: d["seconds"],
       camp: d["camp"] || 0,
+      mission: d["mission"] || "attack",
+      cargo: d["cargo"] || %{},
+      hostName: d["hostName"],
       medals: d["medals"] || %{},
       won: d["won"],
       reportId: d["reportId"]
@@ -2334,6 +2979,8 @@ defmodule Age3.Store.Pg do
       side: r.side,
       loyalty: r.loyalty,
       policy: r.policy,
+      scout: r.scout,
+      kind: r.kind || "battle",
       hero: r.hero,
       read: r.read,
       foughtAt: to_ms(r.fought_at)

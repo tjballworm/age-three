@@ -109,6 +109,20 @@ export function startServerSync(): () => void {
 /** The chat line for a finished task. A march arriving says how the battle went; one coming home, what it brought. */
 function doneText(task: TimedTask, cityName: string | undefined): string {
   const m = task.march;
+  const where = m ? `(${m.x},${m.y})` : '';
+  if (m?.phase === 'out' && m.mission && m.mission !== 'attack') {
+    const done = {
+      scout: m.won
+        ? `Scouts reached ${where}. See Reports > Scouting.`
+        : `Scouting at ${where} failed. See Reports.`,
+      transport: `Resources delivered to ${where}.`,
+      reinforce: m.won ? `Reinforcements arrived at ${where}.` : `Reinforcements turned back at ${where}.`,
+      found: m.won
+        ? `A new city was founded at ${where}!`
+        : `Couldn't found a city at ${where}. See Reports.`,
+    } as const;
+    return done[m.mission];
+  }
   if (m?.phase === 'out') {
     const won = Object.entries(m.medals ?? {}).map(
       ([id, n]) => `${n && n > 1 ? `${n} ` : ''}${medalName(id)}`,
@@ -117,7 +131,7 @@ function doneText(task: TimedTask, cityName: string | undefined): string {
   }
   if (m?.phase === 'back') {
     const loot = Object.values(m.loot).reduce((n, v) => n + (v ?? 0), 0);
-    return `${m.heroName}'s march is back${cityName ? ` in ${cityName}` : ''}${loot ? ` with ${loot.toLocaleString('en-US')} resources` : ''}.`;
+    return `${m.heroName ? `${m.heroName}'s march` : 'A march'} is back${cityName ? ` in ${cityName}` : ''}${loot ? ` with ${loot.toLocaleString('en-US')} resources` : ''}.`;
   }
   return `${task.label} complete${cityName ? ` in ${cityName}` : ''}.`;
 }

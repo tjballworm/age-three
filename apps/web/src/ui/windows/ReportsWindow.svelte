@@ -1,6 +1,12 @@
 <script lang="ts">
   import {
+    BUILDINGS,
+    FORT_NAME,
     MEDALS,
+    TECHS,
+    type BuildingType,
+    type FortType,
+    type TechId,
     POLICIES,
     RESOURCE_TYPES,
     TROOP_DATA,
@@ -20,7 +26,15 @@
   // (BattleReport). Opening one marks it read. The list loads when the window opens and again
   // whenever the unread count changes (a battle just happened).
 
-  let reports = $state<ReportSummary[]>([]);
+  /** Which reports this tab lists: battles, scouting, or the other missions (transports, reinforcements, ...). */
+  let { tab = 'battles' }: { tab?: 'battles' | 'scouting' | 'missions' } = $props();
+
+  let all = $state<ReportSummary[]>([]);
+  const kindOf = (r: ReportSummary) =>
+    r.kind === 'scout' ? 'scouting' : (r.kind ?? 'battle') === 'battle' ? 'battles' : 'missions';
+  const reports = $derived(
+    all.filter((r) => (r.side === 'policy' || r.side === 'policied' ? 'missions' : kindOf(r)) === tab),
+  );
   /** result is null for a policy report (no battle). */
   let open = $state<(ReportSummary & { result: BattleResult | null }) | null>(null);
   let error = $state('');
@@ -32,7 +46,7 @@
     loading = true;
     try {
       const reply = await ask({ type: 'getReports', payload: {} });
-      if (reply.type === 'reports') reports = reply.payload.reports;
+      if (reply.type === 'reports') all = reply.payload.reports;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -60,6 +74,13 @@
     load();
   });
 
+  const FAILED: Record<string, string> = {
+    no_informatics: 'this city needs both Informatics research and a Beacon Tower to scout',
+    too_few_scouts: 'too few scouts for its level (10 per level)',
+    scouts_beaten: "the city's scouts beat yours",
+    no_scouts: 'no scouts were sent',
+  };
+
   const when = (ms: number) =>
     new Date(ms).toLocaleString(undefined, {
       month: 'short',
@@ -84,7 +105,17 @@
         onclick={() => show(r)}
       >
         <span class="badge {r.won ? 'won' : 'lost'}"
-          >{r.side === 'policy' || r.side === 'policied' ? 'Policy' : r.won ? 'Victory' : 'Defeat'}</span
+          >{r.side === 'policy' || r.side === 'policied'
+            ? 'Policy'
+            : r.side === 'scouted'
+              ? 'Scouted'
+              : r.kind && r.kind !== 'battle' && r.kind !== 'valley'
+                ? r.won
+                  ? 'Done'
+                  : 'Failed'
+                : r.won
+                  ? 'Victory'
+                  : 'Defeat'}</span
         >
         <b>{r.title.replace(/^(Victory|Defeat) against /, '')}</b>
         <span class="meta">
@@ -96,7 +127,11 @@
       </button>
     {:else}
       {#if !loading && game.fromServer}<p class="note">
-          No battles yet. Attack an NPC city from the world map.
+          {tab === 'scouting'
+            ? 'No scouting yet. Scout a tile from the world map.'
+            : tab === 'missions'
+              ? 'No transports, reinforcements or policies yet.'
+              : 'No battles yet. Attack an NPC city from the world map.'}
         </p>{/if}
     {/each}
   </div>
@@ -165,6 +200,70 @@
             >
           {/each}
         </div>
+      {:else if open.scout && open.side === 'scouted'}
+        <p class="note">
+          {open.scout.by} sent scouts to this city{open.scout.failed ? ', but they were beaten back' : ''}.
+        </p>
+      {:else if open.scout?.failed}
+        <p class="note">
+          The scouts didn't get through and died: {FAILED[String(open.scout.failed)] ?? open.scout.failed}.
+        </p>
+      {:else if open.scout}
+        <div class="facts">
+          <span>Detail <b>{open.scout.detail}</b></span>
+          {#if open.scout.holder}<span>Held by <b>{open.scout.holder}</b></span>{/if}
+          {#if open.scout.walls}<span>Walls <b>Lv {open.scout.walls}</b></span>{/if}
+          {#if open.scout.gateOpen !== undefined}<span
+              >Gate <b>{open.scout.gateOpen ? 'open' : 'closed'}</b></span
+            >{/if}
+          {#if open.scout.resources}
+            <span class="loot">
+              {#each RESOURCE_TYPES as res (res)}
+                {#if open.scout.resources[res] !== undefined}<ResourceIcon type={res} size={14} />
+                  <b>{formatNumber(open.scout.resources[res] ?? 0)}</b>{/if}
+              {/each}
+            </span>
+          {/if}
+        </div>
+        <table class="seen">
+          <tbody>
+            {#each Object.entries(open.scout.troops ?? {}) as [t, n] (t)}
+              <tr
+                ><td>{TROOP_DATA[t as TroopType]?.name ?? t}</td><td
+                  >{n == null ? 'some' : `${open.scout.detail === 'approx' ? '~' : ''}${formatNumber(n)}`}</td
+                ></tr
+              >
+            {:else}
+              <tr><td colspan="2">No troops</td></tr>
+            {/each}
+            {#each Object.entries(open.scout.forts ?? {}) as [f, n] (f)}
+              <tr
+                ><td>{FORT_NAME[f as FortType] ?? f}</td><td
+                  >{n == null ? 'some' : `${open.scout.detail === 'approx' ? '~' : ''}${formatNumber(n)}`}</td
+                ></tr
+              >
+            {/each}
+          </tbody>
+        </table>
+        {#if open.scout.buildings?.length}
+          <p class="note">
+            Buildings: {open.scout.buildings
+              .map((b) => `${BUILDINGS[b.type as BuildingType]?.name ?? b.type} ${b.level}`)
+              .join(', ')}
+          </p>
+        {/if}
+        {#if open.scout.research && Object.keys(open.scout.research).length}
+          <p class="note">
+            Research: {Object.entries(open.scout.research)
+              .map(([t, n]) => `${t === 'all' ? 'every tech' : (TECHS[t as TechId]?.name ?? t)} ${n}`)
+              .join(', ')}
+          </p>
+        {/if}
+        {#if open.scout.heroes?.length}
+          <p class="note">
+            Heroes: {open.scout.heroes.map((h) => `${h.name} Lv ${h.level} (${h.status})`).join(', ')}
+          </p>
+        {/if}
       {:else if !open.result}
         <p class="note">No battle in this report.</p>
       {:else if open.side === 'defence'}
@@ -273,6 +372,15 @@
     margin: 0;
     font-size: 11px;
     color: var(--navy-mid);
+  }
+  .seen {
+    border-collapse: collapse;
+    font-size: 12px;
+    color: var(--navy);
+  }
+  .seen td {
+    padding: 2px 10px 2px 0;
+    font-weight: 700;
   }
   .pick {
     margin: auto;

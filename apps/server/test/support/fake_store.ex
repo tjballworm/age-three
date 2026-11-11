@@ -104,8 +104,14 @@ defmodule Age3.FakeStore do
   def set_mayor(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "bad_message"}
 
   @impl true
-  def march(_player_id, "c1", 10, 20, "h1", %{"warrior" => 100}, now_ms, camp),
-    do: {:ok, now_ms + (60 + camp) * 1000}
+  def march(_player_id, "c1", 10, 20, "h1", %{"warrior" => 100}, now_ms, %{
+        "camp" => camp,
+        "mission" => "attack"
+      }),
+      do: {:ok, now_ms + (60 + camp) * 1000}
+
+  def march(_player_id, "c1", 10, 20, nil, %{"scout" => 10}, now_ms, %{"mission" => "scout"}),
+    do: {:ok, now_ms + 5000}
 
   def march(_player_id, _city_id, _x, _y, _hero_id, _troops, _now_ms, _camp), do: {:error, "bad_target"}
 
@@ -123,4 +129,12 @@ defmodule Age3.FakeStore do
   @impl true
   def report(_player_id, "r1"), do: {:ok, %{id: "r1", won: true, result: %{"winner" => "attacker"}}}
   def report(_player_id, _report_id), do: {:error, "bad_message"}
+
+  @impl true
+  def set_garrison(_player_id, "c1", _allow, _now_ms), do: :ok
+  def set_garrison(_player_id, _city_id, _allow, _now_ms), do: {:error, "bad_message"}
+
+  @impl true
+  def abandon_valley(_player_id, "c1", 1, 2, _now_ms), do: :ok
+  def abandon_valley(_player_id, _city_id, _x, _y, _now_ms), do: {:error, "bad_message"}
 end

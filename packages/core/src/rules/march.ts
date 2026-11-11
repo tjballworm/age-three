@@ -68,3 +68,22 @@ export function marchLoad(troops: Army, research: Research): number {
   );
   return Math.floor(base * (1 + lv(research, 'logistics') * 0.1));
 }
+
+/** Workers a Found City march needs; they settle the new city (wiki: 250). */
+export const FOUND_WORKERS = 250;
+
+/** What a Found City march takes along to build the city (wiki: 10,000 of each resource). */
+export const FOUND_CARGO = { food: 10_000, lumber: 10_000, stone: 10_000, iron: 10_000 } as const;
+
+/**
+ * How many times faster transports and reinforcements go with the sending city's Relief Station (wiki: 2x at Lv1,
+ * 3x at Lv4, 4x at Lv5, 5x at Lv8, 6x at Lv10).
+ */
+export function reliefMultiplier(level: number): number {
+  if (level >= 10) return 6;
+  if (level >= 8) return 5;
+  if (level >= 5) return 4;
+  if (level >= 4) return 3;
+  if (level >= 1) return 2;
+  return 1;
+}

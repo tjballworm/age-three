@@ -147,7 +147,7 @@
       "effect": "Army attack",
       "bonus": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 800, "lumber": 120, "stone": 0, "iron": 200, "gold": 3000}, "seconds": 1200, "requires": {"academy": 2}, "research": {"militaryScience": 1}},
         {"cost": {"food": 1600, "lumber": 240, "stone": 0, "iron": 400, "gold": 6000}, "seconds": 2400, "requires": {"academy": 2}, "research": {"militaryScience": 1}},
@@ -167,7 +167,7 @@
       "effect": "Army defence",
       "bonus": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 700, "lumber": 150, "stone": 0, "iron": 300, "gold": 3500}, "seconds": 1500, "requires": {"academy": 3}},
         {"cost": {"food": 1400, "lumber": 300, "stone": 0, "iron": 600, "gold": 7000}, "seconds": 3000, "requires": {"academy": 3}},
@@ -187,7 +187,7 @@
       "effect": "Army life",
       "bonus": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 1500, "lumber": 0, "stone": 0, "iron": 0, "gold": 3600}, "seconds": 1800, "requires": {"academy": 6}, "research": {"logistics": 3}},
         {"cost": {"food": 3000, "lumber": 0, "stone": 0, "iron": 0, "gold": 7200}, "seconds": 3600, "requires": {"academy": 6}, "research": {"logistics": 3}},
@@ -207,7 +207,7 @@
       "effect": "Shooting range",
       "bonus": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 0, "lumber": 800, "stone": 500, "iron": 600, "gold": 5000}, "seconds": 2400, "requires": {"academy": 4}, "research": {"militaryScience": 4}},
         {"cost": {"food": 0, "lumber": 1600, "stone": 1000, "iron": 1200, "gold": 10000}, "seconds": 4800, "requires": {"academy": 4}, "research": {"militaryScience": 4}},
@@ -227,7 +227,7 @@
       "effect": "Cavalry and mechanics speed",
       "bonus": [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 1000, "lumber": 0, "stone": 0, "iron": 0, "gold": 6000}, "seconds": 2000, "requires": {"academy": 5, "stable": 1}, "research": {"militaryScience": 5}},
         {"cost": {"food": 2000, "lumber": 0, "stone": 0, "iron": 0, "gold": 12000}, "seconds": 4000, "requires": {"academy": 5, "stable": 2}, "research": {"militaryScience": 5}},
@@ -247,7 +247,7 @@
       "effect": "Infantry speed",
       "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 600, "lumber": 0, "stone": 0, "iron": 0, "gold": 3000}, "seconds": 1800, "requires": {"academy": 4}, "research": {"militaryScience": 3}},
         {"cost": {"food": 1200, "lumber": 0, "stone": 0, "iron": 0, "gold": 6000}, "seconds": 3600, "requires": {"academy": 4}, "research": {"militaryScience": 3}},
@@ -267,7 +267,7 @@
       "effect": "Army load",
       "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 500, "lumber": 0, "stone": 200, "iron": 0, "gold": 3000}, "seconds": 1600, "requires": {"academy": 4}, "research": {"militaryScience": 2}},
         {"cost": {"food": 1000, "lumber": 0, "stone": 400, "iron": 0, "gold": 6000}, "seconds": 3200, "requires": {"academy": 4}, "research": {"militaryScience": 2}},
@@ -307,7 +307,7 @@
       "effect": "Walls and fortification endurance",
       "bonus": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 0, "lumber": 2500, "stone": 3000, "iron": 1500, "gold": 6000}, "seconds": 2100, "requires": {"academy": 8}, "research": {"construction": 3}},
         {"cost": {"food": 0, "lumber": 5000, "stone": 6000, "iron": 3000, "gold": 12000}, "seconds": 4200, "requires": {"academy": 8}, "research": {"construction": 3}},
@@ -327,7 +327,7 @@
       "effect": "Fortifications repaired after battle (x base rate)",
       "bonus": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
       "unit": "x",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 0, "lumber": 600, "stone": 700, "iron": 800, "gold": 5500}, "seconds": 2400, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
         {"cost": {"food": 0, "lumber": 1200, "stone": 1400, "iron": 1600, "gold": 11000}, "seconds": 4800, "requires": {"academy": 9}, "research": {"metalCasting": 4}},
@@ -345,7 +345,7 @@
       "name": "Informatics",
       "group": "military",
       "effect": "More detail in scout reports",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 300, "lumber": 0, "stone": 0, "iron": 0, "gold": 2000}, "seconds": 300, "requires": {"academy": 3}},
         {"cost": {"food": 600, "lumber": 0, "stone": 0, "iron": 0, "gold": 4000}, "seconds": 600, "requires": {"academy": 3}},
@@ -365,7 +365,7 @@
       "effect": "Less of a rival's warehouse protection when plundering",
       "bonus": [3, 6, 9, 12, 15, 18, 21, 24, 27, 30],
       "unit": "%",
-      "active": false,
+      "active": true,
       "levels": [
         {"cost": {"food": 5000, "lumber": 0, "stone": 0, "iron": 2000, "gold": 10000}, "seconds": 3600, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
         {"cost": {"food": 10000, "lumber": 0, "stone": 0, "iron": 4000, "gold": 20000}, "seconds": 7200, "requires": {"academy": 10}, "research": {"informatics": 5, "militaryScience": 8}},
