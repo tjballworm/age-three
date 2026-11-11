@@ -239,6 +239,9 @@
         : `${TITLE[mission]} Lv ${target.level} NPC (${target.x},${target.y})`}
   width={1180}
   height={780}
+  minWidth={760}
+  minHeight={480}
+  sizeKey="march"
   onclose={close}
 >
   <div class="march">
@@ -527,7 +530,8 @@
     gap: 18px;
     padding: 10px 12px;
   }
-  @media (max-width: 1000px) {
+  /* two columns, target underneath, when the window is narrow */
+  @container (max-width: 920px) {
     .march {
       grid-template-columns: 1fr 1fr;
     }

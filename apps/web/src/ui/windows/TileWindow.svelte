@@ -139,7 +139,7 @@
   }
 </script>
 
-<Window title={tileTitle(tile)} width={620} height={440} onclose={close}>
+<Window title={tileTitle(tile)} width={620} height={440} sizeKey="tile" onclose={close}>
   <div class="layout">
     <table>
       <tbody>

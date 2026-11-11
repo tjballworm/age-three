@@ -328,7 +328,15 @@
   {@const why = blocker(troop)}
   {@const longest = split.length ? Math.max(...split) : Math.max(n, 1)}
   <div class="overlay" use:overlay>
-    <Window title={spec.name} width={500} height={640} onclose={closeRecruit}>
+    <Window
+      title={spec.name}
+      width={500}
+      height={640}
+      minWidth={440}
+      minHeight={420}
+      sizeKey="recruit"
+      onclose={closeRecruit}
+    >
       <div class="recruit-body">
         <div class="top">
           <div class="art small" aria-hidden="true">{spec.name.slice(0, 1)}</div>
