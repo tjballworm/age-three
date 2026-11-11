@@ -147,8 +147,8 @@
   title={lord || hc
     ? `Attack ${target.name} (${target.x},${target.y})`
     : `Attack Lv ${target.level} NPC (${target.x},${target.y})`}
-  width={760}
-  height={540}
+  width={1180}
+  height={780}
   onclose={close}
 >
   <div class="march">
@@ -180,9 +180,11 @@
       {:else}
         <p class="note">No troops in this city. Train some at the Barracks.</p>
       {/if}
+    </div>
 
+    <div class="side orders">
       <div class="heroes">
-        <span class="caption">Hero <span class="note">click one to lead the march</span></span>
+        <h3>Hero <span class="note">click one to lead the march</span></h3>
         <div class="cards" role="radiogroup" aria-label="Hero">
           {#each idle as h (h.id)}
             <button
@@ -196,11 +198,8 @@
               <span class="face">{h.name[0]}</span>
               <span class="who">
                 <b>{h.name}</b>
-                <span
-                  >Lv {h.level} · ATK {h.attack} · INT {h.intelligence}{h.stars > 0
-                    ? ` · ★ ${h.stars}`
-                    : ''}</span
-                >
+                <span>Lv {h.level}{h.stars > 0 ? ` · ★ ${h.stars}` : ''}</span>
+                <span>ATK {h.attack} · INT {h.intelligence}</span>
               </span>
             </button>
           {:else}
@@ -210,7 +209,7 @@
       </div>
 
       <div class="camp">
-        <span class="caption">Camp wave <span class="note">wait at the target before attacking</span></span>
+        <h3>Camp wave <span class="note">wait at the target before attacking</span></h3>
         <label
           ><input type="number" min="0" max="24" placeholder="0" bind:value={campH} aria-label="Camp hours" />
           h</label
@@ -237,13 +236,14 @@
         >
       </div>
 
+      <h3>March</h3>
       <div class="summary">
-        <span>Troops <b>{formatNumber(total)} / {formatNumber(limit)}</b></span>
-        <span class:short={out >= slots}>Marches out <b>{out} / {slots}</b></span>
-        <span>Travel <b>{total ? formatDuration(seconds * 1000) : '—'}</b> each way</span>
-        <span>Attacks in <b>{total ? formatDuration((seconds + camp) * 1000) : '—'}</b></span>
-        <span class:short={food > foodNow}>Food <b>{formatNumber(food)}</b></span>
-        <span>Can carry <b>{formatNumber(load)}</b></span>
+        <div><span>Troops</span><b>{formatNumber(total)} / {formatNumber(limit)}</b></div>
+        <div class:short={out >= slots}><span>Marches out</span><b>{out} / {slots}</b></div>
+        <div><span>Travel each way</span><b>{total ? formatDuration(seconds * 1000) : '—'}</b></div>
+        <div><span>Attacks in</span><b>{total ? formatDuration((seconds + camp) * 1000) : '—'}</b></div>
+        <div class:short={food > foodNow}><span>Food</span><b>{formatNumber(food)}</b></div>
+        <div><span>Can carry</span><b>{formatNumber(load)}</b></div>
       </div>
       {#if game.player.instantMarch}<p class="note">Instant march is on (cheat): one second each way.</p>{/if}
     </div>
@@ -286,12 +286,6 @@
             <tr><td class="name">Resources</td><td>{formatNumber(hcLoot)}</td></tr>
           </tbody>
         </table>
-        <p class="note">
-          Where a row lists two or three troop types, this city holds one of them (picked again every day).
-          Each win takes 3 of its 100 loyalty, which climbs back a point every 3 minutes; a win at loyalty 0
-          captures it. Killing 5% of its garrison in one battle, won or lost, rolls for a Justice and a Nation
-          Medal. After a battle it refills over a day, and at 00:00 UTC it is full again.
-        </p>
       {:else}
         <h3>Lv {target.level} NPC garrison <span class="note">when full</span></h3>
       {/if}
@@ -312,10 +306,6 @@
             <tr><td class="name">Resources</td><td>{formatNumber(npcLoot)}</td></tr>
           </tbody>
         </table>
-        <p class="note">
-          After a battle it refills a little every second: troops and fortifications over an hour, resources
-          over 8 hours.
-        </p>
       {/if}
     </div>
   </div>
@@ -328,29 +318,36 @@
 </Window>
 
 <style>
+  /* three columns side by side: your troops, the hero / camp wave / march totals, and the target */
   .march {
     display: grid;
-    grid-template-columns: 1.3fr 1fr;
-    gap: 12px;
-    padding: 4px;
-    min-height: 0;
+    grid-template-columns: 1.15fr 1fr 1fr;
+    gap: 18px;
+    padding: 10px 12px;
+  }
+  @media (max-width: 1000px) {
+    .march {
+      grid-template-columns: 1fr 1fr;
+    }
+    .enemy {
+      grid-column: 1 / -1;
+    }
   }
   .side {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    min-height: 0;
-    overflow-y: auto;
+    gap: 12px;
+    min-width: 0;
   }
   h3 {
     margin: 0;
-    font: 800 14px var(--font-display);
+    font: 800 15px var(--font-display);
     color: #7a4a12;
   }
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--navy);
   }
   th {
@@ -360,7 +357,7 @@
     padding: 4px 6px;
   }
   td {
-    padding: 3px 6px;
+    padding: 4px 6px;
     font-weight: 700;
     border-bottom: 1px solid rgba(0, 60, 110, 0.14);
   }
@@ -368,7 +365,9 @@
     font-weight: 800;
   }
   input {
-    width: 90px;
+    width: 100%;
+    max-width: 110px;
+    box-sizing: border-box;
     padding: 3px 6px;
     border: 1px solid #6d8aa8;
     border-radius: 4px;
@@ -377,8 +376,11 @@
   .camp {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     flex-wrap: wrap;
+  }
+  .camp h3 {
+    flex-basis: 100%;
   }
   .camp label {
     display: flex;
@@ -389,20 +391,16 @@
     color: var(--navy);
   }
   .camp input {
-    width: 52px;
+    width: 58px;
   }
   .heroes {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-  }
-  .caption {
-    font: 800 12px var(--font-display);
-    color: #7a4a12;
+    gap: 6px;
   }
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 6px;
   }
   .card {
@@ -453,15 +451,22 @@
   .summary {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px 16px;
-    padding: 8px 12px;
+    gap: 6px;
+  }
+  .summary div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 10px;
     border-radius: 6px;
     border: 1px solid #6d8aa8;
     background: #eef6fc;
-    color: var(--navy);
-    font-size: 12px;
+    color: var(--navy-mid);
+    font-size: 11px;
+    font-weight: 700;
   }
   .summary b {
+    font: 800 15px var(--font-display);
     color: #b07a10;
   }
   .summary .short b {
