@@ -507,7 +507,7 @@ export type ErrorCode =
   /** Population Raising in a city already at its population limit */
   | 'population_full'
   /** a city name that is empty, too long or has other characters */
-  | 'bad_name'
+  | 'bad_city_name'
   /** demolishing the Town Hall, or walls at Lv1 */
   | 'cant_demolish'
   /** demolishing a Barracks with troops in training */

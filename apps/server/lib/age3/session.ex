@@ -884,14 +884,17 @@ defmodule Age3.Session do
   defp message("own_city"), do: "That city is already yours."
   defp message("levy_cooldown"), do: "This city levied less than 15 minutes ago."
   defp message("population_full"), do: "The city is already full of people."
-  defp message("bad_name"), do: "City names are 1 to 20 letters, digits, spaces and ' - ."
+  defp message("bad_city_name"), do: "City names are 1 to 20 letters, digits, spaces and ' - ."
 
   defp message("cant_demolish"),
     do: "The Town Hall can't be demolished, and the walls can't go below level 1."
 
   defp message("barracks_busy"), do: "This Barracks is training troops. Finish or cancel them first."
   defp message("historic_city"), do: "A historic city can't be abandoned."
-  defp message("troops_out"), do: "Troops are out from this city or an attack is on its way to it."
+
+  defp message("troops_out"),
+    do: "Troops are out from this city, or other troops are marching to or stationed in it."
+
   defp message("queue_busy"), do: "Something is already being built in this city."
   defp message("research_busy"), do: "This Academy is already researching something."
   defp message("no_academy"), do: "This city has no Academy."
