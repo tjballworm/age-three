@@ -27,6 +27,7 @@ defmodule Age3.CheatsTest do
 
     assert {:error, _} = Cheats.parse("setResearch", %{"tech" => "archery", "level" => 11})
     assert {:ok, %{}} = Cheats.parse("finishAll", %{})
+    assert {:ok, %{}} = Cheats.parse("maxTown", %{})
     assert {:ok, %{medals: %{"cross" => 5}}} = Cheats.parse("addMedals", %{"medals" => %{"cross" => 5}})
     assert {:error, _} = Cheats.parse("addMedals", %{"medals" => %{"gold" => 5}})
 
@@ -84,5 +85,18 @@ defmodule Age3.CheatsTest do
     assert Cheats.set_research(%{"archery" => 2}, "archery", 0) == %{}
     assert Cheats.set_research(nil, "archery", 4) == %{"archery" => 4}
     assert map_size(Cheats.all_research(10)) == length(Age3.Data.tech_ids())
+  end
+
+  test "max_town fills every town plot at the top level" do
+    town = Enum.reject(Cheats.max_town(), &String.starts_with?(&1.slot, "f"))
+    fields = Enum.filter(Cheats.max_town(), &String.starts_with?(&1.slot, "f"))
+    counts = Enum.frequencies_by(town, & &1.type)
+
+    assert length(town) == 34
+    assert Enum.all?(Cheats.max_town(), &(&1.level == 10))
+    assert counts["cottage"] == 6
+    assert counts["barracks"] == 14
+    assert counts |> Map.drop(["cottage", "barracks"]) |> Map.values() |> Enum.uniq() == [1]
+    assert Enum.sort(Enum.map(fields, & &1.type)) == ~w(farm ironmine quarry sawmill)
   end
 end

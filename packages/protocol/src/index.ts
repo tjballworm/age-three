@@ -253,6 +253,11 @@ export type CheatAction =
     }
   /** Every building and field in the city at this level (constructions in progress are dropped). */
   | { action: 'levelAll'; level: number }
+  /**
+   * Replaces the city's buildings with a maxed-out layout, all Lv10: Town Hall, walls, one of every other town
+   * building, 6 cottages, Barracks on every plot left, and one of each field. Constructions and training are dropped.
+   */
+  | { action: 'maxTown' }
   /** One tech at a level (0 forgets it). Research only counts up to each city's Academy level. */
   | { action: 'setResearch'; tech: TechId; level: number }
   /** Every tech at a level. */

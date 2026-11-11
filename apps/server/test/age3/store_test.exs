@@ -1004,6 +1004,16 @@ defmodule Age3.Store.PgTest do
              ]
 
       assert city.troops == %{}
+
+      {:ok, _} = Pg.build(id, city.id, "3", "cottage", now)
+      assert {:ok, _} = Pg.cheat(id, target, "maxTown", %{}, now)
+      # the cottage being built is dropped, so no tasks are left
+      {:ok, _, [city], []} = Pg.state(id, now)
+
+      assert length(city.buildings) == 34
+      assert length(city.fields) == 4
+      assert Enum.count(city.buildings, &(&1.type == "barracks")) == 14
+      assert Enum.all?(city.buildings ++ city.fields, &(&1.level == 10))
     end
   end
 
