@@ -26,8 +26,17 @@
   /** Only building construction and upgrades (not walls) with 5 minutes or less left get a free Speedup button. */
   const canSpeedUp = (t: TimedTask) => game.fromServer && canFreeSpeedUp(t, clock.now);
 
-  /** A march still on its way can be called back; it takes as long to come home as it has been out. */
+  /**
+   * A march still on its way (or camping) can be called back; it takes as long to come home as it has been out, at
+   * most one trip.
+   */
   const canRecall = (t: TimedTask) => game.fromServer && t.kind === 'march' && t.march?.phase === 'out';
+  /** A march waiting out its camp wave at the target. */
+  const camping = (t: TimedTask) =>
+    t.kind === 'march' &&
+    t.march?.phase === 'out' &&
+    (t.march.camp ?? 0) > 0 &&
+    clock.now >= t.endsAt - (t.march.camp ?? 0) * 1000;
   const recall = (t: TimedTask) =>
     command({ type: 'recall', payload: { cityId: t.cityId, taskId: t.id } }).catch((e) =>
       console.warn('Recall failed:', e),
@@ -64,7 +73,7 @@
         <div class="row" title={task.label}>
           <ProgressBar value={progress(task, clock.now)} tone={task.kind} />
           <span class="ic"><Icon name={ICON[task.kind]} size={14} stroke={2.2} /></span>
-          <span class="label">{task.label}</span>
+          <span class="label">{task.label}{camping(task) ? ' (camping)' : ''}</span>
           <span class="time">{formatDuration(remaining(task, clock.now))}</span>
           {#if canRecall(task)}
             <button class="speedup" type="button" onclick={() => recall(task)}>Recall</button>

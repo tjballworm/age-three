@@ -164,7 +164,8 @@ defmodule Age3.Store do
 
   @doc """
   Sends an attack from one of the player's cities to the NPC city at x, y with hero_id and troops
-  (%{"warrior" => 100}), taking the troops, hero and the trip's food now (Age3.March). Returns when it arrives.
+  (%{"warrior" => 100}), taking the troops, hero and the trip's food now (Age3.March). camp is the camp wave in
+  seconds: the army waits that long at the target before it attacks. Returns when it attacks.
   """
   @callback march(
               player_id :: String.t(),
@@ -173,7 +174,8 @@ defmodule Age3.Store do
               y :: integer,
               hero_id :: String.t(),
               troops :: map,
-              now_ms :: integer
+              now_ms :: integer,
+              camp :: non_neg_integer
             ) :: {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
 
   @doc """
@@ -189,7 +191,10 @@ defmodule Age3.Store do
               now_ms :: integer
             ) :: :ok | {:error, String.t()}
 
-  @doc "Turns a march that hasn't arrived yet around; it takes as long to come back as it has been out."
+  @doc """
+  Turns a march that hasn't attacked yet (on its way or camping) around; it takes as long to come back as it has
+  been out, at most one trip's time.
+  """
   @callback recall(player_id :: String.t(), city_id :: String.t(), task_id :: String.t(), now_ms :: integer) ::
               {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
 
@@ -821,7 +826,7 @@ defmodule Age3.Store.Pg do
   # the march task ends (complete_due), which then starts a second task for the way back. See Age3.March.
 
   @impl true
-  def march(player_id, city_id, x, y, hero_id, troops, now_ms) do
+  def march(player_id, city_id, x, y, hero_id, troops, now_ms, camp \\ 0) do
     now = to_datetime(now_ms)
     arrivals([city_id], now)
 
@@ -836,8 +841,9 @@ defmodule Age3.Store.Pg do
       food = resources["food"]["amount"]
 
       target = Pvp.target(city_at(x, y), World.tile_at(x, y), player_id)
-
+      marches = Repo.aggregate(from(t in Task, where: t.city_id == ^city.id and t.kind == "march"), :count)
       rally = Historic.rally_multiplier(city.historic_level)
+      opts = [rally_multiplier: rally, marches: marches, camp: camp]
 
       case March.check(
              buildings,
@@ -849,7 +855,7 @@ defmodule Age3.Store.Pg do
              food,
              troops,
              target,
-             rally
+             opts
            ) do
         {:ok, plan} ->
           seconds = if player.instant_march, do: 1, else: plan.seconds
@@ -879,10 +885,12 @@ defmodule Age3.Store.Pg do
               "heroName" => hero.name,
               "troops" => plan.troops,
               "seconds" => seconds,
+              "camp" => plan.camp,
               "target" => Atom.to_string(elem(target, 0))
             },
             started_at: now,
-            ends_at: to_datetime(now_ms + seconds * 1000)
+            # the camp wave: it waits at the target before it attacks
+            ends_at: to_datetime(now_ms + (seconds + plan.camp) * 1000)
           })
 
         {:error, code} ->
@@ -1039,7 +1047,8 @@ defmodule Age3.Store.Pg do
       complete_due(city.id, now)
       task = find_task(city.id, task_id, ["march"]) || Repo.rollback("bad_message")
       if task.data["phase"] != "out", do: Repo.rollback("already_returning")
-      back_ms = max(1000, now_ms - to_ms(task.started_at))
+      # a march camping at its target is a whole trip from home, not further
+      back_ms = max(1000, min(now_ms - to_ms(task.started_at), task.data["seconds"] * 1000))
 
       task
       |> Ecto.Changeset.change(
@@ -2304,6 +2313,8 @@ defmodule Age3.Store.Pg do
       heroName: d["heroName"],
       troops: d["troops"],
       loot: d["loot"] || %{},
+      seconds: d["seconds"],
+      camp: d["camp"] || 0,
       medals: d["medals"] || %{},
       won: d["won"],
       reportId: d["reportId"]

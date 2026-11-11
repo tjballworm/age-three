@@ -270,19 +270,20 @@ defmodule Age3.Session do
   defp handle("setMayor", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid mayor appointment."), session}
 
-  # Attack the NPC city at x, y: {cityId, x, y, heroId, troops: {warrior: 100, ...}}. The troops, hero and the
-  # trip's food leave now; the battle happens when the march arrives, and a report follows. Replies with the new
-  # state.
+  # Attack the NPC city at x, y: {cityId, x, y, heroId, troops: {warrior: 100, ...}, camp}. The troops, hero and
+  # the trip's food leave now; the battle happens when the march arrives (after camping `camp` seconds, 0 if left
+  # out), and a report follows. Replies with the new state.
   defp handle(
          "march",
-         %{"cityId" => city_id, "x" => x, "y" => y, "heroId" => hero_id, "troops" => %{} = troops},
+         %{"cityId" => city_id, "x" => x, "y" => y, "heroId" => hero_id, "troops" => %{} = troops} = payload,
          id,
          session
        )
        when is_binary(city_id) and is_integer(x) and is_integer(y) and is_binary(hero_id) do
     now = session.now.()
+    camp = Map.get(payload, "camp", 0)
 
-    case session.store.march(session.player_id, city_id, x, y, hero_id, troops, now) do
+    case session.store.march(session.player_id, city_id, x, y, hero_id, troops, now, camp) do
       {:ok, ends_at} ->
         session.wake.(ends_at)
         state_reply(id, session, now)
@@ -576,6 +577,10 @@ defmodule Age3.Session do
   defp message("hero_busy"), do: "That hero is busy."
   defp message("no_rally_spot"), do: "Build a Rally Spot to send troops out."
   defp message("too_many_troops"), do: "Too many troops. Each Rally Spot level sends 10,000."
+
+  defp message("too_many_marches"),
+    do: "All this city's marches are out. Each Rally Spot level sends one march at a time."
+
   defp message("not_enough_troops"), do: "Not enough troops in the city."
   defp message("no_troops"), do: "Choose some troops to send."
   defp message("no_hero"), do: "Choose a hero to lead the march."

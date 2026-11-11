@@ -87,13 +87,25 @@ export type SetGateMessage = Envelope<'setGate', { cityId: string; open: boolean
 /**
  * Attack the NPC city at x, y with an idle hero and troops from the city. The troops, hero and the trip's food
  * (marchFood) leave now; the battle is fought when the march arrives (a taskDone with `march.won`), then it comes
- * home with the loot. Needs a Rally Spot (10,000 troops per level). Replies with state.
+ * home with the loot. Needs a Rally Spot (10,000 troops per level, one march out at a time per level). `camp` is
+ * the camp wave: seconds (0 to 24 hours, 0 if left out) the army waits at the target before it attacks; the food
+ * covers it. Replies with state.
  */
 export type MarchMessage = Envelope<
   'march',
-  { cityId: string; x: number; y: number; heroId: string; troops: Partial<Record<TroopType, number>> }
+  {
+    cityId: string;
+    x: number;
+    y: number;
+    heroId: string;
+    troops: Partial<Record<TroopType, number>>;
+    camp?: number;
+  }
 >;
-/** Turn a march around before it arrives; it takes as long to come home as it has been out. Replies with state. */
+/**
+ * Turn a march around before it attacks (on its way or camping); it takes as long to come home as it has been on
+ * the road, at most one trip's time. Replies with state.
+ */
 export type RecallMessage = Envelope<'recall', { cityId: string; taskId: string }>;
 /**
  * A historic city you hold (cityId) imposes a policy on another lord's city at x, y in its draft area
@@ -295,6 +307,8 @@ export type ErrorCode =
   | 'no_rally_spot'
   /** more troops than 10,000 per Rally Spot level */
   | 'too_many_troops'
+  /** the city already has as many marches out as its Rally Spot level */
+  | 'too_many_marches'
   /** the city doesn't have the troops */
   | 'not_enough_troops'
   /** a march with no troops */

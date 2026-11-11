@@ -255,6 +255,10 @@ export interface MarchInfo {
   troops: Partial<Record<TroopType, number>>;
   /** What it carries home; empty on the way out. */
   loot: Partial<Record<ResourceType, number>>;
+  /** Seconds each way. */
+  seconds?: number;
+  /** The camp wave: seconds the army waits at the target before it attacks (0 for none). */
+  camp?: number;
   /** Medals won in the battle (already the player's). */
   medals?: MedalCounts;
   /** Only on the task that just arrived (in taskDone): how the battle went and its report. */

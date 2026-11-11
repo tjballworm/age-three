@@ -104,8 +104,10 @@ defmodule Age3.FakeStore do
   def set_mayor(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "bad_message"}
 
   @impl true
-  def march(_player_id, "c1", 10, 20, "h1", %{"warrior" => 100}, now_ms), do: {:ok, now_ms + 60_000}
-  def march(_player_id, _city_id, _x, _y, _hero_id, _troops, _now_ms), do: {:error, "bad_target"}
+  def march(_player_id, "c1", 10, 20, "h1", %{"warrior" => 100}, now_ms, camp),
+    do: {:ok, now_ms + (60 + camp) * 1000}
+
+  def march(_player_id, _city_id, _x, _y, _hero_id, _troops, _now_ms, _camp), do: {:error, "bad_target"}
 
   @impl true
   def impose_policy(_player_id, "c1", 10, 20, "tax", _now_ms), do: :ok

@@ -5,14 +5,17 @@
     HISTORIC_RESEARCH,
     HISTORIC_RESOURCES,
     HISTORIC_WALLS,
+    MAX_CAMP_SECONDS,
     TROOPS,
     TROOP_DATA,
     TROOPS_PER_RALLY_LEVEL,
+    campSeconds,
     marchFood,
     marchLoad,
     marchSeconds,
     historicRallyMultiplier,
     historicSpec,
+    maxMarches,
     npcSpec,
     researchInCity,
     stockAt,
@@ -27,8 +30,10 @@
   import { formatDuration, formatNumber } from '$ui/format';
 
   // Sends an attack from the city on screen to an NPC city, another lord's city or a historic city: pick the
-  // troops and an idle hero, see how long it takes, the food it eats and what it can carry back, then March. The numbers come from the same rules the
-  // server uses (rules/march.ts); the server checks everything again and decides the battle when it arrives.
+  // troops, an idle hero and an optional camp wave (time the army waits at the target before it attacks), see how
+  // long it takes, the food it eats and what it can carry back, then March. A city sends one march at a time per
+  // Rally Spot level. The numbers come from the same rules the server uses (rules/march.ts); the server checks
+  // everything again and decides the battle when it arrives.
 
   let { target }: { target: WorldTile } = $props();
 
@@ -51,9 +56,15 @@
   const limit = $derived(
     Math.floor(rally * TROOPS_PER_RALLY_LEVEL * historicRallyMultiplier(city.historicLevel)),
   );
+  /** Marches this city has out (going, camping or coming home) and how many its Rally Spot allows. */
+  const out = $derived(game.queue.filter((t) => t.kind === 'march' && t.cityId === city.id).length);
+  const slots = $derived(maxMarches(rally));
 
   let counts = $state<Partial<Record<TroopType, number>>>({});
   let heroId = $state('');
+  let campH = $state<number | null>(null);
+  let campM = $state<number | null>(null);
+  let campS = $state<number | null>(null);
   let error = $state('');
   let sending = $state(false);
 
@@ -73,7 +84,8 @@
   const seconds = $derived(
     game.player.instantMarch && total ? 1 : marchSeconds(city, target, army, research),
   );
-  const food = $derived(marchFood(army, seconds));
+  const camp = $derived(campSeconds(campH ?? 0, campM ?? 0, campS ?? 0));
+  const food = $derived(marchFood(army, seconds, camp));
   const load = $derived(marchLoad(army, research));
   const foodNow = $derived(stockAt(city.resources.food, game.syncedAt, clock.now));
   const npcLoot = $derived(npc ? Object.values(npc.resources).reduce((n, v) => n + v, 0) : 0);
@@ -83,15 +95,19 @@
       ? 'Attacking needs the game server.'
       : rally === 0
         ? 'Build a Rally Spot to send troops out.'
-        : !idle.length
-          ? 'No idle hero in this city. Hire one at the Inn.'
-          : total === 0
-            ? 'Choose some troops to send.'
-            : total > limit
-              ? `Too many troops: your Rally Spot Lv ${rally} sends ${formatNumber(limit)}.`
-              : food > foodNow
-                ? 'Not enough food for the trip.'
-                : '',
+        : out >= slots
+          ? `All ${slots} of this city's marches are out. Each Rally Spot level sends one at a time.`
+          : camp > MAX_CAMP_SECONDS
+            ? 'A camp wave can be 24 hours at most.'
+            : !idle.length
+              ? 'No idle hero in this city. Hire one at the Inn.'
+              : total === 0
+                ? 'Choose some troops to send.'
+                : total > limit
+                  ? `Too many troops: your Rally Spot Lv ${rally} sends ${formatNumber(limit)}.`
+                  : food > foodNow
+                    ? 'Not enough food for the trip.'
+                    : '',
   );
 
   function max(t: TroopType) {
@@ -111,7 +127,7 @@
     try {
       await command({
         type: 'march',
-        payload: { cityId: city.id, x: target.x, y: target.y, heroId, troops: army },
+        payload: { cityId: city.id, x: target.x, y: target.y, heroId, troops: army, camp },
       });
       postChat(
         'system',
@@ -193,9 +209,39 @@
         </div>
       </div>
 
+      <div class="camp">
+        <span class="caption">Camp wave <span class="note">wait at the target before attacking</span></span>
+        <label
+          ><input type="number" min="0" max="24" placeholder="0" bind:value={campH} aria-label="Camp hours" />
+          h</label
+        >
+        <label
+          ><input
+            type="number"
+            min="0"
+            max="59"
+            placeholder="0"
+            bind:value={campM}
+            aria-label="Camp minutes"
+          /> m</label
+        >
+        <label
+          ><input
+            type="number"
+            min="0"
+            max="59"
+            placeholder="0"
+            bind:value={campS}
+            aria-label="Camp seconds"
+          /> s</label
+        >
+      </div>
+
       <div class="summary">
         <span>Troops <b>{formatNumber(total)} / {formatNumber(limit)}</b></span>
+        <span class:short={out >= slots}>Marches out <b>{out} / {slots}</b></span>
         <span>Travel <b>{total ? formatDuration(seconds * 1000) : '—'}</b> each way</span>
+        <span>Attacks in <b>{total ? formatDuration((seconds + camp) * 1000) : '—'}</b></span>
         <span class:short={food > foodNow}>Food <b>{formatNumber(food)}</b></span>
         <span>Can carry <b>{formatNumber(load)}</b></span>
       </div>
@@ -327,6 +373,23 @@
     border: 1px solid #6d8aa8;
     border-radius: 4px;
     font: inherit;
+  }
+  .camp {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .camp label {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+  .camp input {
+    width: 52px;
   }
   .heroes {
     display: flex;

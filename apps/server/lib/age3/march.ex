@@ -4,8 +4,9 @@ defmodule Age3.March do
   # march.ts, which the March window uses to show the numbers first.
   #
   # Playtest 1 has one mission: attacking an NPC city (TJ, 2026-11-03). A march needs a Rally Spot (it sends up to
-  # 10,000 troops per level) and an idle hero in the city. Troops, hero and food leave the city when it sets off;
-  # the survivors, the hero and the loot come back when it returns.
+  # 10,000 troops per level, and one march out at a time per level) and an idle hero in the city. Troops, hero and
+  # food leave the city when it sets off; the survivors, the hero and the loot come back when it returns. A camp
+  # wave (TJ, 2026-11-09) makes the army wait at the target before it attacks, to time hits.
   @moduledoc false
 
   alias Age3.{Combat.Units, Data, Research, World}
@@ -13,6 +14,8 @@ defmodule Age3.March do
   # every march is this many times faster than the original game (TJ, 2026-11-03: 5x for the test server)
   @speed 5
   @troops_per_rally_level 10_000
+  # the longest camp wave: a march waits at most this many seconds at its target before attacking
+  @max_camp 24 * 3600
 
   def speed, do: @speed
 
@@ -22,20 +25,30 @@ defmodule Age3.March do
   {x, y}, food the city's settled food, send the troops to send (%{"warrior" => 100}).
 
   target is what stands at `to` (Age3.Pvp.target/3): {:npc, level}, {:lord, level}, {:historic, level},
-  {:city, city} or {:error, code}; left out, only an NPC will do. rally_multiplier: a held historic city's Rally
-  Spot sends more (Age3.Historic.rally_multiplier/1).
+  {:city, city} or {:error, code}; left out, only an NPC will do.
 
-  Returns {:ok, %{troops, seconds, food, level}} (level of the NPC, lord's town or historic city attacked, nil
-  for a player city) or {:error, code}.
+  opts: :rally_multiplier, a held historic city's Rally Spot sends more (Age3.Historic.rally_multiplier/1);
+  :marches, how many marches the city has out already (one per Rally Spot level at a time); :camp, the camp wave
+  in seconds (the army waits that long at the target before it attacks, and eats food meanwhile).
+
+  Returns {:ok, %{troops, seconds, camp, food, level}} (seconds each way, level of the NPC, lord's town or
+  historic city attacked, nil for a player city) or {:error, code}.
   """
-  def check(buildings, research, troops, hero, from, to, food, send, target \\ nil, rally_multiplier \\ 1) do
+  def check(buildings, research, troops, hero, from, to, food, send, target \\ nil, opts \\ []) do
     rally = level_of(buildings, "rallyspot")
     send = for {t, n} <- send || %{}, n > 0, into: %{}, do: {t, n}
+    camp = Keyword.get(opts, :camp, 0)
 
     with :ok <- valid_troops(send),
+         :ok <- valid_camp(camp),
          :ok <- if(rally > 0, do: :ok, else: {:error, "no_rally_spot"}),
          :ok <-
-           if(total(send) <= floor(rally * @troops_per_rally_level * rally_multiplier),
+           if(Keyword.get(opts, :marches, 0) < max_marches(rally),
+             do: :ok,
+             else: {:error, "too_many_marches"}
+           ),
+         :ok <-
+           if(total(send) <= floor(rally * @troops_per_rally_level * Keyword.get(opts, :rally_multiplier, 1)),
              do: :ok,
              else: {:error, "too_many_troops"}
            ),
@@ -47,13 +60,19 @@ defmodule Age3.March do
          :ok <- hero_ready(hero),
          {:ok, level} <- target_level(target, to) do
       seconds = seconds(from, to, send, research)
-      cost = food(send, seconds)
+      cost = food(send, seconds, camp)
 
       if food >= cost,
-        do: {:ok, %{troops: send, seconds: seconds, food: cost, level: level}},
+        do: {:ok, %{troops: send, seconds: seconds, camp: camp, food: cost, level: level}},
         else: {:error, "not_enough_resources"}
     end
   end
+
+  @doc "How many marches a city can have out at once (going, camping or coming home): one per Rally Spot level."
+  def max_marches(rally_level), do: max(0, rally_level)
+
+  defp valid_camp(camp) when is_integer(camp) and camp >= 0 and camp <= @max_camp, do: :ok
+  defp valid_camp(_camp), do: {:error, "bad_message"}
 
   defp valid_troops(send) do
     cond do
@@ -108,8 +127,11 @@ defmodule Age3.March do
     :math.sqrt(:math.pow(min(dx, size - dx), 2) + :math.pow(min(dy, size - dy), 2))
   end
 
-  @doc "Food the army eats there and back, paid when it leaves: upkeep per hour x the round trip, rounded up."
-  def food(troops, seconds), do: ceil(Age3.Train.upkeep(troops) * 2 * seconds / 3600)
+  @doc """
+  Food the army eats there and back, paid when it leaves: upkeep per hour x (the round trip + the camp wave it
+  waits at the target), rounded up.
+  """
+  def food(troops, seconds, camp \\ 0), do: ceil(Age3.Train.upkeep(troops) * (2 * seconds + camp) / 3600)
 
   @doc "Resources the army can carry back: each troop's load, +10% per Logistics level, rounded down."
   def load(troops, research) do

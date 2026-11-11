@@ -71,6 +71,39 @@ defmodule Age3.MarchTest do
     assert {:error, "not_enough_resources"} = March.check(@rally, %{}, troops, idle, home, target, 0, send)
   end
 
+  test "check: one march out per Rally Spot level, and a camp wave that costs food" do
+    home = {400, 400}
+    target = npc_near(home, 1)
+    troops = %{"warrior" => 20_000}
+    idle = %{status: "idle"}
+    send = %{"warrior" => 100}
+
+    check = fn rally, opts ->
+      March.check(rally, %{}, troops, idle, home, target, 1_000_000, send, nil, opts)
+    end
+
+    rally3 = [%{type: "rallyspot", level: 3}]
+
+    assert {:ok, _} = check.(@rally, marches: 0)
+    assert {:error, "too_many_marches"} = check.(@rally, marches: 1)
+    assert {:ok, _} = check.(rally3, marches: 2)
+    assert {:error, "too_many_marches"} = check.(rally3, marches: 3)
+    assert {:error, "no_rally_spot"} = check.([], marches: 0)
+
+    assert {:ok, plan} = check.(@rally, camp: 1800)
+    assert plan.camp == 1800
+    assert plan.seconds == March.seconds(home, target, send, %{})
+    assert plan.food == March.food(send, plan.seconds, 1800)
+
+    assert March.food(%{"warrior" => 100_000}, 3600, 1800) ==
+             ceil(Age3.Train.upkeep(%{"warrior" => 100_000}) * 2.5)
+
+    assert {:ok, %{camp: 86_400}} = check.(@rally, camp: 86_400)
+    assert {:error, "bad_message"} = check.(@rally, camp: 86_401)
+    assert {:error, "bad_message"} = check.(@rally, camp: -1)
+    assert {:error, "bad_message"} = check.(@rally, camp: "1h")
+  end
+
   test "take" do
     assert March.take(%{"warrior" => 100, "pike" => 5}, %{"warrior" => 40}) == %{"warrior" => 60, "pike" => 5}
   end
