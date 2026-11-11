@@ -254,6 +254,36 @@ defmodule Age3.Store do
             ) :: :ok | {:error, code :: String.t()}
 
   @doc """
+  The Marketplace seen from a city: its Marketplace level, the best 5 buy and sell prices per resource (with the
+  last trade's price) and the player's open orders.
+  """
+  @callback market(player_id :: String.t(), city_id :: String.t()) ::
+              {:ok, map} | {:error, code :: String.t()}
+
+  @doc """
+  Places a buy or sell order (Age3.Market): pays for it, trades at once with what meets it and leaves the rest
+  open. Returns {:ok, the trade partners' player ids} or {:error, code}.
+  """
+  @callback place_order(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              side :: String.t(),
+              resource :: String.t(),
+              amount :: integer,
+              price :: integer,
+              now_ms :: integer
+            ) :: {:ok, [String.t()]} | {:error, code :: String.t()}
+
+  @doc "Cancels an open order and gives back what it holds."
+  @callback cancel_order(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              order_id :: String.t(),
+              now_ms :: integer
+            ) ::
+              :ok | {:error, code :: String.t()}
+
+  @doc """
   Posts a chat line to "world" or "alliance". Returns {:ok, line, to} (to: :all or the alliance id, for
   chat_audience/1) or {:error, code}.
   """
@@ -325,6 +355,9 @@ defmodule Age3.Store.Pg do
     Beacon,
     Economy,
     Forts,
+    Market,
+    MarketOrder,
+    MarketTrade,
     Game,
     Hero,
     Heroes,
@@ -874,6 +907,194 @@ defmodule Age3.Store.Pg do
         l |> Map.delete(:allianceId) |> Map.put(:relation, Alliances.relation(mine, l.allianceId, diplomacy))
       end)
     end)
+  end
+
+  # The Marketplace (Age3.Market). Placing an order pays for it, trades at once with what meets it (crediting the
+  # other side's cities) and leaves the rest in the book.
+  @impl true
+  def market(player_id, city_id) do
+    with city when city != nil <- own_city(player_id, city_id) do
+      books =
+        Map.new(Market.resources(), fn r ->
+          {r,
+           %{
+             buy: book_levels(r, "buy", :desc),
+             sell: book_levels(r, "sell", :asc),
+             last:
+               Repo.one(
+                 from(t in MarketTrade,
+                   where: t.resource == ^r,
+                   order_by: [desc: t.inserted_at],
+                   limit: 1,
+                   select: t.price
+                 )
+               )
+           }}
+        end)
+
+      orders =
+        Repo.all(
+          from o in MarketOrder,
+            join: c in City,
+            on: c.id == o.city_id,
+            where: o.player_id == ^player_id,
+            order_by: o.inserted_at,
+            select: %{
+              id: o.id,
+              cityId: o.city_id,
+              city: c.name,
+              side: o.side,
+              resource: o.resource,
+              amount: o.amount,
+              price: o.price
+            }
+        )
+
+      {:ok, %{level: market_level(city.id), books: books, orders: orders}}
+    else
+      _ -> {:error, "bad_message"}
+    end
+  end
+
+  defp own_city(player_id, city_id) do
+    case Ecto.UUID.cast(city_id) do
+      {:ok, id} -> Repo.one(from c in City, where: c.id == ^id and c.player_id == ^player_id)
+      :error -> nil
+    end
+  end
+
+  # the best 5 prices on one side of a resource's book, with how much is there at each
+  defp book_levels(resource, side, dir) do
+    Repo.all(
+      from o in MarketOrder,
+        where: o.resource == ^resource and o.side == ^side,
+        group_by: o.price,
+        order_by: [{^dir, o.price}],
+        limit: 5,
+        select: %{price: o.price, amount: sum(o.amount)}
+    )
+    |> Enum.map(&%{&1 | amount: Decimal.to_integer(&1.amount)})
+  end
+
+  defp market_level(city_id),
+    do:
+      Repo.one(
+        from(b in Building, where: b.city_id == ^city_id and b.type == "marketplace", select: max(b.level))
+      ) || 0
+
+  @impl true
+  def place_order(player_id, city_id, side, resource, amount, price, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      open = Repo.aggregate(from(o in MarketOrder, where: o.city_id == ^city.id), :count)
+
+      case Market.check(market_level(city.id), open, side, resource, amount, price) do
+        :ok -> :ok
+        {:error, code} -> Repo.rollback(code)
+      end
+
+      resources = settled(city, now_ms).resources
+      cost = if side == "sell", do: %{resource => amount}, else: %{"gold" => Market.gold(amount, price)}
+      if Build.affordable(resources, cost) != :ok, do: Repo.rollback("not_enough_resources")
+
+      {other, dir} = if side == "buy", do: {"sell", :asc}, else: {"buy", :desc}
+
+      book =
+        Repo.all(
+          from o in MarketOrder,
+            where: o.resource == ^resource and o.side == ^other and o.player_id != ^player_id,
+            order_by: [{^dir, o.price}, asc: o.inserted_at],
+            limit: 200,
+            lock: "FOR UPDATE"
+        )
+
+      {fills, left} = Market.match(side, amount, price, book)
+
+      # what this city gets from the trades made now: resources bought (and, buying below the bid, gold back), or
+      # gold for what it sold
+      gains =
+        Enum.reduce(fills, %{}, fn {o, qty}, acc ->
+          trade = Market.gold(qty, o.price)
+          Repo.insert!(%MarketTrade{resource: resource, amount: qty, price: o.price, inserted_at: now})
+
+          if o.amount == qty,
+            do: Repo.delete!(o),
+            else: o |> Ecto.Changeset.change(amount: o.amount - qty) |> Repo.update!()
+
+          if side == "buy" do
+            # the seller gets the gold, less the fee; the buyer the goods and the gold it bid over the price
+            credit(o.city_id, %{"gold" => trade - Market.fee(trade)}, now)
+            acc |> add(resource, qty) |> add("gold", Market.gold(qty, price) - trade)
+          else
+            credit(o.city_id, %{resource => qty}, now)
+            add(acc, "gold", trade - Market.fee(trade))
+          end
+        end)
+
+      resources = resources |> Build.spend(cost) |> Cheats.add_resources(gains)
+      save_resources(city, resources, now_ms)
+
+      if left > 0 do
+        Repo.insert!(%MarketOrder{
+          city_id: city.id,
+          player_id: player_id,
+          side: side,
+          resource: resource,
+          amount: left,
+          price: price,
+          inserted_at: now
+        })
+      end
+
+      Repo.all(
+        from c in City,
+          where: c.id in ^Enum.map(fills, fn {o, _} -> o.city_id end),
+          distinct: true,
+          select: c.player_id
+      )
+    end)
+  end
+
+  defp add(map, key, n), do: Map.update(map, key, n, &(&1 + n))
+
+  # Adds resources to another city (a trade partner's), settling it first.
+  defp credit(city_id, more, now) do
+    city = Repo.one!(from c in City, where: c.id == ^city_id, lock: "FOR UPDATE")
+    resnapshot(city, now)
+    city = Repo.get!(City, city_id)
+
+    Repo.update_all(from(c in City, where: c.id == ^city.id),
+      set: [resources: Cheats.add_resources(city.resources, more)]
+    )
+  end
+
+  @impl true
+  def cancel_order(player_id, city_id, order_id, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+
+      order =
+        with {:ok, id} <- Ecto.UUID.cast(order_id),
+             %MarketOrder{city_id: cid} = o when cid == city.id <- Repo.get(MarketOrder, id) do
+          o
+        else
+          _ -> Repo.rollback("bad_message")
+        end
+
+      back =
+        if order.side == "sell",
+          do: %{order.resource => order.amount},
+          else: %{"gold" => Market.gold(order.amount, order.price)}
+
+      Repo.delete!(order)
+      save_resources(city, Cheats.add_resources(settled(city, now_ms).resources, back), now_ms)
+    end)
+    |> ok()
   end
 
   # Chat and mail (Age3.Social).

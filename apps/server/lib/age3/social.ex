@@ -35,7 +35,8 @@ defmodule Age3.Social do
       channel == "alliance" and player.alliance_id == nil ->
         {:error, "no_alliance"}
 
-      last && DateTime.diff(DateTime.from_unix!(now_ms * 1000, :microsecond), last, :millisecond) < @chat_gap_ms ->
+      last &&
+          DateTime.diff(DateTime.from_unix!(now_ms * 1000, :microsecond), last, :millisecond) < @chat_gap_ms ->
         {:error, "too_fast"}
 
       true ->

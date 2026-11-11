@@ -442,3 +442,33 @@ export interface Mail {
   read: boolean;
   at: number;
 }
+
+/** Marketplace resources (traded for gold). */
+export type MarketResource = 'food' | 'lumber' | 'stone' | 'iron';
+
+/** The Marketplace seen from a city (the server's `market` reply). Prices are thousandths of a gold per unit. */
+export interface MarketView {
+  /** This city's Marketplace level: how many orders it can have open. */
+  level: number;
+  books: Record<
+    MarketResource,
+    {
+      /** Best bids first. */
+      buy: { price: number; amount: number }[];
+      /** Cheapest offers first. */
+      sell: { price: number; amount: number }[];
+      /** The last trade's price, if any. */
+      last: number | null;
+    }
+  >;
+  /** Your open orders, in every city. */
+  orders: {
+    id: string;
+    cityId: string;
+    city: string;
+    side: 'buy' | 'sell';
+    resource: MarketResource;
+    amount: number;
+    price: number;
+  }[];
+}

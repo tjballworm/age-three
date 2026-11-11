@@ -51,6 +51,7 @@ const PUSH_TEXT = {
   march: 'Your march reached its target. See Reports for the details.',
   incoming: 'Your Beacon Tower spotted a march heading for one of your cities!',
   mail: 'You have new mail.',
+  trade: 'One of your Marketplace orders traded.',
 } as const;
 
 /** Adds server chat lines to the chat (once each, by id), keeping it in time order. */

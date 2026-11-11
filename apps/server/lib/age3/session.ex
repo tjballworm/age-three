@@ -105,6 +105,9 @@ defmodule Age3.Session do
               "promote",
               "getReports",
               "getAlliance",
+              "getMarket",
+              "marketOrder",
+              "cancelOrder",
               "getChat",
               "chat",
               "getMail",
@@ -365,6 +368,43 @@ defmodule Age3.Session do
 
   defp handle("imposePolicy", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid policy."), session}
+
+  # The Marketplace from a city: {cityId}. Replies "market" {level, books, orders}.
+  defp handle("getMarket", %{"cityId" => city_id}, id, session) when is_binary(city_id) do
+    case session.store.market(session.player_id, city_id) do
+      {:ok, market} -> {reply(id, "market", market), session}
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  # Buy or sell: {cityId, side: "buy" | "sell", resource, amount, price (thousandths of a gold per unit)}. Replies
+  # with the state; the trade partners' games are told.
+  defp handle(
+         "marketOrder",
+         %{"cityId" => city_id, "side" => side, "resource" => r, "amount" => amount, "price" => price},
+         id,
+         session
+       )
+       when is_binary(city_id) do
+    now = session.now.()
+
+    case session.store.place_order(session.player_id, city_id, side, r, amount, price, now) do
+      {:ok, partners} ->
+        for p <- partners, do: notify(p, "trade")
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  # Cancel an open order: {cityId, orderId}. What it holds comes back.
+  defp handle("cancelOrder", %{"cityId" => city_id, "orderId" => order_id}, id, session)
+       when is_binary(city_id) and is_binary(order_id),
+       do: command(id, session, &session.store.cancel_order(session.player_id, city_id, order_id, &1))
+
+  defp handle(type, _payload, id, session) when type in ["getMarket", "marketOrder", "cancelOrder"],
+    do: {error(id, "bad_message", "Not a valid market order."), session}
 
   # The latest world and alliance chat: replies "chatHistory" {messages}.
   defp handle("getChat", _payload, id, session),
@@ -721,6 +761,7 @@ defmodule Age3.Session do
   defp slot_key(_slot), do: nil
 
   defp message("not_enough_resources"), do: "Not enough resources."
+  defp message("market_full"), do: "This city has as many orders open as its Marketplace level."
   defp message("too_fast"), do: "Slow down: one chat line a second."
   defp message("already_in_alliance"), do: "Already in an alliance."
   defp message("no_embassy"), do: "Build an Embassy first."

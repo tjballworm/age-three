@@ -293,6 +293,27 @@ defmodule Age3.SessionTest do
              ])
   end
 
+  test "the marketplace" do
+    msg = fn type, payload ->
+      Jason.encode!(%{type: type, id: 2, payload: Map.put(payload, :cityId, "c1")})
+    end
+
+    assert [
+             _,
+             %{"type" => "market", "payload" => %{"level" => 1}},
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "market_full"}},
+             %{"type" => "state"}
+           ] =
+             run([
+               login("secret123"),
+               msg.("getMarket", %{}),
+               msg.("marketOrder", %{side: "sell", resource: "food", amount: 100, price: 50}),
+               msg.("marketOrder", %{side: "buy", resource: "food", amount: 100, price: 50}),
+               msg.("cancelOrder", %{orderId: "o1"})
+             ])
+  end
+
   test "cancelResearch" do
     cancel = fn task ->
       Jason.encode!(%{type: "cancelResearch", id: 2, payload: %{cityId: "c1", taskId: task}})

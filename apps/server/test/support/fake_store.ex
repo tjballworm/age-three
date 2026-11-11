@@ -118,6 +118,17 @@ defmodule Age3.FakeStore do
   @impl true
   def delete_mail(_player_id, _mail_id), do: :ok
 
+  @impl true
+  def market(_player_id, "c1"), do: {:ok, %{level: 1, books: %{}, orders: []}}
+  def market(_player_id, _city_id), do: {:error, "bad_message"}
+
+  @impl true
+  def place_order(_player_id, "c1", "sell", "food", 100, 50, _now_ms), do: {:ok, []}
+  def place_order(_player_id, _city_id, _side, _r, _amount, _price, _now_ms), do: {:error, "market_full"}
+
+  @impl true
+  def cancel_order(_player_id, _city_id, _order_id, _now_ms), do: :ok
+
   # task "t1" has under 5 minutes left; "t2" has more
   @impl true
   def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok

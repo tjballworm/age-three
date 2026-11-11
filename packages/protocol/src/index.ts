@@ -11,6 +11,8 @@ import type {
   Ladder,
   LordCity,
   Mail,
+  MarketResource,
+  MarketView,
   MarchMission,
   MedalCounts,
   Player,
@@ -151,6 +153,20 @@ export type AbandonValleyMessage = Envelope<'abandonValley', { cityId: string; x
 export type SetGarrisonMessage = Envelope<'setGarrison', { cityId: string; allow: boolean }>;
 /** The latest battle reports, newest first. Replies with `reports`. */
 export type GetReportsMessage = Envelope<'getReports', Record<string, never>>;
+/** The Marketplace from a city. Replies with `market`. */
+export type GetMarketMessage = Envelope<'getMarket', { cityId: string }>;
+/**
+ * Buy or sell a resource for gold. price is thousandths of a gold per unit (50 = 0.05). Pays up front (the
+ * resource, or amount * price / 1000 gold), trades at once with the orders that meet it at their price, and
+ * leaves the rest open (as many open orders per city as its Marketplace level). Sellers pay a 0.5% fee. The reply
+ * is a `state` message; the trade partners' games are told.
+ */
+export type MarketOrderMessage = Envelope<
+  'marketOrder',
+  { cityId: string; side: 'buy' | 'sell'; resource: MarketResource; amount: number; price: number }
+>;
+/** Cancel an open order; what it holds comes back. The reply is a `state` message. */
+export type CancelOrderMessage = Envelope<'cancelOrder', { cityId: string; orderId: string }>;
 /** The latest world and alliance chat lines. Replies with `chatHistory`. */
 export type GetChatMessage = Envelope<'getChat', Record<string, never>>;
 /**
@@ -290,6 +306,9 @@ export type ClientMessage =
   | GetReportMessage
   | GetAllianceMessage
   | AllianceActionMessage
+  | GetMarketMessage
+  | MarketOrderMessage
+  | CancelOrderMessage
   | GetChatMessage
   | SendChatMessage
   | GetMailMessage
@@ -319,7 +338,7 @@ export interface GameState {
    * attack on one of the player's cities arrived), 'march' (the player's march reached another player's city),
    * 'incoming' (another lord's march set out for one of the player's cities and its Beacon Tower saw it).
    */
-  reason?: 'cheat' | 'attacked' | 'march' | 'incoming' | 'mail';
+  reason?: 'cheat' | 'attacked' | 'march' | 'incoming' | 'mail' | 'trade';
 }
 /** The reply to getState and commands; also pushed with no id when someone else changed this game (see reason). */
 export type StateMessage = Envelope<'state', GameState>;
@@ -335,6 +354,7 @@ export type AllianceReply = Envelope<'alliance', AllianceInfo>;
 export type ChatLineMessage = Envelope<'chat', ChatMessage>;
 export type ChatHistoryMessage = Envelope<'chatHistory', { messages: ChatMessage[] }>;
 export type MailboxMessage = Envelope<'mail', { inbox: Mail[]; sent: Mail[] }>;
+export type MarketMessage = Envelope<'market', MarketView>;
 
 export type ServerMessage =
   | WelcomeMessage
@@ -347,7 +367,8 @@ export type ServerMessage =
   | AllianceReply
   | ChatLineMessage
   | ChatHistoryMessage
-  | MailboxMessage;
+  | MailboxMessage
+  | MarketMessage;
 
 export type ErrorCode =
   | 'bad_message'
@@ -460,4 +481,6 @@ export type ErrorCode =
   /** attacking or scouting your own alliance, or one yours calls friendly */
   | 'friendly'
   /** more than one chat line a second */
-  | 'too_fast';
+  | 'too_fast'
+  /** a city with as many open orders as its Marketplace level */
+  | 'market_full';
