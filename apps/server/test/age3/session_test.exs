@@ -353,6 +353,46 @@ defmodule Age3.SessionTest do
              ])
   end
 
+  test "levy, renameCity, demolish and abandonCity" do
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"payload" => %{"code" => "levy_cooldown"}},
+             %{"payload" => %{"code" => "bad_message"}},
+             %{"type" => "state"},
+             %{"payload" => %{"code" => "bad_city_name"}},
+             %{"payload" => %{"code" => "bad_city_name"}},
+             %{"type" => "state"},
+             %{"payload" => %{"code" => "cant_demolish"}},
+             %{"type" => "state"},
+             %{"payload" => %{"code" => "troops_out"}},
+             %{"payload" => %{"code" => "bad_message"}}
+           ] =
+             run([
+               login("secret123"),
+               ~s({"type":"levy","id":2,"payload":{"cityId":"c1","resource":"gold"}}),
+               ~s({"type":"levy","id":3,"payload":{"cityId":"c2","resource":"food"}}),
+               ~s({"type":"levy","id":4,"payload":{"cityId":"c1","resource":"gems"}}),
+               ~s({"type":"renameCity","id":5,"payload":{"cityId":"c1","name":"  New   Camelot "}}),
+               ~s({"type":"renameCity","id":6,"payload":{"cityId":"c1","name":"   "}}),
+               ~s({"type":"renameCity","id":7,"payload":{"cityId":"c1","name":"A name that is far too long"}}),
+               ~s({"type":"demolish","id":8,"payload":{"cityId":"c1","slot":3}}),
+               ~s({"type":"demolish","id":9,"payload":{"cityId":"c1","slot":"townhall"}}),
+               ~s({"type":"abandonCity","id":10,"payload":{"cityId":"c2","moveHeroesTo":"c1"}}),
+               ~s({"type":"abandonCity","id":11,"payload":{"cityId":"c1","moveHeroesTo":"c2"}}),
+               ~s({"type":"abandonCity","id":12,"payload":{"cityId":"c1"}})
+             ])
+  end
+
+  test "comfort also takes Blessing and Population Raising" do
+    assert [_, %{"type" => "state"}, %{"type" => "state"}] =
+             run([
+               login("secret123"),
+               ~s({"type":"comfort","id":2,"payload":{"cityId":"c1","kind":"bless"}}),
+               ~s({"type":"comfort","id":3,"payload":{"cityId":"c1","kind":"raise"}})
+             ])
+  end
+
   test "setGate, setDefender and persuade; state lists other lords' cities" do
     assert [
              %{"type" => "welcome"},

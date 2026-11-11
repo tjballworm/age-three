@@ -217,10 +217,32 @@ export type GetReportMessage = Envelope<'getReport', { reportId: string }>;
  */
 export type PromoteMessage = Envelope<'promote', { cityId: string; ladder: Ladder }>;
 /**
- * Comforts a city's people (COMFORTS in core): Disaster Relief pays food, Praying gold, each the population limit,
- * once every 15 minutes per city. Raises loyalty and lowers grievance. Replies with state.
+ * Comforts a city's people (COMFORTS and comfortEffect in core), once every 15 minutes per city: Disaster Relief
+ * pays food and Praying gold, each the population limit, to raise loyalty and lower grievance; Blessing turns gold
+ * into food; Population Raising turns food into people. Replies with state.
  */
-export type ComfortMessage = Envelope<'comfort', { cityId: string; kind: 'relief' | 'pray' }>;
+export type ComfortMessage = Envelope<
+  'comfort',
+  { cityId: string; kind: 'relief' | 'pray' | 'bless' | 'raise' }
+>;
+/**
+ * A levy from the Town Hall (levyAmount in core): takes one resource from the people at once, up to the cap, for
+ * 20 loyalty. Once every 15 minutes per city. Replies with state.
+ */
+export type LevyMessage = Envelope<'levy', { cityId: string; resource: ResourceType }>;
+/** Renames one of your cities: 1 to 20 letters, digits, spaces and ' - . Replies with state. */
+export type RenameCityMessage = Envelope<'renameCity', { cityId: string; name: string }>;
+/**
+ * Takes the building on a slot down one level through the build queue (demolishPlan in core): half its build time,
+ * half its cost back when done, an empty plot after Lv1. Cancel it with cancelBuild. Replies with state.
+ */
+export type DemolishMessage = Envelope<'demolish', { cityId: string; slot: number | string }>;
+/**
+ * Abandons a city for good. Its heroes move to moveHeroesTo (another of your cities) while its Feasting Hall has
+ * room; the rest leave. Not a historic city, and not while troops are out or an attack is on its way. Replies with
+ * state.
+ */
+export type AbandonCityMessage = Envelope<'abandonCity', { cityId: string; moveHeroesTo: string }>;
 /** Sets a city's tax rate, a whole number from 0 to 100. Gold per hour changes from now on. Replies with state. */
 export type SetTaxMessage = Envelope<'setTax', { cityId: string; taxRate: number }>;
 
@@ -299,6 +321,10 @@ export type ClientMessage =
   | SpeedUpMessage
   | SetTaxMessage
   | ComfortMessage
+  | LevyMessage
+  | RenameCityMessage
+  | DemolishMessage
+  | AbandonCityMessage
   | ResearchMessage
   | CancelResearchMessage
   | TrainMessage
@@ -476,6 +502,20 @@ export type ErrorCode =
   | 'rank_too_low'
   /** comfort less than 15 minutes after the last one in that city */
   | 'comfort_cooldown'
+  /** a levy less than 15 minutes after the last one in that city */
+  | 'levy_cooldown'
+  /** Population Raising in a city already at its population limit */
+  | 'population_full'
+  /** a city name that is empty, too long or has other characters */
+  | 'bad_city_name'
+  /** demolishing the Town Hall, or walls at Lv1 */
+  | 'cant_demolish'
+  /** demolishing a Barracks with troops in training */
+  | 'barracks_busy'
+  /** abandoning a historic city */
+  | 'historic_city'
+  /** abandoning a city with troops out or an attack on its way to it */
+  | 'troops_out'
   /** a march to one of your own cities */
   | 'own_city'
   /** a scout march with no scouts */

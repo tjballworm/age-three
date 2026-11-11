@@ -108,6 +108,17 @@ defmodule Age3.Economy do
 
   defp regold(resources, _old_pop, _new_pop, _tax_rate), do: resources
 
+  @doc """
+  Adds gains (%{"food" => 100, ...}) to the settled resources, but only up to each resource's cap, like
+  production: whatever would go over it is lost, and an amount already over the cap stays where it is.
+  """
+  def add_capped(resources, gains) do
+    Map.new(resources, fn {name, %{"amount" => amount, "cap" => cap} = stock} ->
+      gain = Map.get(gains, name, 0)
+      {name, %{stock | "amount" => max(amount, min(amount + gain, cap))}}
+    end)
+  end
+
   @doc "Takes n people out of the population (or, with a negative n, gives them back)."
   def take_population(pop, n) do
     current = pop["current"] - n

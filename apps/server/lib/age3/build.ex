@@ -80,6 +80,41 @@ defmodule Age3.Build do
     if met? and not taken?, do: :ok, else: {:error, "requirement_not_met"}
   end
 
+  @doc """
+  Can the building on `slot` be taken down one level? It takes half the time its current level took to build
+  (with Construction) and gives back half of that level's cost, rounded down; at Lv1 the plot is left empty. The
+  Town Hall can't be demolished, and the walls never go below Lv1. (Age II also has instant demolition with a
+  Dynamite item, which comes with items.)
+
+  Returns {:ok, %{type, level, refund, seconds}} with the level it goes down to (0 = gone), or {:error, code}.
+  """
+  def check_demolish(buildings, slot, research \\ %{}) do
+    research = Research.in_city(research, buildings)
+
+    case Enum.find(buildings, &(&1.slot == slot)) do
+      nil ->
+        {:error, "bad_slot"}
+
+      %{type: "townhall"} ->
+        {:error, "cant_demolish"}
+
+      %{type: "walls", level: 1} ->
+        {:error, "cant_demolish"}
+
+      %{type: type, level: level} ->
+        %{"cost" => cost, "seconds" => seconds} = Data.level(type, level)
+        refund = Map.new(cost, fn {name, n} -> {name, div(n, 2)} end)
+
+        {:ok,
+         %{
+           type: type,
+           level: level - 1,
+           refund: refund,
+           seconds: Research.build_seconds(div(seconds, 2), research)
+         }}
+    end
+  end
+
   @doc "The highest level of type among the buildings, 0 when there is none."
   def level_of(buildings, type) do
     buildings |> Enum.filter(&(&1.type == type)) |> Enum.map(& &1.level) |> Enum.max(fn -> 0 end)

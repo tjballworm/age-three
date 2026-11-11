@@ -7,6 +7,7 @@
     buildSeconds,
     buildingLevel,
     canFreeSpeedUp,
+    demolishPlan,
     researchInCity,
     remaining,
     settleCity,
@@ -108,6 +109,19 @@
 
   const build = (type: BuildingType) =>
     send(() => command({ type: 'build', payload: { cityId: city.id, slot, ...(standing ? {} : { type }) } }));
+  /** Taking what stands here down one level; null for the Town Hall and Lv1 walls. */
+  const demolition = $derived(standing ? demolishPlan(standing.type, standing.level, research) : null);
+  /** The first click on Demolish asks; the second one sends. */
+  let confirmDemolish = $state(false);
+  $effect(() => {
+    void key;
+    confirmDemolish = false;
+  });
+  const demolish = () =>
+    send(async () => {
+      await command({ type: 'demolish', payload: { cityId: city.id, slot } });
+      confirmDemolish = false;
+    });
   const cancel = (taskId: string) =>
     send(() => command({ type: 'cancelBuild', payload: { cityId: city.id, taskId } }));
 
@@ -169,6 +183,34 @@
   } as const;
 </script>
 
+{#snippet demolishButton()}
+  {#if demolition && standing}
+    {#snippet demolishTip()}
+      <b class="tip-title"
+        >Demolish {BUILDINGS[standing.type].name} → {demolition.level
+          ? `Lv ${demolition.level}`
+          : 'empty plot'}</b
+      >
+      <span class="cost">
+        {#each RESOURCE_TYPES.filter((r) => demolition.refund[r] > 0) as r (r)}
+          <span><ResourceIcon type={r} size={14} /> +{formatNumber(demolition.refund[r])}</span>
+        {/each}
+        <span>⏱ {formatDuration(demolition.seconds * 1000)}</span>
+      </span>
+      <span>Half the cost comes back when it is done. Uses the build queue.</span>
+      {#if queueBusy}<span class="tip-why">Already building in this city</span>{/if}
+    {/snippet}
+    <span class="tip-anchor" use:tooltip={demolishTip}>
+      <Button
+        variant="red"
+        disabled={!game.fromServer || sending || queueBusy}
+        onclick={() => (confirmDemolish ? demolish() : (confirmDemolish = true))}
+        >{confirmDemolish ? 'Confirm demolish' : 'Demolish'}</Button
+      >
+    </span>
+  {/if}
+{/snippet}
+
 {#snippet costLine(type: BuildingType, level: number)}
   {@const lv = buildingLevel(type, level)}
   {#if lv}
@@ -219,14 +261,20 @@
             {/if}
             <Button variant="red" disabled={sending} onclick={() => cancel(building.id)}>Cancel</Button>
           </div>
-        {:else if standing.level >= MAX_BUILDING_LEVEL}
-          <Button disabled>Max Level</Button>
         {:else}
-          <span class="tip-anchor" use:tooltip={upgradeTip}>
-            <Button disabled={!game.fromServer || sending || why !== null} onclick={() => build(next.type)}
-              >Upgrade</Button
-            >
-          </span>
+          <div class="actions">
+            {#if standing.level >= MAX_BUILDING_LEVEL}
+              <Button disabled>Max Level</Button>
+            {:else}
+              <span class="tip-anchor" use:tooltip={upgradeTip}>
+                <Button
+                  disabled={!game.fromServer || sending || why !== null}
+                  onclick={() => build(next.type)}>Upgrade</Button
+                >
+              </span>
+            {/if}
+            {@render demolishButton()}
+          </div>
         {/if}
       </div>
       {#if error}<p class="error" role="alert">{error}</p>{/if}
@@ -264,8 +312,10 @@
           </div>
         </div>
         <p class="note">
-          Cancelling gives back the whole cost. Buildings (not walls) with 5 minutes or less left can be sped
-          up for free.
+          {building.label.startsWith('Demolish')
+            ? 'Cancelling stops the demolition (nothing was paid, so nothing comes back).'
+            : 'Cancelling gives back the whole cost.'} Buildings (not walls) with 5 minutes or less left can be
+          sped up for free.
         </p>
       {:else}
         {#each options as { type, level } (type)}
@@ -283,6 +333,21 @@
             </Button>
           </div>
         {/each}
+        {#if demolition && standing}
+          <div class="row">
+            <div class="what">
+              <b>Demolish → {demolition.level ? `Lv ${demolition.level}` : 'empty plot'}</b>
+              <span class="cost">
+                {#each RESOURCE_TYPES.filter((r) => demolition.refund[r] > 0) as r (r)}
+                  <span><ResourceIcon type={r} size={14} /> +{formatNumber(demolition.refund[r])}</span>
+                {/each}
+                <span>⏱ {formatDuration(demolition.seconds * 1000)}</span>
+              </span>
+              <span class="gain">Half this level's cost comes back when it is done.</span>
+            </div>
+            {@render demolishButton()}
+          </div>
+        {/if}
       {/if}
 
       {#if error}<p class="error" role="alert">{error}</p>{/if}

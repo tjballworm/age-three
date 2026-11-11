@@ -6,19 +6,45 @@ import { stockAt } from './timing';
 
 /** Loyalty ticks every 6 minutes, on whole multiples of 6 minutes since the epoch. */
 export const LOYALTY_TICK_MS = 360_000;
-/** Time between two comforts (Disaster Relief or Praying) in the same city. */
+/** Time between two comforts (any of the four) in the same city. */
 export const COMFORT_COOLDOWN_MS = 15 * 60_000;
 
-export type ComfortKind = 'relief' | 'pray';
+export type ComfortKind = 'relief' | 'pray' | 'bless' | 'raise';
 
-/** What each comfort costs (the population limit in this resource) and does to loyalty and grievance. */
+/**
+ * What each comfort does to loyalty and grievance, and which resource it costs (comfortEffect works out how much).
+ * All four share one 15-minute cooldown per city.
+ */
 export const COMFORTS: Record<
   ComfortKind,
   { name: string; resource: ResourceType; loyalty: number; grievance: number }
 > = {
   relief: { name: 'Disaster Relief', resource: 'food', loyalty: 5, grievance: -15 },
   pray: { name: 'Praying', resource: 'gold', loyalty: 25, grievance: -5 },
+  bless: { name: 'Blessing', resource: 'gold', loyalty: 0, grievance: 0 },
+  raise: { name: 'Population Raising', resource: 'food', loyalty: 0, grievance: 0 },
 };
+
+/**
+ * A comfort's cost and what it brings, for the people there now. Disaster Relief and Praying cost the population
+ * limit; Blessing costs a tenth of the limit in gold and gives 10x the limit in food; Population Raising costs 10
+ * food a person and brings in a tenth more people (at least 1, never past the limit). Matches
+ * Age3.Loyalty.check_comfort.
+ */
+export function comfortEffect(
+  kind: ComfortKind,
+  pop: Pick<Population, 'current' | 'max'>,
+): { cost: number; food: number; people: number } {
+  const current = Math.trunc(pop.current);
+  if (kind === 'bless') return { cost: Math.floor(pop.max / 10), food: pop.max * 10, people: 0 };
+  if (kind === 'raise')
+    return {
+      cost: current * 10,
+      food: 0,
+      people: Math.min(Math.max(Math.floor(current / 10), 1), pop.max - current),
+    };
+  return { cost: pop.max, food: 0, people: 0 };
+}
 
 const clamp = (n: number) => Math.min(100, Math.max(0, n));
 

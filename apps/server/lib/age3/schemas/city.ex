@@ -16,6 +16,8 @@ defmodule Age3.City do
     field :grievance, :integer, default: 0
     # the last Disaster Relief or Praying (Age3.Loyalty, 15 minute cooldown)
     field :comfort_at, :utc_datetime_usec
+    # the last levy (Age3.Levy, 15 minute cooldown)
+    field :levy_at, :utc_datetime_usec
 
     # the Rally Spot's "open gate to fight": closed keeps the troops out of battles (they open by themselves at
     # loyalty 5 or less)

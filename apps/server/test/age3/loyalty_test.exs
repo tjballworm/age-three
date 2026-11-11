@@ -31,16 +31,33 @@ defmodule Age3.LoyaltyTest do
   end
 
   test "comforting costs the population limit, once every 15 minutes" do
-    assert {:ok, %{resource: "food", cost: 1000, loyalty: 5, grievance: -15}} =
-             Loyalty.check_comfort("relief", nil, 0, 1000, 1000)
+    assert {:ok, %{resource: "food", cost: 1000, loyalty: 5, grievance: -15, gain: %{}, people: 0}} =
+             Loyalty.check_comfort("relief", nil, 0, pop(800), 1000)
 
     assert {:ok, %{resource: "gold", cost: 1000, loyalty: 25, grievance: -5}} =
-             Loyalty.check_comfort("pray", 0, 900_000, 1000, 5000)
+             Loyalty.check_comfort("pray", 0, 900_000, pop(800), 5000)
 
-    assert {:error, "comfort_cooldown"} = Loyalty.check_comfort("pray", 0, 899_999, 1000, 5000)
-    assert {:error, "not_enough_resources"} = Loyalty.check_comfort("relief", nil, 0, 1000, 999)
-    assert {:error, "bad_message"} = Loyalty.check_comfort("feast", nil, 0, 1000, 1000)
+    assert {:error, "comfort_cooldown"} = Loyalty.check_comfort("pray", 0, 899_999, pop(800), 5000)
+    assert {:error, "not_enough_resources"} = Loyalty.check_comfort("relief", nil, 0, pop(800), 999)
+    assert {:error, "bad_message"} = Loyalty.check_comfort("feast", nil, 0, pop(800), 1000)
     assert Loyalty.apply_change(90, 10, 25, -15) == {100, 0}
+  end
+
+  test "Blessing turns a tenth of the limit in gold into 10x the limit in food" do
+    assert {:ok,
+            %{resource: "gold", cost: 100, loyalty: 0, grievance: 0, gain: %{"food" => 10_000}, people: 0}} =
+             Loyalty.check_comfort("bless", nil, 0, pop(800), 100)
+
+    assert {:error, "not_enough_resources"} = Loyalty.check_comfort("bless", nil, 0, pop(800), 99)
+  end
+
+  test "Population Raising pays 10 food a person for a tenth more people, never past the limit" do
+    assert {:ok, %{resource: "food", cost: 8000, gain: %{}, people: 80}} =
+             Loyalty.check_comfort("raise", nil, 0, pop(800.7), 8000)
+
+    assert {:ok, %{people: 5}} = Loyalty.check_comfort("raise", nil, 0, pop(995), 9950)
+    assert {:ok, %{cost: 0, people: 1}} = Loyalty.check_comfort("raise", nil, 0, pop(0), 0)
+    assert {:error, "population_full"} = Loyalty.check_comfort("raise", nil, 0, pop(1000), 100_000)
   end
 
   test "taxes come from the people there now, rounded down" do
