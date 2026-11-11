@@ -10,6 +10,7 @@
   import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
   import LordMedals from './LordMedals.svelte';
   import LordProfile from './LordProfile.svelte';
+  import MailWindow from './MailWindow.svelte';
   import ReportsWindow from './ReportsWindow.svelte';
   import TroopsOverview from './TroopsOverview.svelte';
 
@@ -62,6 +63,8 @@
       {#key tab}<ReportsWindow
           tab={tab === 'Scouting' ? 'scouting' : tab === 'Missions' ? 'missions' : 'battles'}
         />{/key}
+    {:else if game.openWindow === 'mail'}
+      <MailWindow {tab} onCompose={() => (tab = 'Compose')} />
     {:else if game.openWindow === 'alliance'}
       <AllianceWindow {tab} />
     {:else if game.openWindow === 'leaderboard'}

@@ -1,7 +1,7 @@
 // Keeps the client state in step with the game server. With no server configured (or while it can't be
 // reached) the game keeps showing the sample data, so the client still works on its own.
 
-import { medalName, type TimedTask } from '@age3/core';
+import { medalName, type ChatMessage, type TimedTask } from '@age3/core';
 import { PROTOCOL_VERSION, type ServerMessage } from '@age3/protocol';
 import { connect, ServerError, type GameClient, type Request } from '$net/client';
 import { auth, forgetToken, savedToken, saveToken } from './auth.svelte';
@@ -50,7 +50,25 @@ const PUSH_TEXT = {
   attacked: 'One of your cities was attacked! See Reports for the details.',
   march: 'Your march reached its target. See Reports for the details.',
   incoming: 'Your Beacon Tower spotted a march heading for one of your cities!',
+  mail: 'You have new mail.',
 } as const;
+
+/** Adds server chat lines to the chat (once each, by id), keeping it in time order. */
+function addChat(lines: ChatMessage[]) {
+  const have = new Set(game.chat.map((m) => m.id));
+  const fresh = lines.filter((l) => !have.has(l.id));
+  if (!fresh.length) return;
+  game.chat.push(...fresh);
+  game.chat.sort((a, b) => a.at - b.at);
+  if (game.chat.length > 200) game.chat.splice(0, game.chat.length - 200);
+}
+
+/** Says something in the world or alliance channel. */
+export async function sendChat(channel: 'world' | 'alliance', text: string): Promise<void> {
+  if (!current) throw new Error('Not connected to the server.');
+  const reply = await current.request({ type: 'chat', payload: { channel, text } });
+  if (reply.type === 'chat') addChat([reply.payload]);
+}
 
 export function startServerSync(): () => void {
   if (!SERVER_URL) return () => {};
@@ -93,6 +111,7 @@ export function startServerSync(): () => void {
       postChat('system', null, PUSH_TEXT[m.payload.reason ?? 'cheat'], m.payload.serverTime);
       return;
     }
+    if (m.type === 'chat' && m.id === undefined) return addChat([m.payload]);
     if (m.type !== 'taskDone') return;
     applyServerState(m.payload);
     const { task } = m.payload;
@@ -158,4 +177,10 @@ export function logOut() {
 async function loadState(c: GameClient) {
   const reply = await c.request({ type: 'getState', payload: {} });
   if (reply.type === 'state') applyServerState(reply.payload);
+  const chat = await c.request({ type: 'getChat', payload: {} });
+  if (chat.type === 'chatHistory') {
+    // the sample chat goes; system lines from this session stay
+    game.chat = game.chat.filter((m) => m.id.startsWith('local-'));
+    addChat(chat.payload.messages);
+  }
 }

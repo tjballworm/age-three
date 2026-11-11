@@ -92,6 +92,32 @@ defmodule Age3.FakeStore do
   def alliance_action(_player_id, "apply", %{"name" => "Pact"}, _now_ms), do: :ok
   def alliance_action(_player_id, _action, _args, _now_ms), do: {:error, "no_alliance"}
 
+  @impl true
+  def chat(_player_id, "world", "hi", now_ms),
+    do: {:ok, %{id: "l1", channel: "world", from: "Tester", text: "hi", at: now_ms}, :all}
+
+  def chat(_player_id, _channel, _text, _now_ms), do: {:error, "no_alliance"}
+
+  @impl true
+  def chat_history(_player_id), do: []
+
+  @impl true
+  def chat_audience(_to), do: []
+
+  @impl true
+  def send_mail(_player_id, "Other", _subject, _body, _now_ms), do: {:ok, "p2"}
+  def send_mail(_player_id, _to, _subject, _body, _now_ms), do: {:error, "player_not_found"}
+
+  @impl true
+  def mailbox(_player_id), do: %{inbox: [], sent: []}
+
+  @impl true
+  def read_mail(_player_id, "m1"), do: :ok
+  def read_mail(_player_id, _mail_id), do: {:error, "bad_message"}
+
+  @impl true
+  def delete_mail(_player_id, _mail_id), do: :ok
+
   # task "t1" has under 5 minutes left; "t2" has more
   @impl true
   def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok

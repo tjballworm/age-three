@@ -268,6 +268,31 @@ defmodule Age3.SessionTest do
     assert_received {:wake, 61_000}
   end
 
+  test "chat and mail" do
+    msg = fn type, payload -> Jason.encode!(%{type: type, id: 2, payload: payload}) end
+
+    assert [
+             _,
+             %{"type" => "chat", "payload" => %{"text" => "hi"}},
+             %{"type" => "error", "payload" => %{"code" => "no_alliance"}},
+             %{"type" => "chatHistory", "payload" => %{"messages" => []}},
+             %{"type" => "mail", "payload" => %{"inbox" => []}},
+             %{"type" => "error", "payload" => %{"code" => "player_not_found"}},
+             %{"type" => "mail"},
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}}
+           ] =
+             run([
+               login("secret123"),
+               msg.("chat", %{channel: "world", text: "hi"}),
+               msg.("chat", %{channel: "alliance", text: "hi"}),
+               msg.("getChat", %{}),
+               msg.("sendMail", %{to: "Other", subject: "Hello", body: "Hi there"}),
+               msg.("sendMail", %{to: "Nobody", subject: "Hello", body: "Hi there"}),
+               msg.("readMail", %{mailId: "m1"}),
+               msg.("readMail", %{mailId: "m2"})
+             ])
+  end
+
   test "cancelResearch" do
     cancel = fn task ->
       Jason.encode!(%{type: "cancelResearch", id: 2, payload: %{cityId: "c1", taskId: task}})

@@ -254,6 +254,34 @@ defmodule Age3.Store do
             ) :: :ok | {:error, code :: String.t()}
 
   @doc """
+  Posts a chat line to "world" or "alliance". Returns {:ok, line, to} (to: :all or the alliance id, for
+  chat_audience/1) or {:error, code}.
+  """
+  @callback chat(player_id :: String.t(), channel :: String.t(), text :: String.t(), now_ms :: integer) ::
+              {:ok, map, :all | String.t()} | {:error, code :: String.t()}
+
+  @doc "The latest world and alliance chat lines for a player, oldest first."
+  @callback chat_history(player_id :: String.t()) :: [map]
+
+  @doc "Who gets a chat line: :all, or the alliance's player ids."
+  @callback chat_audience(:all | String.t()) :: :all | [String.t()]
+
+  @doc "Mails a player by name. Returns {:ok, receiver_id} or {:error, code}."
+  @callback send_mail(
+              player_id :: String.t(),
+              to :: String.t(),
+              subject :: String.t(),
+              body :: String.t(),
+              now_ms :: integer
+            ) :: {:ok, String.t()} | {:error, code :: String.t()}
+
+  @doc "The player's inbox and sent mail, newest first."
+  @callback mailbox(player_id :: String.t()) :: %{inbox: [map], sent: [map]}
+
+  @callback read_mail(player_id :: String.t(), mail_id :: String.t()) :: :ok | {:error, code :: String.t()}
+  @callback delete_mail(player_id :: String.t(), mail_id :: String.t()) :: :ok | {:error, code :: String.t()}
+
+  @doc """
   What the Alliance window shows: the player's alliance (members, ranks, diplomacy, applications for officers),
   their invitations and applications, their best Embassy level and the biggest alliances.
   """
@@ -313,6 +341,7 @@ defmodule Age3.Store.Pg do
     Research,
     Task,
     Scout,
+    Social,
     Titles,
     Train,
     Valley,
@@ -846,6 +875,25 @@ defmodule Age3.Store.Pg do
       end)
     end)
   end
+
+  # Chat and mail (Age3.Social).
+  @impl true
+  def chat(player_id, channel, text, now_ms), do: Social.chat(player_id, channel, text, now_ms)
+  @impl true
+  def chat_history(player_id), do: Social.history(player_id)
+  @impl true
+  def chat_audience(:all), do: :all
+  def chat_audience(alliance_id), do: Social.alliance_members(alliance_id)
+  @impl true
+  def send_mail(player_id, to, subject, body, now_ms),
+    do: Social.send_mail(player_id, to, subject, body, now_ms)
+
+  @impl true
+  def mailbox(player_id), do: Social.mailbox(player_id)
+  @impl true
+  def read_mail(player_id, mail_id), do: Social.read_mail(player_id, mail_id)
+  @impl true
+  def delete_mail(player_id, mail_id), do: Social.delete_mail(player_id, mail_id)
 
   # Alliances (Age3.AllianceStore). Founding one pays 10,000 gold from a city with Embassy Lv2.
   @impl true
@@ -3073,6 +3121,8 @@ defmodule Age3.Store.Pg do
       research: p.research,
       instantMarch: p.instant_march,
       unreadReports: unread_reports(p.id),
+      unreadMail: Social.unread(p.id),
+      allianceRank: p.alliance_rank,
       # not stored yet; the backlog has it derived from prestige
       rank: 0
     }

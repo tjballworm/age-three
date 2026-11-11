@@ -105,6 +105,12 @@ defmodule Age3.Session do
               "promote",
               "getReports",
               "getAlliance",
+              "getChat",
+              "chat",
+              "getMail",
+              "sendMail",
+              "readMail",
+              "deleteMail",
               "alliance",
               "getReport",
               "cheat"
@@ -360,6 +366,49 @@ defmodule Age3.Session do
   defp handle("imposePolicy", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid policy."), session}
 
+  # The latest world and alliance chat: replies "chatHistory" {messages}.
+  defp handle("getChat", _payload, id, session),
+    do: {reply(id, "chatHistory", %{messages: session.store.chat_history(session.player_id)}), session}
+
+  # Say something: {channel: "world" | "alliance", text}. Replies "chat" with the line, which is also pushed (no
+  # id) to every open game it reaches, the sender's included.
+  defp handle("chat", %{"channel" => channel, "text" => text}, id, session) do
+    case session.store.chat(session.player_id, channel, text, session.now.()) do
+      {:ok, line, to} ->
+        broadcast(session.store.chat_audience(to), %{type: "chat", payload: line})
+        {reply(id, "chat", line), session}
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("chat", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid chat line."), session}
+
+  # Mail. Each replies "mail" {inbox, sent}; sendMail {to, subject, body} also tells the receiver's open games.
+  defp handle("getMail", _payload, id, session), do: mailbox(id, session)
+
+  defp handle("sendMail", %{"to" => to, "subject" => subject, "body" => body}, id, session) do
+    case session.store.send_mail(session.player_id, to, subject, body, session.now.()) do
+      {:ok, receiver} ->
+        notify(receiver, "mail")
+        mailbox(id, session)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("readMail", %{"mailId" => mail_id}, id, session) when is_binary(mail_id),
+    do: mail_command(id, session, session.store.read_mail(session.player_id, mail_id))
+
+  defp handle("deleteMail", %{"mailId" => mail_id}, id, session) when is_binary(mail_id),
+    do: mail_command(id, session, session.store.delete_mail(session.player_id, mail_id))
+
+  defp handle(type, _payload, id, session) when type in ["sendMail", "readMail", "deleteMail"],
+    do: {error(id, "bad_message", "Not a valid mail."), session}
+
   # The Alliance window's contents: replies "alliance" {alliance, invites, applied, embassy, alliances}.
   defp handle("getAlliance", _payload, id, session),
     do: {reply(id, "alliance", session.store.alliance_info(session.player_id)), session}
@@ -569,6 +618,21 @@ defmodule Age3.Session do
     end)
   end
 
+  @doc "Pushes a message to the open games of these players (:all for everyone online)."
+  def broadcast(players, message) do
+    if Process.whereis(Age3.Players) do
+      pids =
+        case players do
+          :all -> Registry.select(Age3.Players, [{{:_, :"$1", :_}, [], [:"$1"]}])
+          ids -> Enum.flat_map(ids, fn id -> for {pid, _} <- Registry.lookup(Age3.Players, id), do: pid end)
+        end
+
+      for pid <- Enum.uniq(pids), do: send(pid, {:push, message})
+    end
+
+    :ok
+  end
+
   @doc "The push for a change made by someone else: the player's whole state and the reason, with no id. nil if unreadable."
   def refresh(session, reason \\ "cheat") do
     case state_reply(nil, session, session.now.()) do
@@ -607,6 +671,11 @@ defmodule Age3.Session do
   end
 
   # A command that changes the game: run it at now and reply with the new state, or the error.
+  defp mailbox(id, session), do: {reply(id, "mail", session.store.mailbox(session.player_id)), session}
+
+  defp mail_command(id, session, :ok), do: mailbox(id, session)
+  defp mail_command(id, session, {:error, code}), do: {error(id, code, message(code)), session}
+
   defp command(id, session, fun) do
     now = session.now.()
 
@@ -652,6 +721,7 @@ defmodule Age3.Session do
   defp slot_key(_slot), do: nil
 
   defp message("not_enough_resources"), do: "Not enough resources."
+  defp message("too_fast"), do: "Slow down: one chat line a second."
   defp message("already_in_alliance"), do: "Already in an alliance."
   defp message("no_embassy"), do: "Build an Embassy first."
   defp message("no_alliance"), do: "No such alliance."

@@ -85,6 +85,7 @@ export function applyServerState(s: GameState) {
   game.queue = s.tasks;
   game.syncedAt = s.serverTime;
   game.badges.reports = s.player.unreadReports ?? 0;
+  game.badges.mail = s.player.unreadMail ?? 0;
   if (!s.cities.some((c) => c.id === game.cityId)) game.cityId = s.cities[0]?.id ?? '';
   if (!game.fromServer) {
     const home = s.cities[0];

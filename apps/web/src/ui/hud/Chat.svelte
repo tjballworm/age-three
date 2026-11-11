@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ChatChannel } from '@age3/core';
   import { game, postChat } from '$state/game.svelte';
+  import { sendChat } from '$state/sync';
   import Icon from '$ui/components/Icon.svelte';
   import Tabs from '$ui/components/Tabs.svelte';
   import { formatClock } from '$ui/format';
@@ -30,8 +31,16 @@
     e.preventDefault();
     const text = draft.trim();
     if (!text) return;
-    postChat(target, game.player.name, text);
-    draft = '';
+    if (!game.fromServer) {
+      // sample mode: the line only shows here
+      postChat(target, game.player.name, text);
+      draft = '';
+      return;
+    }
+    const channel = target === 'alliance' ? 'alliance' : 'world';
+    sendChat(channel, text)
+      .then(() => (draft = ''))
+      .catch((err) => postChat('system', null, err instanceof Error ? err.message : String(err)));
   }
 </script>
 

@@ -5,10 +5,12 @@ import type {
   BuildingType,
   AllianceInfo,
   AllianceRank,
+  ChatMessage,
   City,
   FortType,
   Ladder,
   LordCity,
+  Mail,
   MarchMission,
   MedalCounts,
   Player,
@@ -149,6 +151,19 @@ export type AbandonValleyMessage = Envelope<'abandonValley', { cityId: string; x
 export type SetGarrisonMessage = Envelope<'setGarrison', { cityId: string; allow: boolean }>;
 /** The latest battle reports, newest first. Replies with `reports`. */
 export type GetReportsMessage = Envelope<'getReports', Record<string, never>>;
+/** The latest world and alliance chat lines. Replies with `chatHistory`. */
+export type GetChatMessage = Envelope<'getChat', Record<string, never>>;
+/**
+ * Say something in the world or your alliance's channel (200 characters, one line a second). Replies with
+ * `chat` (the line); the line is also pushed to every game it reaches, yours included.
+ */
+export type SendChatMessage = Envelope<'chat', { channel: 'world' | 'alliance'; text: string }>;
+/** Your inbox and sent mail. Replies with `mail`. */
+export type GetMailMessage = Envelope<'getMail', Record<string, never>>;
+/** Mail a player by name. Replies with `mail`; the receiver's game is told (unreadMail goes up). */
+export type SendMailMessage = Envelope<'sendMail', { to: string; subject: string; body: string }>;
+/** Mark a received mail read, or delete your copy of one. Replies with `mail`. */
+export type ReadMailMessage = Envelope<'readMail' | 'deleteMail', { mailId: string }>;
 /** The Alliance window's contents. Replies with `alliance`. */
 export type GetAllianceMessage = Envelope<'getAlliance', Record<string, never>>;
 /**
@@ -275,6 +290,11 @@ export type ClientMessage =
   | GetReportMessage
   | GetAllianceMessage
   | AllianceActionMessage
+  | GetChatMessage
+  | SendChatMessage
+  | GetMailMessage
+  | SendMailMessage
+  | ReadMailMessage
   | PromoteMessage
   | CheatMessage;
 
@@ -299,7 +319,7 @@ export interface GameState {
    * attack on one of the player's cities arrived), 'march' (the player's march reached another player's city),
    * 'incoming' (another lord's march set out for one of the player's cities and its Beacon Tower saw it).
    */
-  reason?: 'cheat' | 'attacked' | 'march' | 'incoming';
+  reason?: 'cheat' | 'attacked' | 'march' | 'incoming' | 'mail';
 }
 /** The reply to getState and commands; also pushed with no id when someone else changed this game (see reason). */
 export type StateMessage = Envelope<'state', GameState>;
@@ -311,6 +331,10 @@ export type ReportsMessage = Envelope<'reports', { reports: ReportSummary[] }>;
 export type ReportMessage = Envelope<'report', { report: ReportSummary & { result: BattleResult | null } }>;
 
 export type AllianceReply = Envelope<'alliance', AllianceInfo>;
+/** A chat line: the reply to `chat`, and pushed (no id) to every game it reaches. */
+export type ChatLineMessage = Envelope<'chat', ChatMessage>;
+export type ChatHistoryMessage = Envelope<'chatHistory', { messages: ChatMessage[] }>;
+export type MailboxMessage = Envelope<'mail', { inbox: Mail[]; sent: Mail[] }>;
 
 export type ServerMessage =
   | WelcomeMessage
@@ -320,7 +344,10 @@ export type ServerMessage =
   | ErrorMessage
   | ReportsMessage
   | ReportMessage
-  | AllianceReply;
+  | AllianceReply
+  | ChatLineMessage
+  | ChatHistoryMessage
+  | MailboxMessage;
 
 export type ErrorCode =
   | 'bad_message'
@@ -431,4 +458,6 @@ export type ErrorCode =
   | 'alliance_full'
   | 'not_a_member'
   /** attacking or scouting your own alliance, or one yours calls friendly */
-  | 'friendly';
+  | 'friendly'
+  /** more than one chat line a second */
+  | 'too_fast';

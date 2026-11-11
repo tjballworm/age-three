@@ -256,6 +256,10 @@ export interface Player {
   instantMarch?: boolean;
   /** Battle reports not opened yet. */
   unreadReports?: number;
+  /** Mail not read yet. */
+  unreadMail?: number;
+  /** Your rank in your alliance (null without one). */
+  allianceRank?: AllianceRank | null;
 }
 
 export type TaskKind = 'build' | 'train' | 'research' | 'march' | 'fort';
@@ -426,4 +430,15 @@ export interface AllianceInfo {
   embassy: number;
   /** The biggest alliances. */
   alliances: { id: string; name: string; members: number; prestige: number; host: string | null }[];
+}
+
+/** A mail between players. */
+export interface Mail {
+  id: string;
+  from: string;
+  to: string;
+  subject: string;
+  body: string;
+  read: boolean;
+  at: number;
 }
