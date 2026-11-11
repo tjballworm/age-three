@@ -33,8 +33,28 @@ defmodule Age3.FakeStore do
 
   # city "c1" can always comfort; anything else is still cooling down
   @impl true
-  def comfort(_player_id, "c1", kind, _now_ms) when kind in ["relief", "pray"], do: :ok
+  def comfort(_player_id, "c1", kind, _now_ms) when kind in ["relief", "pray", "bless", "raise"], do: :ok
   def comfort(_player_id, _city_id, _kind, _now_ms), do: {:error, "comfort_cooldown"}
+
+  # city "c1" can always levy; anything else is still cooling down
+  @impl true
+  def levy(_player_id, "c1", kind, _now_ms) when kind in ["gold", "food", "lumber", "stone", "iron"], do: :ok
+  def levy(_player_id, "c1", _kind, _now_ms), do: {:error, "bad_message"}
+  def levy(_player_id, _city_id, _kind, _now_ms), do: {:error, "levy_cooldown"}
+
+  @impl true
+  def rename_city(_player_id, "c1", _name, _now_ms), do: :ok
+  def rename_city(_player_id, _city_id, _name, _now_ms), do: {:error, "bad_message"}
+
+  # anything on slot "3" can be demolished; the Town Hall can't
+  @impl true
+  def demolish(_player_id, _city_id, "3", now_ms), do: {:ok, now_ms + 30_000}
+  def demolish(_player_id, _city_id, "townhall", _now_ms), do: {:error, "cant_demolish"}
+  def demolish(_player_id, _city_id, _slot, _now_ms), do: {:error, "bad_slot"}
+
+  @impl true
+  def abandon_city(_player_id, "c2", "c1", _now_ms), do: {:ok, 1}
+  def abandon_city(_player_id, _city_id, _move_to, _now_ms), do: {:error, "troops_out"}
 
   @impl true
   def set_gate(_player_id, "c1", open, _now_ms) when is_boolean(open), do: :ok

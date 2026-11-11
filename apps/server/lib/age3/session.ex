@@ -84,6 +84,10 @@ defmodule Age3.Session do
               "speedUp",
               "setTax",
               "comfort",
+              "levy",
+              "renameCity",
+              "demolish",
+              "abandonCity",
               "setGate",
               "setDefender",
               "persuade",
@@ -555,9 +559,9 @@ defmodule Age3.Session do
   defp handle("setTax", _payload, id, session),
     do: {error(id, "bad_message", "The tax rate must be a whole number from 0 to 100."), session}
 
-  # Comfort a city's people: {cityId, kind: "relief" | "pray"} (Age3.Loyalty).
+  # Comfort a city's people: {cityId, kind: "relief" | "pray" | "bless" | "raise"} (Age3.Loyalty).
   defp handle("comfort", %{"cityId" => city_id, "kind" => kind}, id, session)
-       when is_binary(city_id) and kind in ["relief", "pray"] do
+       when is_binary(city_id) and kind in ["relief", "pray", "bless", "raise"] do
     now = session.now.()
 
     case session.store.comfort(session.player_id, city_id, kind, now) do
@@ -567,7 +571,69 @@ defmodule Age3.Session do
   end
 
   defp handle("comfort", _payload, id, session),
-    do: {error(id, "bad_message", "Comfort with Disaster Relief or Praying."), session}
+    do:
+      {error(id, "bad_message", "Comfort with Disaster Relief, Praying, Blessing or Population Raising."),
+       session}
+
+  # A levy from the Town Hall: {cityId, resource: "gold" | "food" | "lumber" | "stone" | "iron"} (Age3.Levy).
+  defp handle("levy", %{"cityId" => city_id, "resource" => kind}, id, session)
+       when is_binary(city_id) and is_binary(kind) do
+    now = session.now.()
+
+    case session.store.levy(session.player_id, city_id, kind, now) do
+      :ok -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("levy", _payload, id, session),
+    do: {error(id, "bad_message", "Levy gold, food, lumber, stone or iron."), session}
+
+  # Rename one of your cities: {cityId, name}.
+  defp handle("renameCity", %{"cityId" => city_id, "name" => name}, id, session) when is_binary(city_id) do
+    now = session.now.()
+
+    with {:ok, name} <- Age3.Game.city_name(name),
+         :ok <- session.store.rename_city(session.player_id, city_id, name, now) do
+      state_reply(id, session, now)
+    else
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("renameCity", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid city name."), session}
+
+  # Take the building on a slot down one level: {cityId, slot}. Goes through the build queue.
+  defp handle("demolish", %{"cityId" => city_id, "slot" => slot}, id, session) when is_binary(city_id) do
+    now = session.now.()
+
+    case session.store.demolish(session.player_id, city_id, slot_key(slot), now) do
+      {:ok, ends_at} ->
+        session.wake.(ends_at)
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("demolish", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid demolition."), session}
+
+  # Give up a city for good: {cityId, moveHeroesTo} (another of your cities, which takes its heroes).
+  defp handle("abandonCity", %{"cityId" => city_id, "moveHeroesTo" => move_to}, id, session)
+       when is_binary(city_id) and is_binary(move_to) do
+    now = session.now.()
+
+    case session.store.abandon_city(session.player_id, city_id, move_to, now) do
+      {:ok, _moved} -> state_reply(id, session, now)
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("abandonCity", _payload, id, session),
+    do: {error(id, "bad_message", "Choose a city for the heroes to move to."), session}
 
   # The Rally Spot's gate: {cityId, open}. Closed, the troops stay out of battles.
   defp handle("setGate", %{"cityId" => city_id, "open" => open}, id, session)
@@ -816,6 +882,16 @@ defmodule Age3.Session do
   defp message("fort_queue_full"), do: "The walls' queue is full."
   defp message("comfort_cooldown"), do: "The people were comforted less than 15 minutes ago."
   defp message("own_city"), do: "That city is already yours."
+  defp message("levy_cooldown"), do: "This city levied less than 15 minutes ago."
+  defp message("population_full"), do: "The city is already full of people."
+  defp message("bad_name"), do: "City names are 1 to 20 letters, digits, spaces and ' - ."
+
+  defp message("cant_demolish"),
+    do: "The Town Hall can't be demolished, and the walls can't go below level 1."
+
+  defp message("barracks_busy"), do: "This Barracks is training troops. Finish or cancel them first."
+  defp message("historic_city"), do: "A historic city can't be abandoned."
+  defp message("troops_out"), do: "Troops are out from this city or an attack is on its way to it."
   defp message("queue_busy"), do: "Something is already being built in this city."
   defp message("research_busy"), do: "This Academy is already researching something."
   defp message("no_academy"), do: "This city has no Academy."

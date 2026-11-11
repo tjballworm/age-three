@@ -145,6 +145,190 @@ defmodule Age3.Store.PgTest do
     assert_in_delta city.resources["food"]["amount"], food - 1000, 50
   end
 
+  # Sets every resource of a city to `amount`, as of now (below the caps, so gains show).
+  defp set_amounts(city_id, amount, now) do
+    city = Age3.Repo.get!(Age3.City, city_id)
+    resources = Map.new(city.resources, fn {k, v} -> {k, %{v | "amount" => amount}} end)
+
+    Age3.Repo.query!("UPDATE cities SET resources = $1, synced_at = $2 WHERE id = $3", [
+      resources,
+      DateTime.from_unix!(now, :millisecond),
+      Ecto.UUID.dump!(city_id)
+    ])
+  end
+
+  describe "town hall" do
+    test "a levy takes a share of the people now for 20 loyalty, up to the cap, once every 15 minutes" do
+      {id, city_id, now} = general("Levier")
+      set_amounts(city_id, 1000, now)
+
+      assert :ok = Pg.levy(id, city_id, "iron", now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+      # 1,000 people: iron = 1,000 / 2.5
+      assert_in_delta city.resources["iron"]["amount"], 1400, 0.01
+      assert %{loyalty: 80, levyAt: ^now} = city
+
+      assert {:error, "levy_cooldown"} = Pg.levy(id, city_id, "gold", now + 899_999)
+      assert {:error, "bad_message"} = Pg.levy(id, city_id, "gems", now + 900_000)
+
+      # whatever goes over the cap is lost
+      cap = city.resources["food"]["cap"]
+      set_amounts(city_id, cap - 10, now + 900_000)
+      assert :ok = Pg.levy(id, city_id, "food", now + 900_000)
+      {:ok, _, [city], _} = Pg.state(id, now + 900_000)
+      assert city.resources["food"]["amount"] == cap
+      assert city.loyalty == 60
+    end
+
+    test "Blessing turns gold into food; Population Raising turns food into people" do
+      {id, city_id, now} = general("Blesser")
+      set_amounts(city_id, 50_000, now)
+
+      assert :ok = Pg.comfort(id, city_id, "bless", now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+      limit = city.population["max"]
+      assert_in_delta city.resources["gold"]["amount"], 50_000 - div(limit, 10), 0.01
+
+      assert_in_delta city.resources["food"]["amount"],
+                      min(50_000 + limit * 10, city.resources["food"]["cap"]),
+                      0.01
+
+      {:ok, _} = Pg.cheat(id, {:city, city_id}, "setPopulation", %{amount: 500}, now)
+      {:ok, _} = Pg.cheat(id, {:city, city_id}, "setLoyalty", %{changes: [loyalty: 100]}, now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+      food = city.resources["food"]["amount"]
+
+      assert :ok = Pg.comfort(id, city_id, "raise", now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+      assert city.population["current"] == 550
+      assert_in_delta city.resources["food"]["amount"], food - 5000, 0.01
+    end
+
+    test "rename_city renames only your own city" do
+      {id, city_id, now} = general("Renamer")
+      {other, _, _} = general("Bystander")
+
+      assert :ok = Pg.rename_city(id, city_id, "Camelot", now)
+      {:ok, _, [city], _} = Pg.state(id, now)
+      assert city.name == "Camelot"
+      assert {:error, "bad_message"} = Pg.rename_city(other, city_id, "Mine", now)
+    end
+
+    test "demolish takes a building down a level through the build queue and refunds half when done" do
+      {id, city_id, now} = general("Wrecker")
+      set_amounts(city_id, 1000, now)
+
+      assert {:ok, ends_at} = Pg.demolish(id, city_id, "6", now)
+      seconds = Age3.Data.level("cottage", 3)["seconds"]
+      assert ends_at == now + div(seconds, 2) * 1000
+      assert {:error, "queue_busy"} = Pg.build(id, city_id, "f0", "farm", now)
+
+      {:ok, _, _, [task]} = Pg.state(id, now)
+      assert %{kind: "build", label: "Demolish Cottage → Lv 2", targetLevel: 2, slot: "6"} = task
+
+      {:ok, _, [city], []} = Pg.state(id, ends_at)
+      assert %{type: "cottage", level: 2, slot: 6} in city.buildings
+      lumber = div(Age3.Data.level("cottage", 3)["cost"]["lumber"], 2)
+      # production went on meanwhile, so at least the refund came in
+      assert city.resources["lumber"]["amount"] >= 1000 + lumber
+
+      # a Lv1 building goes completely; cancelling a demolition gives nothing back (nothing was paid)
+      {:ok, _} = Pg.cheat(id, {:city, city_id}, "setBuilding", %{slot: "6", type: nil, level: 1}, ends_at)
+      assert {:ok, gone_at} = Pg.demolish(id, city_id, "6", ends_at)
+      {:ok, _, [city], []} = Pg.state(id, gone_at)
+      refute Enum.any?(city.buildings, &(&1.slot == 6))
+
+      assert {:ok, _} = Pg.demolish(id, city_id, "7", gone_at)
+      {:ok, _, _, [task]} = Pg.state(id, gone_at)
+      assert :ok = Pg.cancel_build(id, city_id, task.id, gone_at)
+      {:ok, _, [city], []} = Pg.state(id, gone_at)
+      assert %{type: "cottage", level: 2, slot: 7} in city.buildings
+    end
+
+    test "demolish can't touch the Town Hall, Lv1 walls, empty plots or a Barracks in training" do
+      {id, city_id, now} = general("Careful")
+      assert {:error, "cant_demolish"} = Pg.demolish(id, city_id, "townhall", now)
+      assert {:error, "cant_demolish"} = Pg.demolish(id, city_id, "walls", now)
+      assert {:error, "bad_slot"} = Pg.demolish(id, city_id, "20", now)
+
+      {:ok, _} = Pg.train(id, city_id, "4", "warrior", 10, now)
+      assert {:error, "barracks_busy"} = Pg.demolish(id, city_id, "4", now)
+    end
+
+    test "abandon_city deletes the city and moves its heroes while the other Feasting Hall has room" do
+      {id, city_id, now} = general("Quitter")
+      city = Age3.Repo.get!(Age3.City, city_id)
+
+      home =
+        Age3.Repo.insert!(%Age3.City{
+          player_id: id,
+          name: "Home",
+          x: rem(city.x + 400, 800),
+          y: city.y,
+          resources: city.resources,
+          population: city.population,
+          synced_at: city.synced_at
+        })
+
+      Age3.Repo.insert_all(Age3.Building, [
+        %{city_id: home.id, slot: "townhall", type: "townhall", level: 1},
+        %{city_id: home.id, slot: "9", type: "feastinghall", level: 1}
+      ])
+
+      for {name, level, status} <- [{"Low", 1, "idle"}, {"High", 9, "mayor"}] do
+        Age3.Repo.insert!(%Age3.Hero{
+          city_id: city_id,
+          name: name,
+          level: level,
+          politics: 1,
+          attack: 1,
+          intelligence: 1,
+          status: status
+        })
+      end
+
+      assert {:error, "bad_message"} = Pg.abandon_city(id, city_id, city_id, now)
+      assert {:ok, 1} = Pg.abandon_city(id, city_id, home.id, now)
+
+      {:ok, _, [home], _} = Pg.state(id, now)
+      assert home.name == "Home"
+      assert [%{name: "High", status: "idle"}] = home.heroes
+      assert Age3.Repo.get(Age3.City, city_id) == nil
+    end
+
+    test "abandon_city refuses while troops are out" do
+      {id, city_id, now} = general("Busy")
+      {other, other_city, _} = general("Other")
+
+      Age3.Repo.insert!(%Age3.Task{
+        city_id: other_city,
+        kind: "march",
+        label: "Attack",
+        target_city_id: city_id,
+        cost: %{},
+        data: %{},
+        started_at: DateTime.from_unix!(now * 1000, :microsecond),
+        ends_at: DateTime.from_unix!((now + 3_600_000) * 1000, :microsecond)
+      })
+
+      city = Age3.Repo.get!(Age3.City, city_id)
+
+      home =
+        Age3.Repo.insert!(%Age3.City{
+          player_id: id,
+          name: "Home",
+          x: rem(city.x + 400, 800),
+          y: city.y,
+          resources: city.resources,
+          population: city.population,
+          synced_at: city.synced_at
+        })
+
+      assert {:error, "troops_out"} = Pg.abandon_city(id, city_id, home.id, now)
+      assert {:error, "bad_message"} = Pg.abandon_city(other, city_id, home.id, now)
+    end
+  end
+
   test "set_tax changes gold per hour from now on" do
     {:ok, id} = Pg.find_or_create_player("Taxman")
     now = System.system_time(:millisecond)

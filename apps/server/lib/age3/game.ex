@@ -8,6 +8,20 @@ defmodule Age3.Game do
   @doc "The seed the world map is generated from. Matches WORLD_SEED in apps/web/src/state/world.ts."
   def world_seed, do: 1
 
+  @doc """
+  A city name as typed: spaces trimmed and runs of spaces made one; 1 to 20 characters of letters, digits, spaces
+  and ' - . Returns {:ok, name} or {:error, "bad_name"}.
+  """
+  def city_name(name) when is_binary(name) do
+    name = name |> String.trim() |> String.replace(~r/\s+/u, " ")
+
+    if String.length(name) in 1..20 and Regex.match?(~r/^[\p{L}\p{N} '\-.]+$/u, name),
+      do: {:ok, name},
+      else: {:error, "bad_name"}
+  end
+
+  def city_name(_name), do: {:error, "bad_name"}
+
   @doc "True where the map has a historic city, so no player city is placed there."
   def historic_city?(x, y), do: historic_level(x, y) != nil
 

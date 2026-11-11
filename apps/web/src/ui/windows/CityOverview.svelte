@@ -2,10 +2,16 @@
   import {
     COMFORTS,
     COMFORT_COOLDOWN_MS,
+    LEVY_COOLDOWN_MS,
+    LEVY_KINDS,
+    LEVY_LOYALTY,
     RESOURCE_TYPES,
+    comfortEffect,
+    levyAmount,
     loyaltyTarget,
     settleCity,
     type ComfortKind,
+    type ResourceType,
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game } from '$state/game.svelte';
@@ -18,6 +24,9 @@
   const now = $derived(settleCity(city, game.syncedAt, clock.now));
   const grievance = $derived(city.grievance ?? 0);
   const cooldown = $derived(Math.max(0, (city.comfortAt ?? -Infinity) + COMFORT_COOLDOWN_MS - clock.now));
+  const levyCooldown = $derived(Math.max(0, (city.levyAt ?? -Infinity) + LEVY_COOLDOWN_MS - clock.now));
+  /** The player's other cities, which can take this one's heroes if it is abandoned. */
+  const others = $derived(game.cities.filter((c) => c.id !== city.id));
 
   // The tax slider starts at the city's rate and goes back to it whenever the server sends a new one.
   let rate = $state(0);
@@ -29,11 +38,11 @@
   let sending = $state(false);
   let error = $state('');
 
-  async function comfort(kind: ComfortKind) {
+  async function send(run: () => Promise<void>) {
     error = '';
     sending = true;
     try {
-      await command({ type: 'comfort', payload: { cityId: city.id, kind } });
+      await run();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -41,17 +50,33 @@
     }
   }
 
-  async function setTax() {
-    error = '';
-    sending = true;
-    try {
-      await command({ type: 'setTax', payload: { cityId: city.id, taxRate: rate } });
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      sending = false;
-    }
-  }
+  const comfort = (kind: ComfortKind) =>
+    send(() => command({ type: 'comfort', payload: { cityId: city.id, kind } }));
+  const setTax = () => send(() => command({ type: 'setTax', payload: { cityId: city.id, taxRate: rate } }));
+  const levy = (resource: ResourceType) =>
+    send(() => command({ type: 'levy', payload: { cityId: city.id, resource } }));
+
+  // Renaming: the box starts with the city's name and goes back to it whenever the city changes.
+  let newName = $state('');
+  $effect(() => {
+    newName = city.name;
+  });
+  const rename = () =>
+    send(() => command({ type: 'renameCity', payload: { cityId: city.id, name: newName } }));
+
+  // Abandoning needs the city's name typed in, so it can't happen by a stray click.
+  let moveTo = $state('');
+  let confirmName = $state('');
+  $effect(() => {
+    if (!others.some((c) => c.id === moveTo)) moveTo = others[0]?.id ?? '';
+  });
+  // a different city starts with an empty confirmation
+  $effect(() => {
+    void city.id;
+    confirmName = '';
+  });
+  const abandon = () =>
+    send(() => command({ type: 'abandonCity', payload: { cityId: city.id, moveHeroesTo: moveTo } }));
 </script>
 
 <table>
@@ -100,19 +125,91 @@
   </p>
   <div class="comforts">
     {#each Object.entries(COMFORTS) as [kind, c] (kind)}
-      {@const cost = now.population.max}
+      {@const e = comfortEffect(kind as ComfortKind, now.population)}
+      {@const full = kind === 'raise' && Math.trunc(now.population.current) >= now.population.max}
       <Button
         small
-        disabled={!game.fromServer || sending || cooldown > 0 || now.resources[c.resource].amount < cost}
+        disabled={!game.fromServer ||
+          sending ||
+          cooldown > 0 ||
+          full ||
+          now.resources[c.resource].amount < e.cost}
         onclick={() => comfort(kind as ComfortKind)}
-        title="Costs {formatNumber(cost)} {c.resource}: loyalty +{c.loyalty}, grievance {c.grievance}"
+        title={kind === 'bless'
+          ? `Costs ${formatNumber(e.cost)} gold: +${formatNumber(e.food)} food (up to the storage limit)`
+          : kind === 'raise'
+            ? full
+              ? 'The city is already full of people'
+              : `Costs ${formatNumber(e.cost)} food: +${formatNumber(e.people)} people`
+            : `Costs ${formatNumber(e.cost)} ${c.resource}: loyalty +${c.loyalty}, grievance ${c.grievance}`}
       >
         {c.name}
-        <span class="cost"><ResourceIcon type={c.resource} size={12} /> {formatNumber(cost)}</span>
+        <span class="cost"><ResourceIcon type={c.resource} size={12} /> {formatNumber(e.cost)}</span>
       </Button>
     {/each}
     {#if cooldown > 0}<span class="note">Ready again in {Math.ceil(cooldown / 60_000)} min</span>{/if}
   </div>
+</div>
+
+<div class="section">
+  <div class="caption">Levy</div>
+  <p class="note">
+    Take resources from the people at once, for {LEVY_LOYALTY} loyalty. Anything over the storage limit is lost.
+  </p>
+  <div class="comforts">
+    {#each LEVY_KINDS as kind (kind)}
+      {@const amount = levyAmount(kind, now.population.current)}
+      <Button
+        small
+        disabled={!game.fromServer || sending || levyCooldown > 0}
+        onclick={() => levy(kind)}
+        title="+{formatNumber(amount)} {kind}, loyalty −{LEVY_LOYALTY}"
+      >
+        <span class="levy">{kind}</span>
+        <span class="cost"><ResourceIcon type={kind} size={12} /> +{formatNumber(amount)}</span>
+      </Button>
+    {/each}
+    {#if levyCooldown > 0}<span class="note">Ready again in {Math.ceil(levyCooldown / 60_000)} min</span>{/if}
+  </div>
+</div>
+
+<div class="section">
+  <div class="caption">City</div>
+  <div class="comforts">
+    <label class="field">
+      <span>Name</span>
+      <input type="text" maxlength="20" bind:value={newName} disabled={!game.fromServer} />
+    </label>
+    <Button
+      small
+      disabled={!game.fromServer || sending || !newName.trim() || newName.trim() === city.name}
+      onclick={rename}>Rename</Button
+    >
+  </div>
+  {#if others.length > 0 && !city.historicLevel}
+    <div class="comforts">
+      <label class="field">
+        <span>Abandon, heroes move to</span>
+        <select bind:value={moveTo} disabled={!game.fromServer}>
+          {#each others as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
+        </select>
+      </label>
+      <label class="field">
+        <span>Type “{city.name}” to confirm</span>
+        <input type="text" bind:value={confirmName} disabled={!game.fromServer} />
+      </label>
+      <Button
+        small
+        variant="red"
+        disabled={!game.fromServer || sending || confirmName !== city.name || !moveTo}
+        onclick={abandon}>Abandon city</Button
+      >
+    </div>
+    <p class="note">
+      The city and everything in it is gone for good. Heroes move while the other city's Feasting Hall has
+      room (highest level first); the rest leave.
+    </p>
+  {/if}
 </div>
 {#if error}<p class="error" role="alert">{error}</p>{/if}
 
@@ -214,6 +311,35 @@
     gap: 2px;
     margin-left: 4px;
     font-size: 11px;
+  }
+  .levy {
+    text-transform: capitalize;
+  }
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 10px 10px;
+    color: #06263f;
+    font-size: 12px;
+  }
+  .caption {
+    color: #7a4a12;
+    font: 800 13px var(--font-display);
+  }
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+  }
+  .field input,
+  .field select {
+    font: inherit;
+    font-weight: 400;
+    padding: 2px 4px;
+    color: #06263f;
+    background: #fff;
   }
   .error {
     margin: 0 10px;

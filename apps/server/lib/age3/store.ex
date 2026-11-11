@@ -367,6 +367,36 @@ defmodule Age3.Store do
               now_ms :: integer
             ) ::
               :ok | {:error, code :: String.t()}
+
+  @doc """
+  A levy (Age3.Levy): takes one resource from the city's people at once, up to the cap, for 20 loyalty. Once every
+  15 minutes per city.
+  """
+  @callback levy(player_id :: String.t(), city_id :: String.t(), kind :: String.t(), now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
+  @doc "Renames one of the player's cities. The name is already checked (Age3.Game.city_name/1)."
+  @callback rename_city(player_id :: String.t(), city_id :: String.t(), name :: String.t(), now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
+  @doc """
+  Starts taking the building on a slot down one level (Age3.Build.check_demolish/3). Uses the build queue.
+  Returns when it will finish (epoch ms).
+  """
+  @callback demolish(player_id :: String.t(), city_id :: String.t(), slot :: String.t(), now_ms :: integer) ::
+              {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
+
+  @doc """
+  Abandons a city for good. Its heroes move to the player's city `move_to` while there's room. Returns how many
+  heroes moved.
+  """
+  @callback abandon_city(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              move_to :: String.t(),
+              now_ms :: integer
+            ) ::
+              {:ok, moved :: integer} | {:error, code :: String.t()}
 end
 
 defmodule Age3.Store.Pg do
@@ -398,6 +428,7 @@ defmodule Age3.Store.Pg do
     Heroes,
     Items,
     Historic,
+    Levy,
     Lord,
     Loyalty,
     March,
@@ -816,18 +847,19 @@ defmodule Age3.Store.Pg do
       city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
       %{resources: resources, population: pop, loyalty: loyalty} = settled(city, now_ms)
       comfort_at = city.comfort_at && to_ms(city.comfort_at)
-      limit = pop["max"]
 
       case Loyalty.check_comfort(
              kind,
              comfort_at,
              now_ms,
-             limit,
+             pop,
              get_in(resources, [kind_resource(kind), "amount"]) || 0
            ) do
         {:ok, c} ->
           {loyalty, grievance} = Loyalty.apply_change(loyalty, city.grievance, c.loyalty, c.grievance)
-          save_resources(city, Build.spend(resources, %{c.resource => c.cost}), now_ms)
+          resources = resources |> Build.spend(%{c.resource => c.cost}) |> Economy.add_capped(c.gain)
+          # Population Raising brings people in: a negative number of people taken
+          save_resources(city, resources, now_ms, -c.people)
 
           Repo.update_all(from(x in City, where: x.id == ^city.id),
             set: [loyalty: loyalty, grievance: grievance, comfort_at: now]
@@ -840,8 +872,170 @@ defmodule Age3.Store.Pg do
     |> ok()
   end
 
-  defp kind_resource("relief"), do: "food"
+  defp kind_resource(kind) when kind in ["relief", "raise"], do: "food"
   defp kind_resource(_kind), do: "gold"
+
+  # Town Hall actions: levies, renaming, demolishing a building and abandoning a city.
+
+  @impl true
+  def levy(player_id, city_id, kind, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
+      %{resources: resources, population: pop, loyalty: loyalty} = settled(city, now_ms)
+
+      case Levy.check(kind, city.levy_at && to_ms(city.levy_at), now_ms, pop["current"]) do
+        {:ok, amount} ->
+          save_resources(city, Economy.add_capped(resources, %{kind => amount}), now_ms)
+
+          Repo.update_all(from(c in City, where: c.id == ^city.id),
+            set: [loyalty: max(0, loyalty - Levy.loyalty_cost()), levy_at: now]
+          )
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def rename_city(player_id, city_id, name, _now_ms) do
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      Repo.update_all(from(c in City, where: c.id == ^city.id), set: [name: name])
+    end)
+    |> ok()
+  end
+
+  # Demolishing goes through the build queue as a "build" task down to a lower level (0 = gone), so it shares the
+  # one-at-a-time queue, shows on the plot like any construction, can be cancelled (nothing was paid, so nothing
+  # comes back) and gets the free speed-up at 5 minutes. The refund comes when it finishes.
+  @impl true
+  def demolish(player_id, city_id, slot, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      complete_due(city.id, now)
+
+      if Repo.exists?(from t in Task, where: t.city_id == ^city.id and t.kind == "build"),
+        do: Repo.rollback("queue_busy")
+
+      buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+
+      case Build.check_demolish(buildings, slot, research_of(player_id)) do
+        {:ok, plan} ->
+          check_demolish_busy(city, slot, plan)
+          name = Data.building(plan.type)["name"]
+
+          Repo.insert!(%Task{
+            city_id: city.id,
+            kind: "build",
+            label: if(plan.level == 0, do: "Demolish #{name}", else: "Demolish #{name} → Lv #{plan.level}"),
+            slot: slot,
+            target_type: plan.type,
+            target_level: plan.level,
+            cost: %{},
+            data: %{"demolish" => true, "refund" => plan.refund},
+            started_at: now,
+            ends_at: to_datetime(now_ms + plan.seconds * 1000)
+          })
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> case do
+      {:ok, task} -> {:ok, to_ms(task.ends_at)}
+      {:error, code} -> {:error, code}
+    end
+  end
+
+  # Buildings that are in use can't go down: an Academy that is researching, a Barracks with troops in training,
+  # and a Feasting Hall that would no longer house its heroes.
+  defp check_demolish_busy(city, slot, %{type: type, level: level}) do
+    case type do
+      "academy" ->
+        if researching?(city.id), do: Repo.rollback("academy_busy")
+
+      "barracks" ->
+        if training_queue(city.id, slot) != [], do: Repo.rollback("barracks_busy")
+
+      "feastinghall" ->
+        heroes = Repo.aggregate(from(h in Hero, where: h.city_id == ^city.id), :count)
+        if heroes > level, do: Repo.rollback("hall_full")
+
+      _ ->
+        :ok
+    end
+  end
+
+  # Abandoning a city: it is deleted with its buildings, tasks and troops, and its tile is free again. Its heroes
+  # move to `move_to` (another of the player's cities) while that Feasting Hall has room, highest level first;
+  # the rest are dismissed, and captives are let go. Not the last city, not a historic city, and not while
+  # troops are out from it or an attack is on its way to it.
+  @impl true
+  def abandon_city(player_id, city_id, move_to, now_ms) do
+    now = to_datetime(now_ms)
+
+    with {:ok, from_id} <- Ecto.UUID.cast(city_id),
+         {:ok, to_id} <- Ecto.UUID.cast(move_to),
+         true <- from_id != to_id do
+      arrivals([from_id, to_id], now)
+
+      Repo.transaction(fn ->
+        # lock both in id order, like an attack does, so two commands can't deadlock
+        [first, second] = Enum.sort([from_id, to_id])
+        locked = for id <- [first, second], do: lock_city(player_id, id)
+        if Enum.any?(locked, &is_nil/1), do: Repo.rollback("bad_message")
+        city = Enum.find(locked, &(&1.id == from_id))
+        home = Enum.find(locked, &(&1.id == to_id))
+
+        if city.historic_level, do: Repo.rollback("historic_city")
+
+        if Repo.exists?(
+             from t in Task,
+               where:
+                 (t.city_id == ^city.id and t.kind == "march") or
+                   (t.target_city_id == ^city.id and t.kind == "march")
+           ),
+           do: Repo.rollback("troops_out")
+
+        complete_due(home.id, now)
+        home_buildings = Repo.all(from b in Building, where: b.city_id == ^home.id)
+
+        room =
+          Heroes.capacity(home_buildings) -
+            Repo.aggregate(from(h in Hero, where: h.city_id == ^home.id), :count)
+
+        moving =
+          Repo.all(
+            from h in Hero,
+              where: h.city_id == ^city.id and h.status != "captive",
+              order_by: [desc: h.level, asc: h.inserted_at],
+              select: h.id
+          )
+          |> Enum.take(max(room, 0))
+
+        Repo.update_all(from(h in Hero, where: h.id in ^moving), set: [city_id: home.id, status: "idle"])
+        Repo.delete!(city)
+        # the heroes' salaries come off the new city's gold from now on
+        resnapshot(Repo.get!(City, home.id), now)
+        length(moving)
+      end)
+      |> case do
+        {:ok, moved} -> {:ok, moved}
+        {:error, code} -> {:error, code}
+      end
+    else
+      _ -> {:error, "bad_message"}
+    end
+  end
 
   @impl true
   def set_gate(player_id, city_id, open, now_ms) do
@@ -2930,6 +3124,20 @@ defmodule Age3.Store.Pg do
     if tasks == [], do: [], else: done ++ complete_due(city_id, now)
   end
 
+  # a demolition that took the building down to nothing leaves the plot empty
+  defp apply_task(city, %Task{kind: "build", target_level: 0, data: %{"demolish" => true}} = t) do
+    Repo.delete_all(from b in Building, where: b.city_id == ^t.city_id and b.slot == ^t.slot)
+    refund(city, t)
+  end
+
+  defp apply_task(city, %Task{kind: "build", data: %{"demolish" => true}} = t) do
+    Repo.update_all(from(b in Building, where: b.city_id == ^t.city_id and b.slot == ^t.slot),
+      set: [level: t.target_level]
+    )
+
+    refund(city, t)
+  end
+
   defp apply_task(_city, %Task{kind: "build"} = t) do
     Repo.insert!(%Building{city_id: t.city_id, slot: t.slot, type: t.target_type, level: t.target_level},
       on_conflict: [set: [type: t.target_type, level: t.target_level]],
@@ -3027,6 +3235,12 @@ defmodule Age3.Store.Pg do
       _ ->
         {Npc.full(level), "Lv#{level} NPC", Data.npc_regen_seconds()}
     end
+  end
+
+  # A demolition's refund, added (up to the caps) as of the moment it finished.
+  defp refund(city, %Task{data: %{"refund" => refund}} = t) do
+    at = to_ms(Enum.max([city.synced_at, t.ends_at], DateTime))
+    save_resources(city, Economy.add_capped(settled(city, at).resources, refund), at)
   end
 
   defp fight_npc(city, %Task{data: d} = t, kind) do
@@ -3623,6 +3837,7 @@ defmodule Age3.Store.Pg do
       defenderHeroId: c.defender_hero_id,
       taxRate: c.tax_rate,
       comfortAt: c.comfort_at && to_ms(c.comfort_at),
+      levyAt: c.levy_at && to_ms(c.levy_at),
       historicLevel: c.historic_level,
       policiesLeft:
         c.historic_level && Historic.policies_left(c.historic_level, c.policies_used, c.policies_day, now_ms),

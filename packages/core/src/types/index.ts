@@ -44,6 +44,8 @@ export interface City extends Coord {
   grievance?: number;
   /** When the city last comforted its people (epoch ms), null if never. Missing from older servers. */
   comfortAt?: number | null;
+  /** When the city last levied (epoch ms), null if never. Missing from older servers. */
+  levyAt?: number | null;
   /** The Rally Spot's "open gate to fight": closed, the troops stay out of battles (it opens by itself at loyalty 5). */
   gateOpen?: boolean;
   /** The hero who leads the city's defence, chosen apart from the mayor; null for nobody. */
