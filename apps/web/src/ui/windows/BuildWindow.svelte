@@ -182,7 +182,14 @@
   {/if}
 {/snippet}
 
-<Window {title} width={panel ? 900 : 620} height={panel ? 640 : 440} onclose={close}>
+<Window
+  {title}
+  width={panel ? 900 : 620}
+  height={panel ? 640 : 440}
+  minWidth={panel ? 640 : 480}
+  sizeKey={`build:${panel ?? 'site'}`}
+  onclose={close}
+>
   {#if panel && standing}
     {@const next = options[0]!}
     {@const why = blocker(next.type, next.level) ?? (queueBusy ? 'Already building in this city' : null)}

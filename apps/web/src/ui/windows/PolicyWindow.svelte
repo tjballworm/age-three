@@ -92,6 +92,7 @@
   title={`Impose Policy on ${target.name} (${target.x},${target.y})`}
   width={620}
   height={460}
+  sizeKey="policy"
   onclose={close}
 >
   <div class="policy">

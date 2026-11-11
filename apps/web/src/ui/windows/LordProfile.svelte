@@ -232,7 +232,7 @@
     color: var(--err);
     font-weight: 700;
   }
-  @media (max-width: 640px) {
+  @container (max-width: 560px) {
     .ladders {
       grid-template-columns: 1fr;
     }

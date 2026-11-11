@@ -17,14 +17,30 @@
   import ReportsWindow from './ReportsWindow.svelte';
   import TroopsOverview from './TroopsOverview.svelte';
 
-  // Title and tabs for every window, and a size for the ones that need more room than the standard 819 x 550.
+  // Title and tabs for every window, a size for the ones that need more room than the standard 819 x 550, and a
+  // smallest size (players can resize windows) for the ones that need more than the standard 480 x 360.
   // Content is filled in as each feature is built.
-  const WINDOWS: Record<WindowId, { title: string; tabs: string[]; width?: number; height?: number }> = {
+  type Def = {
+    title: string;
+    tabs: string[];
+    width?: number;
+    height?: number;
+    minWidth?: number;
+    minHeight?: number;
+  };
+  const WINDOWS: Record<WindowId, Def> = {
     hero: { title: 'Lord', tabs: ['Profile', 'Heroes', 'Medals'] },
     items: { title: 'Items', tabs: ['All', 'Speed-ups', 'Resources', 'Chests'] },
     quests: { title: 'Quests', tabs: ['Routine', 'Military', 'Economy'] },
     alliance: { title: 'Alliance', tabs: ['Info', 'Members', 'Diplomacy'] },
-    reports: { title: 'Reports', tabs: ['Battles', 'Scouting', 'Missions'], width: 1200, height: 860 },
+    reports: {
+      title: 'Reports',
+      tabs: ['Battles', 'Scouting', 'Missions'],
+      width: 1200,
+      height: 860,
+      minWidth: 720,
+      minHeight: 480,
+    },
     mail: { title: 'Mail', tabs: ['Inbox', 'Sent', 'Compose'] },
     leaderboard: { title: 'Leaderboard', tabs: ['Player', 'Hero', 'Alliance'] },
     shop: { title: 'Shop', tabs: ['Featured', 'Speed-ups', 'Resources', 'Chests'] },
@@ -32,7 +48,11 @@
     events: { title: 'Events', tabs: ['Current', 'Upcoming'] },
     settings: { title: 'Settings', tabs: ['Game', 'Sound', 'Account'] },
     city: { title: 'City Overview', tabs: ['Resources', 'Buildings', 'Troops'] },
-    cheats: { title: 'Cheats · Testing', tabs: ['Resources & troops', 'Buildings & research'] },
+    cheats: {
+      title: 'Cheats · Testing',
+      tabs: ['Resources & troops', 'Buildings & research'],
+      minWidth: 600,
+    },
   };
 
   let tab = $state('');
@@ -46,7 +66,15 @@
 </script>
 
 {#if game.openWindow && def}
-  <Window title={def.title} width={def.width} height={def.height} onclose={closeWindow}>
+  <Window
+    title={def.title}
+    width={def.width}
+    height={def.height}
+    minWidth={def.minWidth}
+    minHeight={def.minHeight}
+    sizeKey={game.openWindow}
+    onclose={closeWindow}
+  >
     {#snippet tabs()}
       <Tabs tabs={tabList} bind:active={tab} />
     {/snippet}
