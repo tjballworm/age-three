@@ -12,13 +12,14 @@
   import ReportsWindow from './ReportsWindow.svelte';
   import TroopsOverview from './TroopsOverview.svelte';
 
-  // Title and tabs for every window. Content is filled in as each feature is built.
-  const WINDOWS: Record<WindowId, { title: string; tabs: string[] }> = {
+  // Title and tabs for every window, and a size for the ones that need more room than the standard 819 x 550.
+  // Content is filled in as each feature is built.
+  const WINDOWS: Record<WindowId, { title: string; tabs: string[]; width?: number; height?: number }> = {
     hero: { title: 'Lord', tabs: ['Profile', 'Heroes', 'Medals'] },
     items: { title: 'Items', tabs: ['All', 'Speed-ups', 'Resources', 'Chests'] },
     quests: { title: 'Quests', tabs: ['Routine', 'Military', 'Economy'] },
     alliance: { title: 'Alliance', tabs: ['Info', 'Members', 'Diplomacy'] },
-    reports: { title: 'Reports', tabs: ['Battles', 'Scouting', 'Trade'] },
+    reports: { title: 'Reports', tabs: ['Battles', 'Scouting', 'Trade'], width: 1200, height: 860 },
     mail: { title: 'Mail', tabs: ['Inbox', 'Sent', 'Compose'] },
     leaderboard: { title: 'Leaderboard', tabs: ['Player', 'Hero', 'Alliance'] },
     shop: { title: 'Shop', tabs: ['Featured', 'Speed-ups', 'Resources', 'Chests'] },
@@ -40,7 +41,7 @@
 </script>
 
 {#if game.openWindow && def}
-  <Window title={def.title} onclose={closeWindow}>
+  <Window title={def.title} width={def.width} height={def.height} onclose={closeWindow}>
     {#snippet tabs()}
       <Tabs tabs={tabList} bind:active={tab} />
     {/snippet}

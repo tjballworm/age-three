@@ -126,7 +126,7 @@
   .report {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
     color: var(--navy);
   }
   .banner {
@@ -156,10 +156,11 @@
   .sides {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    gap: 12px;
+    align-items: start;
   }
   .side {
-    padding: 6px 8px;
+    padding: 8px 12px;
     border-radius: 6px;
     border: 1px solid #6d8aa8;
     background: #eef6fc;
@@ -169,14 +170,14 @@
     border-color: #b08a7a;
   }
   h4 {
-    margin: 0 0 4px;
-    font: 800 13px var(--font-display);
+    margin: 0 0 6px;
+    font: 800 14px var(--font-display);
     color: #7a4a12;
   }
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 13px;
   }
   th {
     text-align: right;
@@ -190,7 +191,7 @@
   }
   td {
     text-align: right;
-    padding: 2px 4px;
+    padding: 3px 4px;
     font-weight: 700;
     border-top: 1px solid rgba(0, 60, 110, 0.12);
   }
@@ -217,13 +218,15 @@
     font: 800 12px var(--font-display);
     color: #2f6fae;
   }
+  /* rounds fill the width in columns, so the log is half as long */
   .rounds {
     margin: 0;
     padding: 0;
     list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 6px;
+    align-items: start;
   }
   .rounds li {
     padding: 5px 8px;
