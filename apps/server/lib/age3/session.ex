@@ -537,7 +537,8 @@ defmodule Age3.Session do
   @doc """
   Tells a player's open sockets that their game changed (Age3Web.GameSocket pushes them the new state). reason is
   "cheat" (someone cheated on this account), "attacked" (an attack on one of their cities arrived) or "march" (their
-  march reached another player's city while they weren't the one looking).
+  march reached another player's city while they weren't the one looking) or "incoming" (another lord's march set
+  out for one of their cities).
   """
   def notify(player_id, reason \\ "cheat") do
     Registry.dispatch(Age3.Players, player_id, fn sockets ->

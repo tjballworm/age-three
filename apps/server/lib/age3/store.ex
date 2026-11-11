@@ -278,6 +278,7 @@ defmodule Age3.Store.Pg do
     City,
     Combat,
     Data,
+    Beacon,
     Economy,
     Forts,
     Game,
@@ -1086,10 +1087,28 @@ defmodule Age3.Store.Pg do
       end
     end)
     |> case do
-      {:ok, task} -> {:ok, to_ms(task.ends_at)}
-      {:error, code} -> {:error, code}
+      {:ok, task} ->
+        # the target's Beacon Tower sees it coming (without one, nothing is known until it hits): refresh the
+        # defender's open games
+        if task.target_city_id && beacon_at(task.target_city_id) > 0,
+          do:
+            tell(
+              Repo.one(from c in City, where: c.id == ^task.target_city_id, select: c.player_id),
+              "incoming"
+            )
+
+        {:ok, to_ms(task.ends_at)}
+
+      {:error, code} ->
+        {:error, code}
     end
   end
+
+  defp beacon_at(city_id),
+    do:
+      Repo.one(
+        from b in Building, where: b.city_id == ^city_id and b.type == "beacontower", select: max(b.level)
+      ) || 0
 
   # Checks a mission needs the database for, inside the march's transaction: valleys (the city's cap, not your
   # own), founding (the title's city cap, counting Found City marches already out) and reinforcing someone
@@ -3026,8 +3045,45 @@ defmodule Age3.Store.Pg do
           do: %{taskId: t.id, cityId: t.city_id, troops: t.data["troops"], owner: owner_name(t.city_id)}
         ),
       heroes: Enum.map(c.heroes, &hero_json/1),
-      inn: inn_json(c.inn)
+      inn: inn_json(c.inn),
+      incoming: incoming(c)
     }
+  end
+
+  # Other lords' marches on their way to this city, as far as its Beacon Tower sees them (Age3.Beacon).
+  defp incoming(c) do
+    level = Build.level_of(c.buildings, "beacontower")
+
+    if level < 1 do
+      []
+    else
+      Repo.all(
+        from t in Task,
+          join: src in City,
+          on: src.id == t.city_id,
+          join: p in Player,
+          on: p.id == src.player_id,
+          where:
+            t.kind == "march" and t.target_city_id == ^c.id and src.player_id != ^c.player_id and
+              fragment("?->>'phase' = 'out'", t.data),
+          order_by: t.ends_at,
+          select: {t, src, p}
+      )
+      |> Enum.map(fn {t, src, p} ->
+        hero = t.data["heroId"] && Repo.get(Hero, t.data["heroId"])
+
+        Beacon.seen(level, %{
+          id: t.id,
+          mission: t.data["mission"] || "attack",
+          arrives_at: to_ms(t.ends_at),
+          lord: p.name,
+          from: %{x: src.x, y: src.y, name: src.name},
+          troops: t.data["troops"],
+          hero_level: hero && hero.level,
+          research: p.research || %{}
+        })
+      end)
+    end
   end
 
   defp owner_name(city_id),

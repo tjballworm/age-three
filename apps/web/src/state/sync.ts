@@ -49,6 +49,7 @@ const PUSH_TEXT = {
   cheat: 'Your city was changed by a tester (cheat).',
   attacked: 'One of your cities was attacked! See Reports for the details.',
   march: 'Your march reached its target. See Reports for the details.',
+  incoming: 'Your Beacon Tower spotted a march heading for one of your cities!',
 } as const;
 
 export function startServerSync(): () => void {

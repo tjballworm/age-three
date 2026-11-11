@@ -92,4 +92,28 @@ defmodule Age3.ScoutValleyTest do
       assert Enum.map(0..10, &March.relief/1) == [1, 2, 2, 2, 3, 4, 4, 4, 5, 5, 6]
     end
   end
+
+  describe "Beacon" do
+    @march %{
+      id: "m1",
+      mission: "attack",
+      arrives_at: 5000,
+      lord: "Raider",
+      from: %{x: 1, y: 2, name: "Raid Town"},
+      troops: %{"cavalry" => 12_345, "scout" => 0},
+      hero_level: 30,
+      research: %{"archery" => 4}
+    }
+
+    test "each Beacon Tower level shows a little more of an incoming march" do
+      assert Age3.Beacon.seen(0, @march) == nil
+      assert Age3.Beacon.seen(1, @march) == %{id: "m1"}
+      assert Age3.Beacon.seen(3, @march) == %{id: "m1", mission: "attack", arrivesAt: 5000}
+      assert %{from: "Raider", fromCity: %{x: 1}, troops: %{"cavalry" => nil}} = Age3.Beacon.seen(6, @march)
+      assert Age3.Beacon.seen(7, @march).troops == %{"cavalry" => 12_000}
+      assert Age3.Beacon.seen(8, @march).troops == %{"cavalry" => 12_345}
+      refute Map.has_key?(Age3.Beacon.seen(8, @march), :heroLevel)
+      assert %{heroLevel: 30, research: %{"archery" => 4}} = Age3.Beacon.seen(10, @march)
+    end
+  end
 end

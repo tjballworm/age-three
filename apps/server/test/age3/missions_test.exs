@@ -302,8 +302,14 @@ defmodule Age3.MissionsTest do
       settle(c, at)
       :ok = Pg.set_gate(b.id, b.city.id, true, at)
 
-      {:ok, hit} =
-        Pg.march(a.id, a.city.id, b.city.x, b.city.y, a.hero, %{"cavalry" => 20_000}, at + 1000, %{})
+      # with instant marches off, the attack is seen coming by the Beacon Tower (Lv5 here)
+      Repo.update_all(from(p in Age3.Player, where: p.id == ^a.id), set: [instant_march: false])
+      {:ok, _} = Pg.march(a.id, a.city.id, b.city.x, b.city.y, a.hero, %{"cavalry" => 20_000}, at + 1000, %{})
+      {:ok, _, [seen], _} = Pg.state(b.id, at + 1000)
+      assert [%{mission: "attack", from: "Raider", fromCity: %{name: _}} = warning] = seen.incoming
+      refute Map.has_key?(warning, :troops)
+      {:ok, _, _, [out]} = Pg.state(a.id, at + 1000)
+      hit = out.endsAt
 
       {:ok, _, [city], _} = Pg.state(b.id, hit)
       assert Map.get(city.forts, "trap", 0) < 1000

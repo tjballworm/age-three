@@ -274,9 +274,10 @@ export interface GameState {
   serverTime: number;
   /**
    * Only on a push with no id: why the game changed. 'cheat' (someone cheated on this account), 'attacked' (an
-   * attack on one of the player's cities arrived), 'march' (the player's march reached another player's city).
+   * attack on one of the player's cities arrived), 'march' (the player's march reached another player's city),
+   * 'incoming' (another lord's march set out for one of the player's cities and its Beacon Tower saw it).
    */
-  reason?: 'cheat' | 'attacked' | 'march';
+  reason?: 'cheat' | 'attacked' | 'march' | 'incoming';
 }
 /** The reply to getState and commands; also pushed with no id when someone else changed this game (see reason). */
 export type StateMessage = Envelope<'state', GameState>;

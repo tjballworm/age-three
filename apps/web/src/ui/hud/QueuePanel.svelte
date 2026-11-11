@@ -46,6 +46,29 @@
       console.warn('Recall failed:', e),
     );
 
+  /**
+   * Other lords' marches heading for any of the player's cities, as their Beacon Towers see them (no tower, no
+   * warning). Lv2 tells the mission, Lv3 the arrival time, Lv4 the lord, Lv5 where from, Lv6+ the troops.
+   */
+  const incoming = $derived(
+    game.cities
+      .flatMap((c) => (c.incoming ?? []).map((m) => ({ ...m, city: c.name })))
+      .sort((a, b) => (a.arrivesAt ?? Infinity) - (b.arrivesAt ?? Infinity)),
+  );
+  const MISSION: Record<string, string> = {
+    attack: 'Attack',
+    scout: 'Scouts',
+    transport: 'Transport',
+    reinforce: 'Reinforcements',
+    found: 'March',
+  };
+  const troopsText = (t: Record<string, number | null | undefined> | undefined) =>
+    t
+      ? Object.entries(t)
+          .map(([k, n]) => (n == null ? k : `${n.toLocaleString('en-US')} ${k}`))
+          .join(', ')
+      : '';
+
   let filter = $state<Filter>('all');
   let collapsed = $state(false);
 
@@ -70,6 +93,24 @@
     </button>
     <span class="count">{rows.length}</span>
   </header>
+  {#each incoming as m (m.id)}
+    <div
+      class="incoming"
+      role="alert"
+      title={[
+        m.fromCity ? `From ${m.fromCity.name} (${m.fromCity.x},${m.fromCity.y})` : '',
+        troopsText(m.troops),
+        m.heroLevel ? `Hero Lv ${m.heroLevel}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')}
+    >
+      <span class="label"
+        >⚠ {m.mission ? MISSION[m.mission] : 'Enemy march'}{m.from ? ` from ${m.from}` : ''} → {m.city}</span
+      >
+      {#if m.arrivesAt}<span class="time">{formatDuration(Math.max(0, m.arrivesAt - clock.now))}</span>{/if}
+    </div>
+  {/each}
   {#if !collapsed}
     <Tabs tabs={TABS} bind:active={filter} size="small" />
     <div class="rows">
@@ -134,6 +175,19 @@
     text-align: center;
     font-weight: 700;
     font-size: 11px;
+  }
+  .incoming {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 3px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #7a1010cc;
+    border: 1px solid #e05050;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
   }
   .rows {
     display: flex;
