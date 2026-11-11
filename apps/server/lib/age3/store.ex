@@ -220,6 +220,27 @@ defmodule Age3.Store do
   @callback report(player_id :: String.t(), report_id :: String.t()) ::
               {:ok, map} | {:error, code :: String.t()}
 
+  @doc """
+  Builds count of a fortification (trap, abatis, tower, log, trebuchet) at the city's walls, paying now
+  (Age3.Forts). The batch joins the end of the walls' queue. Returns when it is done.
+  """
+  @callback build_forts(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              fort :: String.t(),
+              count :: integer,
+              now_ms :: integer
+            ) :: {:ok, ends_at_ms :: integer} | {:error, code :: String.t()}
+
+  @doc "Stops a fortification batch (running or waiting) and refunds its whole cost."
+  @callback cancel_forts(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              task_id :: String.t(),
+              now_ms :: integer
+            ) ::
+              :ok | {:error, code :: String.t()}
+
   @doc "Stops a construction that hasn't finished and refunds its whole cost."
   @callback cancel_build(
               player_id :: String.t(),
@@ -246,6 +267,7 @@ defmodule Age3.Store.Pg do
     Combat,
     Data,
     Economy,
+    Forts,
     Game,
     Hero,
     Heroes,
@@ -540,6 +562,65 @@ defmodule Age3.Store.Pg do
     end
   end
 
+  # Fortifications (Age3.Forts): batches built at the walls one after another, like a Barracks' queue.
+  @impl true
+  def build_forts(player_id, city_id, fort, count, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
+      queue = training_queue(city.id, "walls", "fort")
+      buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
+      resources = settled(city, now_ms).resources
+      queued = for t <- queue, do: {t.target_type, t.target_level}
+
+      case Forts.check(
+             buildings,
+             research_of(player_id),
+             resources,
+             city.forts,
+             queued,
+             fort,
+             count,
+             mayor_politics(city.id)
+           ) do
+        {:ok, plan} ->
+          save_resources(city, Build.spend(resources, plan.cost), now_ms)
+          starts_ms = Enum.reduce(queue, now_ms, &max(&2, to_ms(&1.ends_at)))
+
+          Repo.insert!(%Task{
+            city_id: city.id,
+            kind: "fort",
+            label: "#{count} × #{Data.fort(fort)["name"]}",
+            slot: "walls",
+            target_type: fort,
+            target_level: count,
+            cost: plan.cost,
+            started_at: to_datetime(starts_ms),
+            ends_at: to_datetime(starts_ms + plan.seconds * 1000)
+          })
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> case do
+      {:ok, task} -> {:ok, to_ms(task.ends_at)}
+      {:error, code} -> {:error, code}
+    end
+  end
+
+  @impl true
+  def cancel_forts(player_id, city_id, task_id, now_ms),
+    do: cancel(player_id, city_id, task_id, "fort", now_ms)
+
+  # The mayor's Politics in a city (0 without a mayor): it speeds up construction (x0.995 per point).
+  defp mayor_politics(city_id),
+    do:
+      Repo.one(from(h in Hero, where: h.city_id == ^city_id and h.status == "mayor", select: h.politics)) || 0
+
   @impl true
   def cancel_train(player_id, city_id, task_id, now_ms),
     do: cancel(player_id, city_id, task_id, "train", now_ms)
@@ -559,7 +640,7 @@ defmodule Age3.Store.Pg do
       save_resources(city, Build.spend(resources, task.cost, -1), now_ms, -people(task))
       Repo.delete!(task)
       # the batches waiting behind a cancelled one move up
-      if kind == "train", do: rechain(city.id, task.slot, now_ms)
+      if kind in ["train", "fort"], do: rechain(city.id, task.slot, now_ms, kind)
     end)
     |> case do
       {:ok, _task} -> :ok
@@ -1437,7 +1518,11 @@ defmodule Age3.Store.Pg do
       set: [started_at: now]
     )
 
-    Repo.update_all(from(t in Task, where: t.city_id == ^city.id), set: [ends_at: now])
+    Repo.update_all(
+      from(t in Task, where: t.city_id == ^city.id and not fragment("coalesce(?->>'phase', '') = 'stationed'", t.data)),
+      set: [ends_at: now]
+    )
+
     complete_due(city.id, now)
     :ok
   end
@@ -1540,11 +1625,11 @@ defmodule Age3.Store.Pg do
     do: Repo.one(from p in Player, where: p.id == ^player_id, select: p.research) || %{}
 
   # The training batches of one Barracks, in the order they run.
-  defp training_queue(city_id, slot),
+  defp training_queue(city_id, slot, kind \\ "train"),
     do:
       Repo.all(
         from t in Task,
-          where: t.city_id == ^city_id and t.kind == "train" and t.slot == ^slot,
+          where: t.city_id == ^city_id and t.kind == ^kind and t.slot == ^slot,
           order_by: t.ends_at
       )
 
@@ -1556,8 +1641,8 @@ defmodule Age3.Store.Pg do
 
   # After a batch was cancelled or sped up: closes the gap in that Barracks' queue. The batch running now keeps
   # its times; each waiting one starts when the one before it ends (or now), keeping its length.
-  defp rechain(city_id, slot, now_ms) do
-    Enum.reduce(training_queue(city_id, slot), now_ms, fn t, starts_ms ->
+  defp rechain(city_id, slot, now_ms, kind) do
+    Enum.reduce(training_queue(city_id, slot, kind), now_ms, fn t, starts_ms ->
       started_ms = to_ms(t.started_at)
       ends_ms = to_ms(t.ends_at)
 
@@ -1839,7 +1924,7 @@ defmodule Age3.Store.Pg do
       from t in Task,
         where:
           t.target_city_id == ^city_id and t.kind == "march" and
-            fragment("?->>'phase' = 'stationed'", t.data)
+            fragment("coalesce(?->>'phase', '') = 'stationed'", t.data)
     )
   end
 
@@ -1945,8 +2030,11 @@ defmodule Age3.Store.Pg do
     guard = defending_hero(def)
     walls = Enum.find_value(def_buildings, 0, &(&1.slot == "walls" && &1.level))
 
+    # allies stationed in the city fight with its own troops while the gate is open
+    garrison = defending_troops(def)
+
     {defender, forts, settings} =
-      Pvp.battle(def.troops, combat_tech(def_research), guard && combat_hero(guard), walls, open?)
+      Pvp.battle(garrison, combat_tech(def_research), guard && combat_hero(guard), walls, open?, def.forts)
 
     attacker = %{
       Combat.default_army()
@@ -1974,8 +2062,13 @@ defmodule Age3.Store.Pg do
     save_resources(def, Build.spend(resources, loot), at_ms)
 
     Repo.update_all(from(c in City, where: c.id == ^def.id),
-      set: [troops: Pvp.troops_left(def.troops, result, open?)]
+      set: [
+        troops: Pvp.troops_left(def.troops, result, open?, garrison),
+        forts: Forts.after_battle(def.forts, result)
+      ]
     )
+
+    if open?, do: thin_stationed(def.id, result, garrison)
 
     hero_report = hero && gain_hero_exp(hero, March.hero_exp(result))
     guard_report = guard && gain_hero_exp(guard, result.attacker.total_lost)
@@ -2068,6 +2161,18 @@ defmodule Age3.Store.Pg do
     unless captured, do: resnapshot(Repo.get!(City, def.id), t.ends_at)
 
     {%{t | data: Map.merge(d, %{"won" => won, "reportId" => report.id, "loot" => loot})}, [def.player_id]}
+  end
+
+  # Allies' stationed troops after a battle at the city they guard: each loses the same share of each type as
+  # the whole garrison did; a group with nobody left is gone.
+  defp thin_stationed(city_id, result, garrison) do
+    for t <- stationed_in(city_id) do
+      left = Pvp.share_left(t.data["troops"], result, garrison)
+
+      if Enum.all?(left, fn {_k, n} -> n == 0 end),
+        do: Repo.delete!(t),
+        else: t |> Ecto.Changeset.change(data: Map.put(t.data, "troops", left)) |> Repo.update!()
+    end
   end
 
   # The way home for a march that has arrived: a new task back to its city, as long as the way out took.
@@ -2222,6 +2327,11 @@ defmodule Age3.Store.Pg do
       ),
       []
     )
+  end
+
+  defp apply_task(city, %Task{kind: "fort"} = t) do
+    forts = Map.update(city.forts || %{}, t.target_type, t.target_level, &(&1 + t.target_level))
+    Repo.update_all(from(c in City, where: c.id == ^city.id), set: [forts: forts])
   end
 
   defp apply_task(city, %Task{kind: "train"} = t) do

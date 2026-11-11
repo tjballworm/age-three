@@ -73,6 +73,14 @@ defmodule Age3.FakeStore do
   def cancel_train(_player_id, _city_id, "t1", _now_ms), do: :ok
   def cancel_train(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
 
+  @impl true
+  def build_forts(_player_id, _city_id, "trap", 10, now_ms), do: {:ok, now_ms + 60_000}
+  def build_forts(_player_id, _city_id, _fort, _count, _now_ms), do: {:error, "no_wall_space"}
+
+  @impl true
+  def cancel_forts(_player_id, _city_id, "t1", _now_ms), do: :ok
+  def cancel_forts(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
+
   # task "t1" has under 5 minutes left; "t2" has more
   @impl true
   def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok

@@ -91,6 +91,8 @@ defmodule Age3.Session do
               "cancelResearch",
               "train",
               "cancelTrain",
+              "buildFort",
+              "cancelFort",
               "hire",
               "dismiss",
               "setMayor",
@@ -212,6 +214,23 @@ defmodule Age3.Session do
         {error(id, code, message(code)), session}
     end
   end
+
+  # Build wall fortifications: {cityId, fort, count}, fort being trap, abatis, tower, log or trebuchet. The
+  # batch joins the end of the walls' queue.
+  defp handle("buildFort", %{"cityId" => city_id, "fort" => fort, "count" => count}, id, session)
+       when is_binary(city_id) and is_binary(fort) and is_integer(count),
+       do: command(id, session, &session.store.build_forts(session.player_id, city_id, fort, count, &1))
+
+  defp handle("buildFort", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid fortification order."), session}
+
+  # Stop a fortification batch and get its cost back: {cityId, taskId}.
+  defp handle("cancelFort", %{"cityId" => city_id, "taskId" => task_id}, id, session)
+       when is_binary(city_id) and is_binary(task_id),
+       do: command(id, session, &session.store.cancel_forts(session.player_id, city_id, task_id, &1))
+
+  defp handle("cancelFort", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid cancel."), session}
 
   defp handle("cancelTrain", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid cancel."), session}
@@ -557,9 +576,20 @@ defmodule Age3.Session do
     now = session.now.()
 
     case fun.(now) do
-      :ok -> state_reply(id, session, now)
-      {:ok, _} -> state_reply(id, session, now)
-      {:error, code} -> {error(id, code, message(code)), session}
+      :ok ->
+        # a cancel can bring the next queued task forward
+        session.wake.(now)
+        state_reply(id, session, now)
+
+      {:ok, ends_at} when is_integer(ends_at) ->
+        session.wake.(ends_at)
+        state_reply(id, session, now)
+
+      {:ok, _} ->
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
     end
   end
 
@@ -587,6 +617,8 @@ defmodule Age3.Session do
   defp slot_key(_slot), do: nil
 
   defp message("not_enough_resources"), do: "Not enough resources."
+  defp message("no_wall_space"), do: "Not enough fortified space on the walls."
+  defp message("fort_queue_full"), do: "The walls' queue is full."
   defp message("comfort_cooldown"), do: "The people were comforted less than 15 minutes ago."
   defp message("own_city"), do: "That city is already yours."
   defp message("queue_busy"), do: "Something is already being built in this city."

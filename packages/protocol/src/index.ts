@@ -4,6 +4,7 @@ import type {
   BattleResult,
   BuildingType,
   City,
+  FortType,
   Ladder,
   LordCity,
   MarchMission,
@@ -66,6 +67,14 @@ export type TrainMessage = Envelope<
 >;
 /** Stop a training batch (running or waiting) and get its cost and people back. The reply is a `state` message. */
 export type CancelTrainMessage = Envelope<'cancelTrain', { cityId: string; taskId: string }>;
+/**
+ * Build `count` of a wall fortification (trap, abatis, tower, log, trebuchet). Each takes wall space (the walls
+ * give 1,000 at Lv1 up to 55,000 at Lv10), costs resources now and needs a walls level and research. The batch
+ * joins the end of the walls' queue (as many batches as the walls level). The reply is a `state` message.
+ */
+export type BuildFortMessage = Envelope<'buildFort', { cityId: string; fort: FortType; count: number }>;
+/** Stop a fortification batch (running or waiting) and get its cost back. The reply is a `state` message. */
+export type CancelFortMessage = Envelope<'cancelFort', { cityId: string; taskId: string }>;
 /**
  * Finishes a building's construction or upgrade for free when it has FREE_SPEEDUP_MS (5 minutes) or less left.
  * Research, training and walls can't be sped up (no_free_speedup). Replies with state.
@@ -218,6 +227,8 @@ export type ClientMessage =
   | CancelResearchMessage
   | TrainMessage
   | CancelTrainMessage
+  | BuildFortMessage
+  | CancelFortMessage
   | HireMessage
   | RefreshInnMessage
   | DismissMessage
@@ -364,4 +375,8 @@ export type ErrorCode =
   /** founding a city when your title allows no more */
   | 'city_cap'
   /** reinforcing someone who isn't an ally, or whose Embassy doesn't take (more) garrisons */
-  | 'not_allied';
+  | 'not_allied'
+  /** fortifications that don't fit in the space the walls have left */
+  | 'no_wall_space'
+  /** the walls' fortification queue already has as many batches as the walls level */
+  | 'fort_queue_full';

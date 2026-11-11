@@ -257,4 +257,58 @@ defmodule Age3.MissionsTest do
       assert [%{kind: "valley", won: false}] = Enum.filter(Pg.reports(a.id), &(&1.kind == "valley"))
     end
   end
+
+  describe "fortifications" do
+    defp walls(l, level) do
+      Repo.insert_all(Building, [%{city_id: l.city.id, slot: "walls", type: "walls", level: level}],
+        on_conflict: {:replace, [:level]},
+        conflict_target: [:city_id, :slot]
+      )
+    end
+
+    test "built in a queue at the walls, limited by space and research; a cancel refunds" do
+      a = lord("Builder")
+      walls(a, 1)
+      assert {:error, "requirement_not_met"} = Pg.build_forts(a.id, a.city.id, "tower", 1, a.now)
+      assert {:error, "no_wall_space"} = Pg.build_forts(a.id, a.city.id, "trap", 1001, a.now)
+      {:ok, done} = Pg.build_forts(a.id, a.city.id, "trap", 100, a.now)
+      assert {:error, "fort_queue_full"} = Pg.build_forts(a.id, a.city.id, "trap", 1, a.now)
+
+      walls(a, 3)
+      {:ok, second} = Pg.build_forts(a.id, a.city.id, "trap", 10, a.now)
+      assert second > done
+      {:ok, _, _, tasks} = Pg.state(a.id, a.now)
+      cancel = Enum.find(tasks, &(&1.kind == "fort" and to_string(&1.endsAt) == to_string(second)))
+      assert cancel
+      assert :ok = Pg.cancel_forts(a.id, a.city.id, cancel.id, a.now)
+
+      {:ok, _, [city], []} = Pg.state(a.id, done)
+      assert city.forts == %{"trap" => 100}
+    end
+
+    test "they defend a player city, and allies stationed there fight when the gate is open" do
+      a = lord("Raider")
+      b = lord("Castle")
+      c = lord("Friend")
+      walls(b, 3)
+
+      Repo.update_all(from(x in City, where: x.id == ^b.city.id),
+        set: [forts: %{"trap" => 1000}, allow_garrison: true]
+      )
+
+      Repo.update_all(Age3.Player, set: [alliance: "Pact"])
+      Repo.update_all(from(p in Age3.Player, where: p.id == ^a.id), set: [alliance: nil])
+      {:ok, at} = march(c, {b.city.x, b.city.y}, %{"cavalry" => 100}, %{"mission" => "reinforce"})
+      settle(c, at)
+      :ok = Pg.set_gate(b.id, b.city.id, true, at)
+
+      {:ok, hit} =
+        Pg.march(a.id, a.city.id, b.city.x, b.city.y, a.hero, %{"cavalry" => 20_000}, at + 1000, %{})
+
+      {:ok, _, [city], _} = Pg.state(b.id, hit)
+      assert Map.get(city.forts, "trap", 0) < 1000
+      assert city.troops["cavalry"] < 20_000
+      assert Enum.all?(city.garrisons, &(&1.troops["cavalry"] < 100))
+    end
+  end
 end
