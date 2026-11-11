@@ -284,8 +284,10 @@
 <style>
   .reports {
     display: grid;
-    grid-template-columns: 240px 1fr;
-    gap: 10px;
+    grid-template-columns: 280px 1fr;
+    gap: 14px;
+    padding: 8px 10px;
+    box-sizing: border-box;
     height: 100%;
     min-height: 0;
   }
@@ -293,7 +295,7 @@
   .detail {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
     min-height: 0;
     overflow-y: auto;
   }
@@ -350,12 +352,12 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px 18px;
-    padding: 6px 10px;
+    padding: 8px 12px;
     border-radius: 6px;
     border: 1px solid #6d8aa8;
     background: #eef6fc;
     color: var(--navy);
-    font-size: 12px;
+    font-size: 13px;
   }
   .facts b {
     color: #b07a10;

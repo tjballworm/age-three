@@ -59,7 +59,8 @@
   .win {
     position: relative;
     max-width: calc(100% - 16px);
-    max-height: calc(100% - 24px);
+    /* room above for the title plate, which sticks up 15px */
+    max-height: calc(100% - 40px);
     color: var(--navy);
     border-radius: 14px;
     background: linear-gradient(180deg, #6a4a24, #3a2814);
