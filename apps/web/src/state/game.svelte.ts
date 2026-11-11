@@ -50,7 +50,7 @@ export const game = $state({
   syncedAt: startedAt,
   queue: sampleQueue(startedAt),
   chat: sampleChat(startedAt),
-  badges: { quests: 3, reports: 5, mail: 1 } as Partial<Record<WindowId, number>>,
+  badges: {} as Partial<Record<WindowId, number>>,
   openWindow: null as WindowId | null,
   mapTarget: null as Coord | null,
   /** World-map tile under the pointer, with its centre in screen pixels. */

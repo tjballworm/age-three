@@ -40,9 +40,26 @@ defmodule Age3.Data do
   @external_resource @valleys_path
   @valleys @valleys_path |> File.read!() |> Jason.decode!()
 
+  @items_path Path.expand("../../priv/data/items.json", __DIR__)
+  @external_resource @items_path
+  @items @items_path |> File.read!() |> Jason.decode!()
+
+  @quests_path Path.expand("../../priv/data/quests.json", __DIR__)
+  @external_resource @quests_path
+  @quests @quests_path |> File.read!() |> Jason.decode!()
+
   @titles_path Path.expand("../../priv/data/titles.json", __DIR__)
   @external_resource @titles_path
   @titles @titles_path |> File.read!() |> Jason.decode!()
+
+  @doc "An item's spec (priv/data/items.json), or nil."
+  def item(id), do: @items["items"][id]
+
+  @doc "Every item id."
+  def item_ids, do: Map.keys(@items["items"])
+
+  @doc "The routine quests, in order (priv/data/quests.json)."
+  def quests, do: @quests["quests"]
 
   @doc "The nine medal ids, lowest first: cross ... nation."
   def medal_ids, do: Enum.map(@medals["medals"], & &1["id"])

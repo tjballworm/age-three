@@ -1,0 +1,15 @@
+{
+  "_source": "Age Three items, after the Age II wiki's item lists (List_of_Speed_Up_items, List_of_Produce_items); names are our own. Shop prices are in gold for now (no paid currency yet; tunable). use: speed (seconds off a task of these kinds), speedPercent (share of the time left off a task of these kinds), resources (added to the city).",
+  "items": {
+    "speed15m": {"name": "Quick Hands (15 min)", "category": "speedups", "use": {"speed": 900, "kinds": ["build", "research"]}, "price": 1000},
+    "speed1h": {"name": "Quick Hands (1 h)", "category": "speedups", "use": {"speed": 3600, "kinds": ["build", "research"]}, "price": 4000},
+    "speed8h": {"name": "Quick Hands (8 h)", "category": "speedups", "use": {"speed": 28800, "kinds": ["build", "research"]}, "price": 30000},
+    "drill30": {"name": "Drill Manual (-30% training)", "category": "speedups", "use": {"speedPercent": 30, "kinds": ["train"]}, "price": 10000},
+    "masons30": {"name": "Mason's Plans (-30% fortifications)", "category": "speedups", "use": {"speedPercent": 30, "kinds": ["fort"]}, "price": 10000},
+    "food10k": {"name": "Food Cart (10,000 food)", "category": "resources", "use": {"resources": {"food": 10000}}, "price": 2000},
+    "lumber10k": {"name": "Lumber Cart (10,000 lumber)", "category": "resources", "use": {"resources": {"lumber": 10000}}, "price": 2000},
+    "stone10k": {"name": "Stone Cart (10,000 stone)", "category": "resources", "use": {"resources": {"stone": 10000}}, "price": 2500},
+    "iron10k": {"name": "Iron Cart (10,000 iron)", "category": "resources", "use": {"resources": {"iron": 10000}}, "price": 3000},
+    "chest": {"name": "Supply Chest", "category": "chests", "use": {"resources": {"food": 5000, "lumber": 5000, "stone": 5000, "iron": 5000, "gold": 2000}}, "price": 0}
+  }
+}

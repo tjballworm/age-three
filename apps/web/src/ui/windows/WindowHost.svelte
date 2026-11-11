@@ -7,11 +7,13 @@
   import CheatsWindow from './CheatsWindow.svelte';
   import CityOverview from './CityOverview.svelte';
   import HeroesOverview from './HeroesOverview.svelte';
+  import ItemsWindow from './ItemsWindow.svelte';
   import LeaderboardWindow from './LeaderboardWindow.svelte';
   import LordMedals from './LordMedals.svelte';
   import LordProfile from './LordProfile.svelte';
   import MailWindow from './MailWindow.svelte';
   import MarketWindow from './MarketWindow.svelte';
+  import QuestsWindow from './QuestsWindow.svelte';
   import ReportsWindow from './ReportsWindow.svelte';
   import TroopsOverview from './TroopsOverview.svelte';
 
@@ -64,6 +66,12 @@
       {#key tab}<ReportsWindow
           tab={tab === 'Scouting' ? 'scouting' : tab === 'Missions' ? 'missions' : 'battles'}
         />{/key}
+    {:else if game.openWindow === 'items'}
+      <ItemsWindow {tab} mode="items" />
+    {:else if game.openWindow === 'shop'}
+      <ItemsWindow {tab} mode="shop" />
+    {:else if game.openWindow === 'quests'}
+      <QuestsWindow {tab} />
     {:else if game.openWindow === 'market'}
       <MarketWindow {tab} />
     {:else if game.openWindow === 'mail'}

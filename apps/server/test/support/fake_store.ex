@@ -132,6 +132,21 @@ defmodule Age3.FakeStore do
   @impl true
   def leaderboard(board), do: [%{rank: 1, name: board}]
 
+  @impl true
+  def buy_item(_player_id, _city_id, "speed1h", 1, _now_ms), do: :ok
+  def buy_item(_player_id, _city_id, _item, _count, _now_ms), do: {:error, "not_enough_resources"}
+
+  @impl true
+  def use_item(_player_id, _city_id, "speed1h", "t1", _now_ms), do: :ok
+  def use_item(_player_id, _city_id, _item, _task_id, _now_ms), do: {:error, "no_item"}
+
+  @impl true
+  def quests(_player_id), do: [%{id: "cottage1", done: true, claimed: false}]
+
+  @impl true
+  def claim_quest(_player_id, _city_id, "cottage1", _now_ms), do: :ok
+  def claim_quest(_player_id, _city_id, _quest_id, _now_ms), do: {:error, "already_claimed"}
+
   # task "t1" has under 5 minutes left; "t2" has more
   @impl true
   def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok

@@ -17,6 +17,7 @@ import type {
   MedalCounts,
   Player,
   PolicyId,
+  QuestStatus,
   ReportSummary,
   ResourceType,
   TechId,
@@ -153,6 +154,14 @@ export type AbandonValleyMessage = Envelope<'abandonValley', { cityId: string; x
 export type SetGarrisonMessage = Envelope<'setGarrison', { cityId: string; allow: boolean }>;
 /** The latest battle reports, newest first. Replies with `reports`. */
 export type GetReportsMessage = Envelope<'getReports', Record<string, never>>;
+/** Buy items from the shop with a city's gold. The reply is a `state` message (player.items). */
+export type BuyItemMessage = Envelope<'buyItem', { cityId: string; item: string; count: number }>;
+/** Use one item in a city: a speed-up on one of its tasks (taskId), or a resource item. Replies with `state`. */
+export type UseItemMessage = Envelope<'useItem', { cityId: string; item: string; taskId?: string }>;
+/** The routine quests. Replies with `quests`. */
+export type GetQuestsMessage = Envelope<'getQuests', Record<string, never>>;
+/** Claim a done quest's reward into a city (once). Replies with `state`. */
+export type ClaimQuestMessage = Envelope<'claimQuest', { cityId: string; questId: string }>;
 /** The top 100 of a leaderboard. Replies with `leaderboard`. */
 export type GetLeaderboardMessage = Envelope<'getLeaderboard', { board: 'player' | 'hero' | 'alliance' }>;
 /** The Marketplace from a city. Replies with `market`. */
@@ -308,6 +317,10 @@ export type ClientMessage =
   | GetReportMessage
   | GetAllianceMessage
   | AllianceActionMessage
+  | BuyItemMessage
+  | UseItemMessage
+  | GetQuestsMessage
+  | ClaimQuestMessage
   | GetLeaderboardMessage
   | GetMarketMessage
   | MarketOrderMessage
@@ -358,6 +371,7 @@ export type ChatLineMessage = Envelope<'chat', ChatMessage>;
 export type ChatHistoryMessage = Envelope<'chatHistory', { messages: ChatMessage[] }>;
 export type MailboxMessage = Envelope<'mail', { inbox: Mail[]; sent: Mail[] }>;
 export type MarketMessage = Envelope<'market', MarketView>;
+export type QuestsMessage = Envelope<'quests', { quests: QuestStatus[] }>;
 /** Rows ranked from 1: players (prestige), heroes (level) or alliances (members' prestige). */
 export type LeaderboardMessage = Envelope<
   'leaderboard',
@@ -380,7 +394,8 @@ export type ServerMessage =
   | ChatHistoryMessage
   | MailboxMessage
   | MarketMessage
-  | LeaderboardMessage;
+  | LeaderboardMessage
+  | QuestsMessage;
 
 export type ErrorCode =
   | 'bad_message'
@@ -495,4 +510,10 @@ export type ErrorCode =
   /** more than one chat line a second */
   | 'too_fast'
   /** a city with as many open orders as its Marketplace level */
-  | 'market_full';
+  | 'market_full'
+  /** using an item the player doesn't have */
+  | 'no_item'
+  /** a speed-up on a training or fortification batch still waiting its turn */
+  | 'not_started'
+  /** a quest reward claimed before */
+  | 'already_claimed';

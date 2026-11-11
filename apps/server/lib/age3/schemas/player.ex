@@ -21,6 +21,9 @@ defmodule Age3.Player do
     # research levels for all the player's cities, e.g. %{"agriculture" => 2}; missing techs are level 0
     field :research, :map, default: %{}
     field :instant_march, :boolean, default: false
+    # items held, %{"speed1h" => 2}; quests whose reward was claimed (Age3.Items, Age3.Quests)
+    field :items, :map, default: %{}
+    field :quests, {:array, :string}, default: []
     # from Age3.Password; nil means this player can't log in yet. redact: true keeps it out of logs
     field :password_hash, :string, redact: true
     has_many :cities, Age3.City

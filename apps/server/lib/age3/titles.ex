@@ -22,6 +22,9 @@ defmodule Age3.Titles do
   @doc "How many cities a title allows: Civilian 1 ... Prinzessin 10."
   def city_cap(title_id), do: (spec(:title, title_id) || hd(steps(:title)))["cities"]
 
+  @doc "Where id stands on a ladder, 0 for Civilian (or an unknown id)."
+  def rank_of(ladder, id), do: max(0, index(steps(ladder), id))
+
   @doc "The step above id on the ladder, or nil at the top."
   def next(ladder, id) do
     steps = steps(ladder)

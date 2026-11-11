@@ -258,6 +258,8 @@ export interface Player {
   unreadReports?: number;
   /** Mail not read yet. */
   unreadMail?: number;
+  /** Items held: item id -> count. */
+  items?: Record<string, number>;
   /** Your rank in your alliance (null without one). */
   allianceRank?: AllianceRank | null;
 }
@@ -471,4 +473,19 @@ export interface MarketView {
     amount: number;
     price: number;
   }[];
+}
+
+/** A routine quest and how the player stands with it (the server's `quests` reply). */
+export interface QuestStatus {
+  id: string;
+  category: 'routine' | 'military' | 'economy';
+  name: string;
+  goal: Record<string, unknown>;
+  reward: {
+    resources?: Partial<Record<ResourceType, number>>;
+    items?: Record<string, number>;
+    prestige?: number;
+  };
+  done: boolean;
+  claimed: boolean;
 }

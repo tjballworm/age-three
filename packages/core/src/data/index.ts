@@ -45,3 +45,4 @@ export * from './npcs';
 export * from './titles';
 export * from './fortifications';
 export * from './valleys';
+export * from './items';

@@ -106,6 +106,10 @@ defmodule Age3.Session do
               "getReports",
               "getAlliance",
               "getLeaderboard",
+              "buyItem",
+              "useItem",
+              "getQuests",
+              "claimQuest",
               "getMarket",
               "marketOrder",
               "cancelOrder",
@@ -369,6 +373,30 @@ defmodule Age3.Session do
 
   defp handle("imposePolicy", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid policy."), session}
+
+  # Buy items from the shop with a city's gold: {cityId, item, count}. Replies with the state.
+  defp handle("buyItem", %{"cityId" => city_id, "item" => item, "count" => count}, id, session)
+       when is_binary(city_id) and is_binary(item),
+       do: command(id, session, &session.store.buy_item(session.player_id, city_id, item, count, &1))
+
+  # Use an item in a city: {cityId, item, taskId?} (a speed-up needs the task). Replies with the state.
+  defp handle("useItem", %{"cityId" => city_id, "item" => item} = p, id, session)
+       when is_binary(city_id) and is_binary(item) do
+    task_id = if is_binary(p["taskId"]), do: p["taskId"]
+    command(id, session, &session.store.use_item(session.player_id, city_id, item, task_id, &1))
+  end
+
+  # The routine quests: replies "quests" {quests: [...]}.
+  defp handle("getQuests", _payload, id, session),
+    do: {reply(id, "quests", %{quests: session.store.quests(session.player_id)}), session}
+
+  # Claim a done quest's reward into a city: {cityId, questId}. Replies with the state.
+  defp handle("claimQuest", %{"cityId" => city_id, "questId" => quest_id}, id, session)
+       when is_binary(city_id) and is_binary(quest_id),
+       do: command(id, session, &session.store.claim_quest(session.player_id, city_id, quest_id, &1))
+
+  defp handle(type, _payload, id, session) when type in ["buyItem", "useItem", "claimQuest"],
+    do: {error(id, "bad_message", "Not a valid item or quest."), session}
 
   # A leaderboard: {board: "player" | "hero" | "alliance"}. Replies "leaderboard" {board, rows}.
   defp handle("getLeaderboard", %{"board" => board}, id, session)
@@ -770,6 +798,9 @@ defmodule Age3.Session do
   defp slot_key(_slot), do: nil
 
   defp message("not_enough_resources"), do: "Not enough resources."
+  defp message("no_item"), do: "You don't have that item."
+  defp message("not_started"), do: "That batch hasn't started yet."
+  defp message("already_claimed"), do: "That reward was already claimed."
   defp message("market_full"), do: "This city has as many orders open as its Marketplace level."
   defp message("too_fast"), do: "Slow down: one chat line a second."
   defp message("already_in_alliance"), do: "Already in an alliance."

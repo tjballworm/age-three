@@ -253,6 +253,37 @@ defmodule Age3.Store do
               now_ms :: integer
             ) :: :ok | {:error, code :: String.t()}
 
+  @doc "Buys count of an item from the shop with gold from a city."
+  @callback buy_item(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              item :: String.t(),
+              count :: integer,
+              now_ms :: integer
+            ) ::
+              :ok | {:error, code :: String.t()}
+
+  @doc "Uses one item in a city: a speed-up on one of its tasks (task_id), or resources into it (task_id nil)."
+  @callback use_item(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              item :: String.t(),
+              task_id :: String.t() | nil,
+              now_ms :: integer
+            ) :: :ok | {:error, code :: String.t()}
+
+  @doc "Every routine quest with whether it is done and claimed."
+  @callback quests(player_id :: String.t()) :: [map]
+
+  @doc "Claims a done quest's reward into a city (once)."
+  @callback claim_quest(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              quest_id :: String.t(),
+              now_ms :: integer
+            ) ::
+              :ok | {:error, code :: String.t()}
+
   @doc "The top 100 of a leaderboard: \"player\" (prestige), \"hero\" (level) or \"alliance\" (members' prestige)."
   @callback leaderboard(board :: String.t()) :: [map]
 
@@ -365,6 +396,7 @@ defmodule Age3.Store.Pg do
     Game,
     Hero,
     Heroes,
+    Items,
     Historic,
     Lord,
     Loyalty,
@@ -376,6 +408,7 @@ defmodule Age3.Store.Pg do
     Report,
     Repo,
     Prestige,
+    Quests,
     Research,
     Task,
     Scout,
@@ -1100,6 +1133,128 @@ defmodule Age3.Store.Pg do
       save_resources(city, Cheats.add_resources(settled(city, now_ms).resources, back), now_ms)
     end)
     |> ok()
+  end
+
+  # Items and the shop (Age3.Items), and routine quests (Age3.Quests).
+  @impl true
+  def buy_item(player_id, city_id, item, count, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      player = Repo.one!(from p in Player, where: p.id == ^player_id, lock: "FOR UPDATE")
+
+      gold =
+        case Items.price(item, count) do
+          {:ok, g} -> g
+          {:error, code} -> Repo.rollback(code)
+        end
+
+      resources = settled(city, now_ms).resources
+      if Build.affordable(resources, %{"gold" => gold}) != :ok, do: Repo.rollback("not_enough_resources")
+      save_resources(city, Build.spend(resources, %{"gold" => gold}), now_ms)
+      player |> Ecto.Changeset.change(items: Items.give(player.items, %{item => count})) |> Repo.update!()
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def use_item(player_id, city_id, item, task_id, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      player = Repo.one!(from p in Player, where: p.id == ^player_id, lock: "FOR UPDATE")
+      complete_due(city.id, now)
+
+      left =
+        case Items.take(player.items, item) do
+          {:ok, left} -> left
+          {:error, code} -> Repo.rollback(code)
+        end
+
+      case Items.resources(item) do
+        nil ->
+          task =
+            (task_id && find_task(city.id, task_id, ["build", "research", "train", "fort"])) ||
+              Repo.rollback("bad_message")
+
+          # a Barracks or the walls work through their queue in order: only the batch running now can be sped up
+          if task.kind in ["train", "fort"] and to_ms(task.started_at) > now_ms,
+            do: Repo.rollback("not_started")
+
+          ends =
+            case Items.speed_up(item, task.kind, to_ms(task.ends_at), now_ms) do
+              {:ok, ms} -> ms
+              {:error, code} -> Repo.rollback(code)
+            end
+
+          task |> Ecto.Changeset.change(ends_at: to_datetime(ends)) |> Repo.update!()
+          if task.kind in ["train", "fort"], do: rechain(city.id, task.slot, now_ms, task.kind)
+          complete_due(city.id, now)
+
+        more ->
+          city = Repo.get!(City, city.id)
+          save_resources(city, Cheats.add_resources(settled(city, now_ms).resources, more), now_ms)
+      end
+
+      player |> Ecto.Changeset.change(items: left) |> Repo.update!()
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def quests(player_id), do: Quests.status(quest_facts(player_id), Repo.get!(Player, player_id).quests)
+
+  @impl true
+  def claim_quest(player_id, city_id, quest_id, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      player = Repo.one!(from p in Player, where: p.id == ^player_id, lock: "FOR UPDATE")
+      quest = Quests.quest(quest_id) || Repo.rollback("bad_message")
+      if quest_id in player.quests, do: Repo.rollback("already_claimed")
+      if not Quests.done?(quest["goal"], quest_facts(player_id)), do: Repo.rollback("requirement_not_met")
+
+      reward = quest["reward"] || %{}
+      resources = Cheats.add_resources(settled(city, now_ms).resources, reward["resources"] || %{})
+      save_resources(city, resources, now_ms)
+
+      player
+      |> Ecto.Changeset.change(
+        quests: [quest_id | player.quests],
+        items: Items.give(player.items, reward["items"]),
+        prestige: player.prestige + (reward["prestige"] || 0)
+      )
+      |> Repo.update!()
+    end)
+    |> ok()
+  end
+
+  # What the quests' goals look at, over all the player's cities.
+  defp quest_facts(player_id) do
+    player = Repo.get!(Player, player_id)
+    cities = Repo.all(from c in City, where: c.player_id == ^player_id, preload: [:buildings, :heroes])
+    buildings = Enum.flat_map(cities, & &1.buildings)
+
+    %{
+      buildings:
+        Enum.reduce(buildings, %{}, fn b, acc -> Map.update(acc, b.type, b.level, &max(&1, b.level)) end),
+      research: player.research,
+      troops:
+        Enum.reduce(cities, %{}, fn c, acc -> Map.merge(acc, c.troops || %{}, fn _k, a, b -> a + b end) end),
+      town_hall: Enum.max([0 | for(b <- buildings, b.type == "townhall", do: b.level)]),
+      population: Enum.max([0 | for(c <- cities, do: c.population["max"] || 0)]),
+      prestige: player.prestige,
+      cities: length(cities),
+      valleys: Repo.aggregate(from(v in ValleyHold, where: v.city_id in ^Enum.map(cities, & &1.id)), :count),
+      heroes: Enum.count(Enum.flat_map(cities, & &1.heroes), &(&1.status != "captive")),
+      mayor: Enum.any?(Enum.flat_map(cities, & &1.heroes), &(&1.status == "mayor")),
+      alliance: player.alliance_id != nil,
+      title: player.title
+    }
   end
 
   # Leaderboards: the top 100 players (prestige), heroes (level, then exp) and alliances (members' prestige).
@@ -3467,6 +3622,7 @@ defmodule Age3.Store.Pg do
       instantMarch: p.instant_march,
       unreadReports: unread_reports(p.id),
       unreadMail: Social.unread(p.id),
+      items: p.items || %{},
       allianceRank: p.alliance_rank,
       # the player's place by prestige (backlog 2: derived, never stored)
       rank: Repo.aggregate(from(o in Player, where: o.prestige > ^p.prestige), :count) + 1

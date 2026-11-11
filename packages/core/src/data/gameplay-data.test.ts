@@ -5,7 +5,7 @@ import { valleyBonus } from './valleys';
 
 describe('fortifications and valleys data', () => {
   it('the server has the same files (npm run sync-data)', () => {
-    for (const f of ['fortifications.json', 'valleys.json']) {
+    for (const f of ['fortifications.json', 'valleys.json', 'items.json', 'quests.json']) {
       expect(readFileSync(new URL(`../../../../apps/server/priv/data/${f}`, import.meta.url), 'utf8')).toBe(
         readFileSync(new URL(`./${f}`, import.meta.url), 'utf8'),
       );
