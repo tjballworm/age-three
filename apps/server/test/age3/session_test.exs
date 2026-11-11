@@ -192,6 +192,7 @@ defmodule Age3.SessionTest do
              %{"type" => "error", "payload" => %{"code" => "bad_target", "message" => target}},
              %{"type" => "error", "payload" => %{"code" => "bad_message"}},
              %{"type" => "state"},
+             %{"type" => "state"},
              %{"type" => "error", "payload" => %{"code" => "already_returning"}},
              %{"type" => "reports", "payload" => %{"reports" => [%{"id" => "r1"}]}},
              %{"type" => "report", "payload" => %{"report" => %{"result" => %{"winner" => "attacker"}}}},
@@ -202,7 +203,8 @@ defmodule Age3.SessionTest do
                msg.("march", send),
                msg.("march", Map.put(send, :camp, 30)),
                msg.("march", %{send | x: 11}),
-               msg.("march", Map.delete(send, :heroId)),
+               msg.("march", Map.put(send, :heroId, 5)),
+               msg.("march", %{cityId: "c1", x: 10, y: 20, mission: "scout", troops: %{scout: 10}}),
                msg.("recall", %{cityId: "c1", taskId: "m1"}),
                msg.("recall", %{cityId: "c1", taskId: "m2"}),
                msg.("getReports", %{}),
@@ -237,6 +239,79 @@ defmodule Age3.SessionTest do
              run([login("secret123"), cancel.("t1"), cancel.("t9")])
 
     assert_received {:wake, 1_000}
+  end
+
+  test "buildFort, cancelFort and assignPoints" do
+    msg = fn type, payload ->
+      Jason.encode!(%{type: type, id: 2, payload: Map.put(payload, :cityId, "c1")})
+    end
+
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "no_wall_space"}},
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}},
+             %{"type" => "state"},
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "not_enough_points"}}
+           ] =
+             run([
+               login("secret123"),
+               msg.("buildFort", %{fort: "trap", count: 10}),
+               msg.("buildFort", %{fort: "trap", count: 99_999_999}),
+               msg.("buildFort", %{fort: "trap", count: "10"}),
+               msg.("cancelFort", %{taskId: "t1"}),
+               msg.("assignPoints", %{heroId: "h1", politics: 1}),
+               msg.("assignPoints", %{heroId: "h1", attack: 9})
+             ])
+
+    assert_received {:wake, 61_000}
+  end
+
+  test "chat and mail" do
+    msg = fn type, payload -> Jason.encode!(%{type: type, id: 2, payload: payload}) end
+
+    assert [
+             _,
+             %{"type" => "chat", "payload" => %{"text" => "hi"}},
+             %{"type" => "error", "payload" => %{"code" => "no_alliance"}},
+             %{"type" => "chatHistory", "payload" => %{"messages" => []}},
+             %{"type" => "mail", "payload" => %{"inbox" => []}},
+             %{"type" => "error", "payload" => %{"code" => "player_not_found"}},
+             %{"type" => "mail"},
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}}
+           ] =
+             run([
+               login("secret123"),
+               msg.("chat", %{channel: "world", text: "hi"}),
+               msg.("chat", %{channel: "alliance", text: "hi"}),
+               msg.("getChat", %{}),
+               msg.("sendMail", %{to: "Other", subject: "Hello", body: "Hi there"}),
+               msg.("sendMail", %{to: "Nobody", subject: "Hello", body: "Hi there"}),
+               msg.("readMail", %{mailId: "m1"}),
+               msg.("readMail", %{mailId: "m2"})
+             ])
+  end
+
+  test "the marketplace" do
+    msg = fn type, payload ->
+      Jason.encode!(%{type: type, id: 2, payload: Map.put(payload, :cityId, "c1")})
+    end
+
+    assert [
+             _,
+             %{"type" => "market", "payload" => %{"level" => 1}},
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "market_full"}},
+             %{"type" => "state"}
+           ] =
+             run([
+               login("secret123"),
+               msg.("getMarket", %{}),
+               msg.("marketOrder", %{side: "sell", resource: "food", amount: 100, price: 50}),
+               msg.("marketOrder", %{side: "buy", resource: "food", amount: 100, price: 50}),
+               msg.("cancelOrder", %{orderId: "o1"})
+             ])
   end
 
   test "cancelResearch" do

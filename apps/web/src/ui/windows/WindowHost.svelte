@@ -3,12 +3,17 @@
   import Button from '$ui/components/Button.svelte';
   import Tabs from '$ui/components/Tabs.svelte';
   import Window from '$ui/components/Window.svelte';
+  import AllianceWindow from './AllianceWindow.svelte';
   import CheatsWindow from './CheatsWindow.svelte';
   import CityOverview from './CityOverview.svelte';
   import HeroesOverview from './HeroesOverview.svelte';
-  import LeaderboardPlaceholder from './LeaderboardPlaceholder.svelte';
+  import ItemsWindow from './ItemsWindow.svelte';
+  import LeaderboardWindow from './LeaderboardWindow.svelte';
   import LordMedals from './LordMedals.svelte';
   import LordProfile from './LordProfile.svelte';
+  import MailWindow from './MailWindow.svelte';
+  import MarketWindow from './MarketWindow.svelte';
+  import QuestsWindow from './QuestsWindow.svelte';
   import ReportsWindow from './ReportsWindow.svelte';
   import TroopsOverview from './TroopsOverview.svelte';
 
@@ -19,7 +24,7 @@
     items: { title: 'Items', tabs: ['All', 'Speed-ups', 'Resources', 'Chests'] },
     quests: { title: 'Quests', tabs: ['Routine', 'Military', 'Economy'] },
     alliance: { title: 'Alliance', tabs: ['Info', 'Members', 'Diplomacy'] },
-    reports: { title: 'Reports', tabs: ['Battles', 'Scouting', 'Trade'], width: 1200, height: 860 },
+    reports: { title: 'Reports', tabs: ['Battles', 'Scouting', 'Missions'], width: 1200, height: 860 },
     mail: { title: 'Mail', tabs: ['Inbox', 'Sent', 'Compose'] },
     leaderboard: { title: 'Leaderboard', tabs: ['Player', 'Hero', 'Alliance'] },
     shop: { title: 'Shop', tabs: ['Featured', 'Speed-ups', 'Resources', 'Chests'] },
@@ -58,10 +63,24 @@
       <HeroesOverview />
     {:else if game.openWindow === 'cheats'}
       <CheatsWindow page={tab === 'Buildings & research' ? 'buildings' : 'resources'} />
-    {:else if game.openWindow === 'reports' && tab === 'Battles'}
-      <ReportsWindow />
+    {:else if game.openWindow === 'reports'}
+      {#key tab}<ReportsWindow
+          tab={tab === 'Scouting' ? 'scouting' : tab === 'Missions' ? 'missions' : 'battles'}
+        />{/key}
+    {:else if game.openWindow === 'items'}
+      <ItemsWindow {tab} mode="items" />
+    {:else if game.openWindow === 'shop'}
+      <ItemsWindow {tab} mode="shop" />
+    {:else if game.openWindow === 'quests'}
+      <QuestsWindow {tab} />
+    {:else if game.openWindow === 'market'}
+      <MarketWindow {tab} />
+    {:else if game.openWindow === 'mail'}
+      <MailWindow {tab} onCompose={() => (tab = 'Compose')} />
+    {:else if game.openWindow === 'alliance'}
+      <AllianceWindow {tab} />
     {:else if game.openWindow === 'leaderboard'}
-      <LeaderboardPlaceholder board={tab} />
+      <LeaderboardWindow board={tab} />
     {:else}
       <div class="placeholder">
         <div class="caption">{def.title} · {tab}</div>

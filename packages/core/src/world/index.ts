@@ -2,8 +2,8 @@
 // Generated from a seed so every client (and later the server) builds the identical map.
 // Historic cities are not random: they sit at fixed spots in each state (see ./states).
 
-import { WORLD_SIZE } from '../data';
-import type { Coord } from '../types';
+import { VALLEY_TERRAINS, WORLD_SIZE } from '../data';
+import type { Coord, Terrain } from '../types';
 import { historicCityAt } from './states';
 
 export * from './states';
@@ -23,6 +23,12 @@ export interface WorldTile extends Coord {
   mine?: boolean;
   /** A real player city's id (made-up towns on the generated map have none). */
   cityId?: string;
+  /** Valleys only: which resource its bonus goes to. */
+  terrain?: Terrain;
+  /** A valley someone holds: the city's name. */
+  heldBy?: string;
+  /** A valley one of your own cities holds. */
+  heldByMe?: boolean;
 }
 
 export interface World {
@@ -107,6 +113,7 @@ export function generateWorld({ seed, size = WORLD_SIZE, reserved = [] }: Genera
       }
       const level = kind === 'flat' ? 0 : 1 + Math.floor(hash(x, y, seed, 2) * 10);
       const tile: WorldTile = { x, y, kind, level };
+      if (kind === 'valley') tile.terrain = terrainAt(x, y, seed);
       if (kind === 'city') {
         const s = (n: number) => pick(SYLLABLES, hash(x, y, seed, 10 + n));
         const name = s(0) + s(1) + (hash(x, y, seed, 13) < 0.4 ? s(2) : '');
@@ -126,6 +133,17 @@ export function generateWorld({ seed, size = WORLD_SIZE, reserved = [] }: Genera
 }
 
 const wrap = (v: number, size: number) => ((Math.round(v) % size) + size) % size;
+
+/**
+ * A valley's terrain, from the map seed (Age3.World.terrain/2 on the server picks the same one). It decides which
+ * resource the valley's bonus goes to.
+ */
+export function terrainAt(x: number, y: number, seed: number, size = WORLD_SIZE): Terrain {
+  const order = VALLEY_TERRAINS;
+  return order[
+    Math.min(order.length - 1, Math.floor(hash(wrap(x, size), wrap(y, size), seed, 3) * order.length))
+  ]!;
+}
 
 /** The tile at any coordinate, wrapping around the edges. */
 export function tileAt(world: World, x: number, y: number): WorldTile {

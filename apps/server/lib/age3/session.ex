@@ -91,14 +91,35 @@ defmodule Age3.Session do
               "cancelResearch",
               "train",
               "cancelTrain",
+              "buildFort",
+              "cancelFort",
               "hire",
               "dismiss",
               "setMayor",
+              "assignPoints",
               "march",
               "recall",
+              "setGarrison",
+              "abandonValley",
               "imposePolicy",
               "promote",
               "getReports",
+              "getAlliance",
+              "getLeaderboard",
+              "buyItem",
+              "useItem",
+              "getQuests",
+              "claimQuest",
+              "getMarket",
+              "marketOrder",
+              "cancelOrder",
+              "getChat",
+              "chat",
+              "getMail",
+              "sendMail",
+              "readMail",
+              "deleteMail",
+              "alliance",
               "getReport",
               "cheat"
             ],
@@ -211,6 +232,23 @@ defmodule Age3.Session do
     end
   end
 
+  # Build wall fortifications: {cityId, fort, count}, fort being trap, abatis, tower, log or trebuchet. The
+  # batch joins the end of the walls' queue.
+  defp handle("buildFort", %{"cityId" => city_id, "fort" => fort, "count" => count}, id, session)
+       when is_binary(city_id) and is_binary(fort) and is_integer(count),
+       do: command(id, session, &session.store.build_forts(session.player_id, city_id, fort, count, &1))
+
+  defp handle("buildFort", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid fortification order."), session}
+
+  # Stop a fortification batch and get its cost back: {cityId, taskId}.
+  defp handle("cancelFort", %{"cityId" => city_id, "taskId" => task_id}, id, session)
+       when is_binary(city_id) and is_binary(task_id),
+       do: command(id, session, &session.store.cancel_forts(session.player_id, city_id, task_id, &1))
+
+  defp handle("cancelFort", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid cancel."), session}
+
   defp handle("cancelTrain", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid cancel."), session}
 
@@ -270,26 +308,34 @@ defmodule Age3.Session do
   defp handle("setMayor", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid mayor appointment."), session}
 
-  # Attack the NPC city at x, y: {cityId, x, y, heroId, troops: {warrior: 100, ...}, camp}. The troops, hero and
-  # the trip's food leave now; the battle happens when the march arrives (after camping `camp` seconds, 0 if left
-  # out), and a report follows. Replies with the new state.
+  # Send a march from a city to x, y: {cityId, x, y, heroId, troops: {warrior: 100, ...}, mission, camp, cargo}.
+  # mission is "attack" (the default; needs a hero), "scout" (needs scouts, hero optional), "transport" (cargo:
+  # resources to deliver), "reinforce" or "found" (250 workers and 10,000 of each resource build a city on a
+  # flat). The troops, hero, cargo and the trip's food leave now; the mission happens when the march arrives
+  # (after camping `camp` seconds for an attack), and a report follows. Replies with the new state.
   defp handle(
          "march",
-         %{"cityId" => city_id, "x" => x, "y" => y, "heroId" => hero_id, "troops" => %{} = troops} = payload,
+         %{"cityId" => city_id, "x" => x, "y" => y, "troops" => %{} = troops} = payload,
          id,
          session
        )
-       when is_binary(city_id) and is_integer(x) and is_integer(y) and is_binary(hero_id) do
+       when is_binary(city_id) and is_integer(x) and is_integer(y) do
     now = session.now.()
-    camp = Map.get(payload, "camp", 0)
+    hero_id = payload["heroId"]
 
-    case session.store.march(session.player_id, city_id, x, y, hero_id, troops, now, camp) do
-      {:ok, ends_at} ->
-        session.wake.(ends_at)
-        state_reply(id, session, now)
+    opts = %{
+      "camp" => Map.get(payload, "camp", 0),
+      "mission" => Map.get(payload, "mission", "attack"),
+      "cargo" => Map.get(payload, "cargo")
+    }
 
-      {:error, code} ->
-        {error(id, code, message(code)), session}
+    with true <- is_binary(hero_id) or is_nil(hero_id),
+         {:ok, ends_at} <- session.store.march(session.player_id, city_id, x, y, hero_id, troops, now, opts) do
+      session.wake.(ends_at)
+      state_reply(id, session, now)
+    else
+      false -> {error(id, "bad_message", "Not a valid march."), session}
+      {:error, code} -> {error(id, code, message(code)), session}
     end
   end
 
@@ -327,6 +373,139 @@ defmodule Age3.Session do
 
   defp handle("imposePolicy", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid policy."), session}
+
+  # Buy items from the shop with a city's gold: {cityId, item, count}. Replies with the state.
+  defp handle("buyItem", %{"cityId" => city_id, "item" => item, "count" => count}, id, session)
+       when is_binary(city_id) and is_binary(item),
+       do: command(id, session, &session.store.buy_item(session.player_id, city_id, item, count, &1))
+
+  # Use an item in a city: {cityId, item, taskId?} (a speed-up needs the task). Replies with the state.
+  defp handle("useItem", %{"cityId" => city_id, "item" => item} = p, id, session)
+       when is_binary(city_id) and is_binary(item) do
+    task_id = if is_binary(p["taskId"]), do: p["taskId"]
+    command(id, session, &session.store.use_item(session.player_id, city_id, item, task_id, &1))
+  end
+
+  # The routine quests: replies "quests" {quests: [...]}.
+  defp handle("getQuests", _payload, id, session),
+    do: {reply(id, "quests", %{quests: session.store.quests(session.player_id)}), session}
+
+  # Claim a done quest's reward into a city: {cityId, questId}. Replies with the state.
+  defp handle("claimQuest", %{"cityId" => city_id, "questId" => quest_id}, id, session)
+       when is_binary(city_id) and is_binary(quest_id),
+       do: command(id, session, &session.store.claim_quest(session.player_id, city_id, quest_id, &1))
+
+  defp handle(type, _payload, id, session) when type in ["buyItem", "useItem", "claimQuest"],
+    do: {error(id, "bad_message", "Not a valid item or quest."), session}
+
+  # A leaderboard: {board: "player" | "hero" | "alliance"}. Replies "leaderboard" {board, rows}.
+  defp handle("getLeaderboard", %{"board" => board}, id, session)
+       when board in ["player", "hero", "alliance"],
+       do: {reply(id, "leaderboard", %{board: board, rows: session.store.leaderboard(board)}), session}
+
+  defp handle("getLeaderboard", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid leaderboard."), session}
+
+  # The Marketplace from a city: {cityId}. Replies "market" {level, books, orders}.
+  defp handle("getMarket", %{"cityId" => city_id}, id, session) when is_binary(city_id) do
+    case session.store.market(session.player_id, city_id) do
+      {:ok, market} -> {reply(id, "market", market), session}
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  # Buy or sell: {cityId, side: "buy" | "sell", resource, amount, price (thousandths of a gold per unit)}. Replies
+  # with the state; the trade partners' games are told.
+  defp handle(
+         "marketOrder",
+         %{"cityId" => city_id, "side" => side, "resource" => r, "amount" => amount, "price" => price},
+         id,
+         session
+       )
+       when is_binary(city_id) do
+    now = session.now.()
+
+    case session.store.place_order(session.player_id, city_id, side, r, amount, price, now) do
+      {:ok, partners} ->
+        for p <- partners, do: notify(p, "trade")
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  # Cancel an open order: {cityId, orderId}. What it holds comes back.
+  defp handle("cancelOrder", %{"cityId" => city_id, "orderId" => order_id}, id, session)
+       when is_binary(city_id) and is_binary(order_id),
+       do: command(id, session, &session.store.cancel_order(session.player_id, city_id, order_id, &1))
+
+  defp handle(type, _payload, id, session) when type in ["getMarket", "marketOrder", "cancelOrder"],
+    do: {error(id, "bad_message", "Not a valid market order."), session}
+
+  # The latest world and alliance chat: replies "chatHistory" {messages}.
+  defp handle("getChat", _payload, id, session),
+    do: {reply(id, "chatHistory", %{messages: session.store.chat_history(session.player_id)}), session}
+
+  # Say something: {channel: "world" | "alliance", text}. Replies "chat" with the line, which is also pushed (no
+  # id) to every open game it reaches, the sender's included.
+  defp handle("chat", %{"channel" => channel, "text" => text}, id, session) do
+    case session.store.chat(session.player_id, channel, text, session.now.()) do
+      {:ok, line, to} ->
+        broadcast(session.store.chat_audience(to), %{type: "chat", payload: line})
+        {reply(id, "chat", line), session}
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("chat", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid chat line."), session}
+
+  # Mail. Each replies "mail" {inbox, sent}; sendMail {to, subject, body} also tells the receiver's open games.
+  defp handle("getMail", _payload, id, session), do: mailbox(id, session)
+
+  defp handle("sendMail", %{"to" => to, "subject" => subject, "body" => body}, id, session) do
+    case session.store.send_mail(session.player_id, to, subject, body, session.now.()) do
+      {:ok, receiver} ->
+        notify(receiver, "mail")
+        mailbox(id, session)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("readMail", %{"mailId" => mail_id}, id, session) when is_binary(mail_id),
+    do: mail_command(id, session, session.store.read_mail(session.player_id, mail_id))
+
+  defp handle("deleteMail", %{"mailId" => mail_id}, id, session) when is_binary(mail_id),
+    do: mail_command(id, session, session.store.delete_mail(session.player_id, mail_id))
+
+  defp handle(type, _payload, id, session) when type in ["sendMail", "readMail", "deleteMail"],
+    do: {error(id, "bad_message", "Not a valid mail."), session}
+
+  # The Alliance window's contents: replies "alliance" {alliance, invites, applied, embassy, alliances}.
+  defp handle("getAlliance", _payload, id, session),
+    do: {reply(id, "alliance", session.store.alliance_info(session.player_id)), session}
+
+  # An alliance action: {action, ...} (Age3.AllianceStore.action/3; "create" also takes cityId and name). Replies
+  # "alliance" like getAlliance; the player's alliance name in the state changes with the next state.
+  defp handle("alliance", %{"action" => action} = payload, id, session) when is_binary(action) do
+    case session.store.alliance_action(
+           session.player_id,
+           action,
+           Map.delete(payload, "action"),
+           session.now.()
+         ) do
+      :ok -> {reply(id, "alliance", session.store.alliance_info(session.player_id)), session}
+      {:error, code} -> {error(id, code, message(code)), session}
+    end
+  end
+
+  defp handle("alliance", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid alliance action."), session}
 
   # The latest battle reports, without the battles: replies "reports" {reports: [...]}.
   defp handle("getReports", _payload, id, session),
@@ -404,6 +583,32 @@ defmodule Age3.Session do
   defp handle("setGate", _payload, id, session),
     do: {error(id, "bad_message", "Open or close the gate with true or false."), session}
 
+  # The Embassy's "let allies garrison this city" box: {cityId, allow}.
+  defp handle("setGarrison", %{"cityId" => city_id, "allow" => allow}, id, session)
+       when is_binary(city_id) and is_boolean(allow),
+       do: command(id, session, &session.store.set_garrison(session.player_id, city_id, allow, &1))
+
+  defp handle("setGarrison", _payload, id, session),
+    do: {error(id, "bad_message", "Tick or untick with true or false."), session}
+
+  # Give up a valley a city holds: {cityId, x, y}.
+  defp handle("abandonValley", %{"cityId" => city_id, "x" => x, "y" => y}, id, session)
+       when is_binary(city_id) and is_integer(x) and is_integer(y),
+       do: command(id, session, &session.store.abandon_valley(session.player_id, city_id, x, y, &1))
+
+  defp handle("abandonValley", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid valley."), session}
+
+  # Spend a hero's stat points: {cityId, heroId, politics?, attack?, intelligence?}, each a number to add.
+  defp handle("assignPoints", %{"cityId" => city_id, "heroId" => hero_id} = p, id, session)
+       when is_binary(city_id) and is_binary(hero_id) do
+    add = Map.take(p, ~w(politics attack intelligence))
+    command(id, session, &session.store.assign_points(session.player_id, city_id, hero_id, add, &1))
+  end
+
+  defp handle("assignPoints", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid point assignment."), session}
+
   # The hero who leads a city's defence: {cityId, heroId} (null for nobody).
   defp handle("setDefender", %{"cityId" => city_id} = payload, id, session) when is_binary(city_id) do
     hero_id = payload["heroId"]
@@ -440,7 +645,7 @@ defmodule Age3.Session do
        when is_binary(city_id) and ladder in ["rank", "title"] do
     now = session.now.()
 
-    case session.store.promote(session.player_id, city_id, String.to_existing_atom(ladder), now) do
+    case session.store.promote(session.player_id, city_id, if(ladder == "rank", do: :rank, else: :title), now) do
       :ok -> state_reply(id, session, now)
       {:error, code} -> {error(id, code, message(code)), session}
     end
@@ -481,12 +686,28 @@ defmodule Age3.Session do
   @doc """
   Tells a player's open sockets that their game changed (Age3Web.GameSocket pushes them the new state). reason is
   "cheat" (someone cheated on this account), "attacked" (an attack on one of their cities arrived) or "march" (their
-  march reached another player's city while they weren't the one looking).
+  march reached another player's city while they weren't the one looking) or "incoming" (another lord's march set
+  out for one of their cities).
   """
   def notify(player_id, reason \\ "cheat") do
     Registry.dispatch(Age3.Players, player_id, fn sockets ->
       for {pid, _} <- sockets, do: send(pid, {:refresh, reason})
     end)
+  end
+
+  @doc "Pushes a message to the open games of these players (:all for everyone online)."
+  def broadcast(players, message) do
+    if Process.whereis(Age3.Players) do
+      pids =
+        case players do
+          :all -> Registry.select(Age3.Players, [{{:_, :"$1", :_}, [], [:"$1"]}])
+          ids -> Enum.flat_map(ids, fn id -> for {pid, _} <- Registry.lookup(Age3.Players, id), do: pid end)
+        end
+
+      for pid <- Enum.uniq(pids), do: send(pid, {:push, message})
+    end
+
+    :ok
   end
 
   @doc "The push for a change made by someone else: the player's whole state and the reason, with no id. nil if unreadable."
@@ -526,6 +747,33 @@ defmodule Age3.Session do
     end
   end
 
+  # A command that changes the game: run it at now and reply with the new state, or the error.
+  defp mailbox(id, session), do: {reply(id, "mail", session.store.mailbox(session.player_id)), session}
+
+  defp mail_command(id, session, :ok), do: mailbox(id, session)
+  defp mail_command(id, session, {:error, code}), do: {error(id, code, message(code)), session}
+
+  defp command(id, session, fun) do
+    now = session.now.()
+
+    case fun.(now) do
+      :ok ->
+        # a cancel can bring the next queued task forward
+        session.wake.(now)
+        state_reply(id, session, now)
+
+      {:ok, ends_at} when is_integer(ends_at) ->
+        session.wake.(ends_at)
+        state_reply(id, session, now)
+
+      {:ok, _} ->
+        state_reply(id, session, now)
+
+      {:error, code} ->
+        {error(id, code, message(code)), session}
+    end
+  end
+
   # One clock reading: resources are settled to exactly the serverTime the client projects from.
   defp state_reply(id, session, now) do
     case session.store.state(session.player_id, now) do
@@ -550,6 +798,22 @@ defmodule Age3.Session do
   defp slot_key(_slot), do: nil
 
   defp message("not_enough_resources"), do: "Not enough resources."
+  defp message("no_item"), do: "You don't have that item."
+  defp message("not_started"), do: "That batch hasn't started yet."
+  defp message("already_claimed"), do: "That reward was already claimed."
+  defp message("market_full"), do: "This city has as many orders open as its Marketplace level."
+  defp message("too_fast"), do: "Slow down: one chat line a second."
+  defp message("already_in_alliance"), do: "Already in an alliance."
+  defp message("no_embassy"), do: "Build an Embassy first."
+  defp message("no_alliance"), do: "No such alliance."
+  defp message("bad_name"), do: "Alliance names are 3 to 20 letters, numbers, spaces, - or _."
+  defp message("name_taken"), do: "That name is taken."
+  defp message("alliance_full"), do: "The alliance is full: the host's Embassy allows 10 members per level."
+  defp message("not_a_member"), do: "They aren't in your alliance."
+  defp message("friendly"), do: "You can't attack your own alliance or one yours calls friendly."
+  defp message("not_enough_points"), do: "The hero doesn't have that many points."
+  defp message("no_wall_space"), do: "Not enough fortified space on the walls."
+  defp message("fort_queue_full"), do: "The walls' queue is full."
   defp message("comfort_cooldown"), do: "The people were comforted less than 15 minutes ago."
   defp message("own_city"), do: "That city is already yours."
   defp message("queue_busy"), do: "Something is already being built in this city."
@@ -582,6 +846,16 @@ defmodule Age3.Session do
     do: "All this city's marches are out. Each Rally Spot level sends one march at a time."
 
   defp message("not_enough_troops"), do: "Not enough troops in the city."
+  defp message("no_scouts"), do: "A scouting march needs at least one scout."
+  defp message("not_enough_workers"), do: "Founding a city takes 250 workers."
+  defp message("too_much_cargo"), do: "The troops can't carry that much. Send more, or transporters."
+  defp message("own_valley"), do: "You already hold that valley."
+
+  defp message("valley_cap"),
+    do: "This city holds as many valleys as its Town Hall level. Upgrade it or abandon one."
+
+  defp message("city_cap"), do: "Your title doesn't allow another city yet."
+  defp message("not_allied"), do: "You can only reinforce an ally whose Embassy takes garrisons and has room."
   defp message("no_troops"), do: "Choose some troops to send."
   defp message("no_hero"), do: "Choose a hero to lead the march."
   defp message("hero_not_found"), do: "That hero isn't in those cities any more."
@@ -595,7 +869,7 @@ defmodule Age3.Session do
 
   defp message("already_returning"), do: "That march is already on its way back."
   defp message("not_enough_medals"), do: "Not enough medals."
-  defp message("rank_too_low"), do: "Your rank is too low for that title."
+  defp message("rank_too_low"), do: "Your rank is too low for that."
   defp message(_code), do: "Not a valid request."
 
   defp welcome(id, player_id, token, session) do

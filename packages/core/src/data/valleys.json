@@ -1,0 +1,105 @@
+{
+  "_source": "Bonus table: Evony Age II wiki, Valley (fetched 2026-11-02). Garrisons are not in the wiki: half an NPC of the same level, no fortifications (tunable).",
+  "terrains": {
+    "grassland": {
+      "name": "Grassland",
+      "resource": "food",
+      "bonus": [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    },
+    "swamp": {
+      "name": "Swamp",
+      "resource": "food",
+      "bonus": [5, 7, 9, 11, 13, 15, 17, 19, 21, 23]
+    },
+    "lake": {
+      "name": "Lake",
+      "resource": "food",
+      "bonus": [8, 11, 14, 17, 20, 23, 26, 29, 32, 35]
+    },
+    "hill": {
+      "name": "Hill",
+      "resource": "iron",
+      "bonus": [5, 7, 9, 11, 13, 15, 17, 19, 21, 23]
+    },
+    "desert": {
+      "name": "Desert",
+      "resource": "stone",
+      "bonus": [5, 7, 9, 11, 13, 15, 17, 19, 21, 23]
+    },
+    "forest": {
+      "name": "Forest",
+      "resource": "lumber",
+      "bonus": [5, 7, 9, 11, 13, 15, 17, 19, 21, 23]
+    }
+  },
+  "order": ["grassland", "swamp", "lake", "hill", "desert", "forest"],
+  "garrisons": [
+    {
+      "warrior": 25,
+      "pike": 20,
+      "sword": 18,
+      "archer": 8,
+      "cavalry": 4
+    },
+    {
+      "warrior": 25,
+      "pike": 22,
+      "sword": 20,
+      "archer": 15,
+      "cavalry": 12
+    },
+    {
+      "warrior": 100,
+      "pike": 80,
+      "sword": 32,
+      "archer": 20,
+      "cavalry": 30
+    },
+    {
+      "warrior": 200,
+      "pike": 200,
+      "sword": 50,
+      "archer": 50,
+      "cavalry": 75
+    },
+    {
+      "warrior": 375,
+      "pike": 500,
+      "sword": 175,
+      "archer": 125,
+      "cavalry": 100
+    },
+    {
+      "warrior": 2000,
+      "pike": 375,
+      "sword": 275,
+      "archer": 250,
+      "cavalry": 225
+    },
+    {
+      "warrior": 6000,
+      "pike": 1500,
+      "sword": 375,
+      "archer": 400,
+      "cavalry": 375
+    },
+    {
+      "warrior": 7500,
+      "pike": 3375,
+      "sword": 2000,
+      "archer": 1500,
+      "cavalry": 1000
+    },
+    {
+      "warrior": 30000,
+      "pike": 9000,
+      "sword": 1000,
+      "archer": 3375,
+      "cavalry": 1250
+    },
+    {
+      "warrior": 200000
+    }
+  ],
+  "regenSeconds": 3600
+}

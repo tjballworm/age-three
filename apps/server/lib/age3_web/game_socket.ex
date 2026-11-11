@@ -54,6 +54,9 @@ defmodule Age3Web.GameSocket do
     end
   end
 
+  # A chat line (or another message) for this player's game from Age3.Session.broadcast/2.
+  def handle_info({:push, message}, session), do: {:push, {:text, Jason.encode!(message)}, session}
+
   def handle_info(_msg, session), do: {:ok, session}
 
   @impl true

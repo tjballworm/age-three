@@ -23,6 +23,7 @@
     type TimedTask,
     type TownBuilding,
     type TroopType,
+    mayorSeconds,
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game, openBuild } from '$state/game.svelte';
@@ -55,6 +56,7 @@
   type Barracks = TownBuilding & { slot: number };
 
   const city = $derived(currentCity());
+  const mayor = $derived(city.heroes?.find((h) => h.status === 'mayor'));
   /** Every Barracks in the city, by plot. */
   const allBarracks = $derived(
     city.buildings
@@ -381,7 +383,11 @@
             >
           </div>
           <div class="fld">
-            Duration <output>{formatDuration(trainSeconds(troop, longest, research) * 1000)}</output>
+            Duration <output
+              >{formatDuration(
+                mayorSeconds(trainSeconds(troop, longest, research), mayor, 'train') * 1000,
+              )}</output
+            >
           </div>
         </div>
 

@@ -3,9 +3,9 @@ defmodule Age3.Pvp do
   # in plans/capture-loyalty-plan.md (project files) with TJ's answers of 2026-11-03:
   #
   #   * Any player city can be attacked: there is no beginner's protection for now.
-  #   * The defending city fights with its troops if its gate is open (or its loyalty is 5 or less: closed gates
-  #     open by themselves then), its walls, its owner's research and its defending hero (set apart from the
-  #     mayor). Player cities have no fortifications yet.
+  #   * The defending city fights with its troops (and its allies' stationed ones) if its gate is open (or its
+  #     loyalty is 5 or less: closed gates open by themselves then), its walls and fortifications, its owner's
+  #     research and its defending hero (set apart from the mayor).
   #   * A win plunders what the warehouses don't protect (gold is never protected; Privateering cuts the
   #     protection by 3% a level, wiki: capacity x 0.97^level), takes 3 loyalty and adds 2 grievance.
   #   * A win that arrives when the city's loyalty is already 0 captures it, if the attacker holds fewer than 10
@@ -52,7 +52,7 @@ defmodule Age3.Pvp do
   the owner's research as it counts in this city, its defending hero (a %{level, attack, intelligence,
   leadership, stars} map or nil) and its walls level.
   """
-  def battle(troops, tech, hero, walls, open?) do
+  def battle(troops, tech, hero, walls, open?, forts \\ %{}) do
     defender = %{
       Combat.default_army()
       | troops: troops,
@@ -61,17 +61,30 @@ defmodule Age3.Pvp do
         heal_percent: 0
     }
 
-    {defender, %{}, %{Combat.default_settings() | walls: walls, closed_gates: not open?, npc: false}}
+    {defender, forts || %{}, %{Combat.default_settings() | walls: walls, closed_gates: not open?, npc: false}}
   end
 
-  @doc "The defender's troops after the battle: the survivors, or all of them if they stayed behind the gate."
-  def troops_left(troops, result, open?) do
-    if open? do
-      survived = for t <- result.defender.troops, into: %{}, do: {t.type, t.survived}
-      Map.new(troops, fn {t, _n} -> {t, Map.get(survived, t, 0)} end)
-    else
-      troops
-    end
+  @doc """
+  The city's own troops after the battle: all of them if they stayed behind the gate; otherwise each type loses
+  the same share as the whole garrison did (garrison: the city's troops plus allies' stationed ones; the city's
+  own troops when left out).
+  """
+  def troops_left(troops, result, open?, garrison \\ nil) do
+    if open?, do: share_left(troops, result, garrison || troops), else: troops
+  end
+
+  @doc """
+  What is left of a group of troops (the city's own, or an ally's stationed ones) that fought as part of
+  garrison: each type keeps survived / fought of its count, rounded down (exactly the survivors when the group
+  is the whole garrison).
+  """
+  def share_left(group, result, garrison) do
+    survived = for t <- result.defender.troops, into: %{}, do: {t.type, t.survived}
+
+    Map.new(group, fn {t, n} ->
+      fought = Map.get(garrison, t, 0)
+      {t, if(fought > 0, do: div(n * Map.get(survived, t, 0), fought), else: n)}
+    end)
   end
 
   @doc """

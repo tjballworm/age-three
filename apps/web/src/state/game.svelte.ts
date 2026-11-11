@@ -8,6 +8,7 @@ import {
   type City,
   type Coord,
   type LordCity,
+  type MarchMission,
   type Player,
   type WorldTile,
 } from '@age3/core';
@@ -49,7 +50,7 @@ export const game = $state({
   syncedAt: startedAt,
   queue: sampleQueue(startedAt),
   chat: sampleChat(startedAt),
-  badges: { quests: 3, reports: 5, mail: 1 } as Partial<Record<WindowId, number>>,
+  badges: {} as Partial<Record<WindowId, number>>,
   openWindow: null as WindowId | null,
   mapTarget: null as Coord | null,
   /** World-map tile under the pointer, with its centre in screen pixels. */
@@ -58,8 +59,9 @@ export const game = $state({
   buildSlot: null as BuildSlot | null,
   /** World-map tile whose window is open. */
   selectedTile: null as WorldTile | null,
-  /** NPC tile the March window is sending an attack to. */
+  /** Tile the March window is sending a march to, and what for. */
   marchTarget: null as WorldTile | null,
+  marchMission: 'attack' as MarchMission,
   /** Another lord's city the Policies window imposes a policy on (from one of your historic cities). */
   policyTarget: null as WorldTile | null,
   /** Game server connection. While not online the game shows sample data. */
@@ -83,6 +85,7 @@ export function applyServerState(s: GameState) {
   game.queue = s.tasks;
   game.syncedAt = s.serverTime;
   game.badges.reports = s.player.unreadReports ?? 0;
+  game.badges.mail = s.player.unreadMail ?? 0;
   if (!s.cities.some((c) => c.id === game.cityId)) game.cityId = s.cities[0]?.id ?? '';
   if (!game.fromServer) {
     const home = s.cities[0];
@@ -134,9 +137,10 @@ export function selectTile(tile: WorldTile | null) {
   }
 }
 
-/** Opens the March window to attack this tile (closing the tile's window), or closes it with null. */
-export function openMarch(tile: WorldTile | null) {
+/** Opens the March window to send a march to this tile (closing the tile's window), or closes it with null. */
+export function openMarch(tile: WorldTile | null, mission: MarchMission = 'attack') {
   game.marchTarget = tile;
+  game.marchMission = mission;
   if (tile) game.selectedTile = null;
 }
 

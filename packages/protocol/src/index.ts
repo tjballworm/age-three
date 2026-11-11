@@ -3,12 +3,21 @@
 import type {
   BattleResult,
   BuildingType,
+  AllianceInfo,
+  AllianceRank,
+  ChatMessage,
   City,
+  FortType,
   Ladder,
   LordCity,
+  Mail,
+  MarketResource,
+  MarketView,
+  MarchMission,
   MedalCounts,
   Player,
   PolicyId,
+  QuestStatus,
   ReportSummary,
   ResourceType,
   TechId,
@@ -66,6 +75,23 @@ export type TrainMessage = Envelope<
 /** Stop a training batch (running or waiting) and get its cost and people back. The reply is a `state` message. */
 export type CancelTrainMessage = Envelope<'cancelTrain', { cityId: string; taskId: string }>;
 /**
+ * Spend a hero's stat points (from levelling up): each field is how many to add to that stat, all of them at most
+ * the hero's `points`. A mayor's Politics adds 1% production per point and speeds up building (x0.995 per point),
+ * Attack speeds up training (x0.9986), Intelligence research (x0.995). The reply is a `state` message.
+ */
+export type AssignPointsMessage = Envelope<
+  'assignPoints',
+  { cityId: string; heroId: string; politics?: number; attack?: number; intelligence?: number }
+>;
+/**
+ * Build `count` of a wall fortification (trap, abatis, tower, log, trebuchet). Each takes wall space (the walls
+ * give 1,000 at Lv1 up to 55,000 at Lv10), costs resources now and needs a walls level and research. The batch
+ * joins the end of the walls' queue (as many batches as the walls level). The reply is a `state` message.
+ */
+export type BuildFortMessage = Envelope<'buildFort', { cityId: string; fort: FortType; count: number }>;
+/** Stop a fortification batch (running or waiting) and get its cost back. The reply is a `state` message. */
+export type CancelFortMessage = Envelope<'cancelFort', { cityId: string; taskId: string }>;
+/**
  * Finishes a building's construction or upgrade for free when it has FREE_SPEEDUP_MS (5 minutes) or less left.
  * Research, training and walls can't be sped up (no_free_speedup). Replies with state.
  */
@@ -85,11 +111,16 @@ export type PersuadeMessage = Envelope<'persuade', { cityId: string; heroId: str
 /** Opens or closes the Rally Spot's gate. Closed, the troops stay out of battles. Replies with state. */
 export type SetGateMessage = Envelope<'setGate', { cityId: string; open: boolean }>;
 /**
- * Attack the NPC city at x, y with an idle hero and troops from the city. The troops, hero and the trip's food
- * (marchFood) leave now; the battle is fought when the march arrives (a taskDone with `march.won`), then it comes
- * home with the loot. Needs a Rally Spot (10,000 troops per level, one march out at a time per level). `camp` is
- * the camp wave: seconds (0 to 24 hours, 0 if left out) the army waits at the target before it attacks; the food
- * covers it. Replies with state.
+ * Send a march from a city to x, y. `mission` (default 'attack'):
+ * - 'attack': an NPC, lord's town, historic city, another player's city or a valley (a win takes it); needs an
+ *   idle hero. `camp` is the camp wave: seconds (0 to 24 hours) the army waits at the target before it attacks.
+ * - 'scout': anything but your own cities; needs scouts, a hero is optional (their Intelligence helps).
+ * - 'transport': any player's city, your own too; `cargo` is what it delivers (up to the troops' load).
+ * - 'reinforce': one of your cities (the troops move there), or an ally's whose Embassy takes garrisons.
+ * - 'found': an empty flat; takes 250 workers and 10,000 of each resource and builds a city there.
+ * The troops, hero, cargo and the trip's food (marchFood) leave now; the mission happens when the march arrives
+ * (a taskDone with `march.won`) and a report follows. Needs a Rally Spot (10,000 troops per level, one march out
+ * at a time per level). Replies with state.
  */
 export type MarchMessage = Envelope<
   'march',
@@ -97,14 +128,16 @@ export type MarchMessage = Envelope<
     cityId: string;
     x: number;
     y: number;
-    heroId: string;
+    heroId?: string | null;
     troops: Partial<Record<TroopType, number>>;
+    mission?: MarchMission;
     camp?: number;
+    cargo?: Partial<Record<ResourceType, number>>;
   }
 >;
 /**
  * Turn a march around before it attacks (on its way or camping); it takes as long to come home as it has been on
- * the road, at most one trip's time. Replies with state.
+ * the road, at most one trip's time. Troops stationed in an ally's city come the whole way home. Replies with state.
  */
 export type RecallMessage = Envelope<'recall', { cityId: string; taskId: string }>;
 /**
@@ -115,8 +148,67 @@ export type ImposePolicyMessage = Envelope<
   'imposePolicy',
   { cityId: string; x: number; y: number; policy: PolicyId }
 >;
+/** Gives up a valley the city holds (and its bonus). Replies with state. */
+export type AbandonValleyMessage = Envelope<'abandonValley', { cityId: string; x: number; y: number }>;
+/** The Embassy's "let allies garrison this city" box. Replies with state. */
+export type SetGarrisonMessage = Envelope<'setGarrison', { cityId: string; allow: boolean }>;
 /** The latest battle reports, newest first. Replies with `reports`. */
 export type GetReportsMessage = Envelope<'getReports', Record<string, never>>;
+/** Buy items from the shop with a city's gold. The reply is a `state` message (player.items). */
+export type BuyItemMessage = Envelope<'buyItem', { cityId: string; item: string; count: number }>;
+/** Use one item in a city: a speed-up on one of its tasks (taskId), or a resource item. Replies with `state`. */
+export type UseItemMessage = Envelope<'useItem', { cityId: string; item: string; taskId?: string }>;
+/** The routine quests. Replies with `quests`. */
+export type GetQuestsMessage = Envelope<'getQuests', Record<string, never>>;
+/** Claim a done quest's reward into a city (once). Replies with `state`. */
+export type ClaimQuestMessage = Envelope<'claimQuest', { cityId: string; questId: string }>;
+/** The top 100 of a leaderboard. Replies with `leaderboard`. */
+export type GetLeaderboardMessage = Envelope<'getLeaderboard', { board: 'player' | 'hero' | 'alliance' }>;
+/** The Marketplace from a city. Replies with `market`. */
+export type GetMarketMessage = Envelope<'getMarket', { cityId: string }>;
+/**
+ * Buy or sell a resource for gold. price is thousandths of a gold per unit (50 = 0.05). Pays up front (the
+ * resource, or amount * price / 1000 gold), trades at once with the orders that meet it at their price, and
+ * leaves the rest open (as many open orders per city as its Marketplace level). Sellers pay a 0.5% fee. The reply
+ * is a `state` message; the trade partners' games are told.
+ */
+export type MarketOrderMessage = Envelope<
+  'marketOrder',
+  { cityId: string; side: 'buy' | 'sell'; resource: MarketResource; amount: number; price: number }
+>;
+/** Cancel an open order; what it holds comes back. The reply is a `state` message. */
+export type CancelOrderMessage = Envelope<'cancelOrder', { cityId: string; orderId: string }>;
+/** The latest world and alliance chat lines. Replies with `chatHistory`. */
+export type GetChatMessage = Envelope<'getChat', Record<string, never>>;
+/**
+ * Say something in the world or your alliance's channel (200 characters, one line a second). Replies with
+ * `chat` (the line); the line is also pushed to every game it reaches, yours included.
+ */
+export type SendChatMessage = Envelope<'chat', { channel: 'world' | 'alliance'; text: string }>;
+/** Your inbox and sent mail. Replies with `mail`. */
+export type GetMailMessage = Envelope<'getMail', Record<string, never>>;
+/** Mail a player by name. Replies with `mail`; the receiver's game is told (unreadMail goes up). */
+export type SendMailMessage = Envelope<'sendMail', { to: string; subject: string; body: string }>;
+/** Mark a received mail read, or delete your copy of one. Replies with `mail`. */
+export type ReadMailMessage = Envelope<'readMail' | 'deleteMail', { mailId: string }>;
+/** The Alliance window's contents. Replies with `alliance`. */
+export type GetAllianceMessage = Envelope<'getAlliance', Record<string, never>>;
+/**
+ * One alliance action; replies with `alliance` (or an error). Founding pays 10,000 gold from a city with Embassy
+ * Lv2; joining needs an Embassy. Officers and up invite and accept, Presbyters and up remove lower ranks, Vice
+ * Hosts and up set lower ranks, diplomacy and the description; the Host hands over (rank 'host') or disbands.
+ */
+export type AllianceActionMessage = Envelope<
+  'alliance',
+  | { action: 'create'; cityId: string; name: string }
+  | { action: 'apply'; name: string }
+  | { action: 'cancel' | 'accept' | 'reject'; requestId: string }
+  | { action: 'invite' | 'kick'; player: string }
+  | { action: 'setRank'; player: string; rank: AllianceRank }
+  | { action: 'diplomacy'; name: string; status: 'friendly' | 'neutral' | 'hostile' }
+  | { action: 'describe'; text: string }
+  | { action: 'leave' | 'disband' }
+>;
 /** One report with the whole battle; marks it read. Replies with `report`. */
 export type GetReportMessage = Envelope<'getReport', { reportId: string }>;
 /**
@@ -206,6 +298,9 @@ export type ClientMessage =
   | CancelResearchMessage
   | TrainMessage
   | CancelTrainMessage
+  | BuildFortMessage
+  | AssignPointsMessage
+  | CancelFortMessage
   | HireMessage
   | RefreshInnMessage
   | DismissMessage
@@ -215,9 +310,26 @@ export type ClientMessage =
   | SetGateMessage
   | MarchMessage
   | RecallMessage
+  | AbandonValleyMessage
+  | SetGarrisonMessage
   | ImposePolicyMessage
   | GetReportsMessage
   | GetReportMessage
+  | GetAllianceMessage
+  | AllianceActionMessage
+  | BuyItemMessage
+  | UseItemMessage
+  | GetQuestsMessage
+  | ClaimQuestMessage
+  | GetLeaderboardMessage
+  | GetMarketMessage
+  | MarketOrderMessage
+  | CancelOrderMessage
+  | GetChatMessage
+  | SendChatMessage
+  | GetMailMessage
+  | SendMailMessage
+  | ReadMailMessage
   | PromoteMessage
   | CheatMessage;
 
@@ -239,9 +351,10 @@ export interface GameState {
   serverTime: number;
   /**
    * Only on a push with no id: why the game changed. 'cheat' (someone cheated on this account), 'attacked' (an
-   * attack on one of the player's cities arrived), 'march' (the player's march reached another player's city).
+   * attack on one of the player's cities arrived), 'march' (the player's march reached another player's city),
+   * 'incoming' (another lord's march set out for one of the player's cities and its Beacon Tower saw it).
    */
-  reason?: 'cheat' | 'attacked' | 'march';
+  reason?: 'cheat' | 'attacked' | 'march' | 'incoming' | 'mail' | 'trade';
 }
 /** The reply to getState and commands; also pushed with no id when someone else changed this game (see reason). */
 export type StateMessage = Envelope<'state', GameState>;
@@ -252,6 +365,22 @@ export type ReportsMessage = Envelope<'reports', { reports: ReportSummary[] }>;
 /** result is null for a policy report (no battle). */
 export type ReportMessage = Envelope<'report', { report: ReportSummary & { result: BattleResult | null } }>;
 
+export type AllianceReply = Envelope<'alliance', AllianceInfo>;
+/** A chat line: the reply to `chat`, and pushed (no id) to every game it reaches. */
+export type ChatLineMessage = Envelope<'chat', ChatMessage>;
+export type ChatHistoryMessage = Envelope<'chatHistory', { messages: ChatMessage[] }>;
+export type MailboxMessage = Envelope<'mail', { inbox: Mail[]; sent: Mail[] }>;
+export type MarketMessage = Envelope<'market', MarketView>;
+export type QuestsMessage = Envelope<'quests', { quests: QuestStatus[] }>;
+/** Rows ranked from 1: players (prestige), heroes (level) or alliances (members' prestige). */
+export type LeaderboardMessage = Envelope<
+  'leaderboard',
+  {
+    board: 'player' | 'hero' | 'alliance';
+    rows: (Record<string, string | number | null> & { rank: number })[];
+  }
+>;
+
 export type ServerMessage =
   | WelcomeMessage
   | PongMessage
@@ -259,7 +388,14 @@ export type ServerMessage =
   | TaskDoneMessage
   | ErrorMessage
   | ReportsMessage
-  | ReportMessage;
+  | ReportMessage
+  | AllianceReply
+  | ChatLineMessage
+  | ChatHistoryMessage
+  | MailboxMessage
+  | MarketMessage
+  | LeaderboardMessage
+  | QuestsMessage;
 
 export type ErrorCode =
   | 'bad_message'
@@ -336,4 +472,48 @@ export type ErrorCode =
   /** comfort less than 15 minutes after the last one in that city */
   | 'comfort_cooldown'
   /** a march to one of your own cities */
-  | 'own_city';
+  | 'own_city'
+  /** a scout march with no scouts */
+  | 'no_scouts'
+  /** a Found City march without 250 workers */
+  | 'not_enough_workers'
+  /** a transport carrying more than its troops' load */
+  | 'too_much_cargo'
+  /** attacking a valley one of your cities holds */
+  | 'own_valley'
+  /** the city already holds as many valleys as its Town Hall level */
+  | 'valley_cap'
+  /** founding a city when your title allows no more */
+  | 'city_cap'
+  /** reinforcing someone who isn't an ally, or whose Embassy doesn't take (more) garrisons */
+  | 'not_allied'
+  /** fortifications that don't fit in the space the walls have left */
+  | 'no_wall_space'
+  /** the walls' fortification queue already has as many batches as the walls level */
+  | 'fort_queue_full'
+  /** spending more stat points than the hero has */
+  | 'not_enough_points'
+  /** joining or founding an alliance while in one */
+  | 'already_in_alliance'
+  /** joining an alliance without an Embassy */
+  | 'no_embassy'
+  /** an alliance that doesn't exist, or an alliance action while in none */
+  | 'no_alliance'
+  /** an alliance name that isn't 3 to 20 letters, digits, spaces, - or _ */
+  | 'bad_name'
+  | 'name_taken'
+  /** the alliance has as many members as the host's Embassy allows (10 per level) */
+  | 'alliance_full'
+  | 'not_a_member'
+  /** attacking or scouting your own alliance, or one yours calls friendly */
+  | 'friendly'
+  /** more than one chat line a second */
+  | 'too_fast'
+  /** a city with as many open orders as its Marketplace level */
+  | 'market_full'
+  /** using an item the player doesn't have */
+  | 'no_item'
+  /** a speed-up on a training or fortification batch still waiting its turn */
+  | 'not_started'
+  /** a quest reward claimed before */
+  | 'already_claimed';

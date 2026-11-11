@@ -1,6 +1,6 @@
 // Core domain types shared by client and server.
 
-import type { TroopType } from '../combat/units';
+import type { FortType, TroopType } from '../combat/units';
 import type { MedalCounts } from '../data/titles';
 
 export type ResourceType = 'gold' | 'food' | 'lumber' | 'stone' | 'iron';
@@ -64,7 +64,46 @@ export interface City extends Coord {
   heroes?: CityHero[];
   /** Heroes the city's Inn offers for hire; null without an Inn. Missing from older servers. */
   inn?: Inn | null;
+  /** Fortifications built on the walls (traps, abatis, towers, logs, trebuchets). Missing from older servers. */
+  forts?: Partial<Record<FortType, number>>;
+  /** The Embassy's "let allies garrison this city" box. */
+  allowGarrison?: boolean;
+  /** Valleys the city holds (as many as its Town Hall level); each raises one resource's production. */
+  valleys?: HeldValley[];
+  /** Allies' troops stationed in the city: they fight for it while the gate is open, and eat its food. */
+  garrisons?: { taskId: string; cityId: string; owner: string; troops: Partial<Record<TroopType, number>> }[];
+  /** Marches of other lords on their way to this city, as much as its Beacon Tower can tell (BeaconWarning). */
+  incoming?: IncomingMarch[];
 }
+
+/** A valley a city holds. */
+export interface HeldValley extends Coord {
+  level: number;
+  terrain: Terrain;
+}
+
+/** The six valley terrains (Grassland, Swamp and Lake give food, Hill iron, Desert stone, Forest lumber). */
+export type Terrain = 'grassland' | 'swamp' | 'lake' | 'hill' | 'desert' | 'forest';
+
+/**
+ * Another lord's march heading for one of your cities. What is filled in depends on the city's Beacon Tower
+ * (Lv1 that it is coming, Lv2 its mission, Lv3 when it arrives, Lv4 the lord, Lv5 where from, Lv6 the troop
+ * types, Lv7 rough numbers, Lv8 exact numbers, Lv9 the hero's level, Lv10 their research). With no Beacon Tower
+ * nothing is known until it hits.
+ */
+export interface IncomingMarch {
+  id: string;
+  mission?: MarchMission;
+  arrivesAt?: number;
+  from?: string;
+  fromCity?: Coord & { name: string };
+  troops?: Partial<Record<TroopType, number | null>>;
+  heroLevel?: number;
+  research?: Partial<Record<TechId, number>>;
+}
+
+/** What a march goes to do. */
+export type MarchMission = 'attack' | 'scout' | 'transport' | 'reinforce' | 'found';
 
 /**
  * idle heroes can be hired out to marches, made mayor or dismissed; a mayor stays home. A captive came with a
@@ -81,6 +120,8 @@ export interface LordCity extends Coord {
   owner: string;
   ownerId: string;
   alliance?: string | null;
+  /** How your alliance sees theirs: the same alliance, friendly or hostile (null: neutral or none). */
+  relation?: 'alliance' | 'friendly' | 'hostile' | null;
   /** 12-18 when the city is a captured historic city. */
   historicLevel?: number | null;
 }
@@ -215,9 +256,15 @@ export interface Player {
   instantMarch?: boolean;
   /** Battle reports not opened yet. */
   unreadReports?: number;
+  /** Mail not read yet. */
+  unreadMail?: number;
+  /** Items held: item id -> count. */
+  items?: Record<string, number>;
+  /** Your rank in your alliance (null without one). */
+  allianceRank?: AllianceRank | null;
 }
 
-export type TaskKind = 'build' | 'train' | 'research' | 'march';
+export type TaskKind = 'build' | 'train' | 'research' | 'march' | 'fort';
 
 /** Anything with a start and end time: construction, training, research, marches. */
 export interface TimedTask {
@@ -238,19 +285,29 @@ export interface TimedTask {
    * Construction: the building and the level it will reach. Research: the tech and its new level. Training: the
    * troop and how many (targetLevel is the count).
    */
-  targetType?: TownBuildingType | FieldType | TechId | TroopType | 'attack';
+  targetType?: TownBuildingType | FieldType | TechId | TroopType | FortType | MarchMission;
   targetLevel?: number;
-  /** Marches only (targetType 'attack', targetLevel the NPC's level). */
+  /** Marches only (targetType the mission, targetLevel the level of whatever stands there). */
   march?: MarchInfo;
 }
 
-/** What a march carries. Phase 'out' is on its way to the target; 'back' is coming home. */
+/**
+ * What a march carries. Phase 'out' is on its way to the target; 'back' is coming home; 'stationed' is troops
+ * staying in an ally's city (reinforce) until recalled.
+ */
 export interface MarchInfo {
-  phase: 'out' | 'back';
+  phase: 'out' | 'back' | 'stationed';
   x: number;
   y: number;
-  heroId: string;
-  heroName: string;
+  /** null when no hero went (scouts, transports, reinforcements, founding). */
+  heroId: string | null;
+  heroName: string | null;
+  /** Missing from older servers: 'attack'. */
+  mission?: MarchMission;
+  /** Resources a transport (or a Found City march) carries there. */
+  cargo?: Partial<Record<ResourceType, number>>;
+  /** The ally's city a stationed reinforcement stays in. */
+  hostName?: string | null;
   /** Troops sent (out) or the survivors (back). */
   troops: Partial<Record<TroopType, number>>;
   /** What it carries home; empty on the way out. */
@@ -283,7 +340,14 @@ export interface ReportSummary {
    * "attack" for your attacks, "defence" for battles at your cities, "policy" for a policy your historic city
    * imposed and "policied" for one imposed on your city. Missing from older servers.
    */
-  side?: 'attack' | 'defence' | 'policy' | 'policied';
+  side?: 'attack' | 'defence' | 'policy' | 'policied' | 'scout' | 'scouted';
+  /**
+   * 'battle' (a whole battle comes with getReport), or a mission's report with no battle: 'scout', 'transport',
+   * 'reinforce', 'found' or 'valley' (a valley you held was taken).
+   */
+  kind?: 'battle' | 'scout' | 'transport' | 'reinforce' | 'found' | 'valley';
+  /** What a scout saw (for the sender), or who scouted you (side 'scouted'). */
+  scout?: ScoutSeen | null;
   /** A policy report: which policy, from and to which city, and what it took. No battle comes with it. */
   policy?: {
     policy: string;
@@ -310,4 +374,117 @@ export interface ChatMessage {
   from: string | null;
   text: string;
   at: number;
+}
+
+/**
+ * What a scout saw. detail grows with the scout level against the target: 'basic' shows the resources, walls and
+ * which troops and fortifications are there (counts null); 'approx' counts rounded to two figures, the buildings
+ * and the gate; 'exact' the exact counts, research and heroes. failed says why it didn't get through (the scouts
+ * died); by is who scouted your city.
+ */
+export interface ScoutSeen {
+  detail?: 'basic' | 'approx' | 'exact';
+  failed?: string | boolean;
+  by?: string;
+  resources?: Partial<Record<ResourceType, number>>;
+  walls?: number;
+  troops?: Partial<Record<TroopType, number | null>>;
+  forts?: Partial<Record<FortType, number | null>>;
+  research?: Record<string, number>;
+  buildings?: { type: string; level: number; slot: string }[];
+  heroes?: { name: string; level: number; status: string }[];
+  gateOpen?: boolean;
+  /** A held valley: the city holding it. */
+  holder?: string;
+}
+
+/** Alliance ranks, lowest first. */
+export type AllianceRank = 'member' | 'officer' | 'presbyter' | 'vice' | 'host';
+
+export interface AllianceMember {
+  id: string;
+  name: string;
+  rank: AllianceRank;
+  prestige: number;
+  cities: number;
+}
+
+/** What the Alliance window shows (the server's `alliance` reply). */
+export interface AllianceInfo {
+  alliance: {
+    id: string;
+    name: string;
+    description: string;
+    /** Your rank. */
+    rank: AllianceRank;
+    members: AllianceMember[];
+    /** 10 per level of the host's best Embassy. */
+    memberCap: number;
+    diplomacy: { id: string; name: string; status: 'friendly' | 'hostile' }[];
+    /** Applications to join (only shown to Officers and up). */
+    applications: { id: string; player: string; prestige: number }[];
+  } | null;
+  /** Alliances inviting you. */
+  invites: { id: string; alliance: string }[];
+  /** Alliances you applied to. */
+  applied: { id: string; alliance: string }[];
+  /** Your best Embassy level (1 to join, 2 to found). */
+  embassy: number;
+  /** The biggest alliances. */
+  alliances: { id: string; name: string; members: number; prestige: number; host: string | null }[];
+}
+
+/** A mail between players. */
+export interface Mail {
+  id: string;
+  from: string;
+  to: string;
+  subject: string;
+  body: string;
+  read: boolean;
+  at: number;
+}
+
+/** Marketplace resources (traded for gold). */
+export type MarketResource = 'food' | 'lumber' | 'stone' | 'iron';
+
+/** The Marketplace seen from a city (the server's `market` reply). Prices are thousandths of a gold per unit. */
+export interface MarketView {
+  /** This city's Marketplace level: how many orders it can have open. */
+  level: number;
+  books: Record<
+    MarketResource,
+    {
+      /** Best bids first. */
+      buy: { price: number; amount: number }[];
+      /** Cheapest offers first. */
+      sell: { price: number; amount: number }[];
+      /** The last trade's price, if any. */
+      last: number | null;
+    }
+  >;
+  /** Your open orders, in every city. */
+  orders: {
+    id: string;
+    cityId: string;
+    city: string;
+    side: 'buy' | 'sell';
+    resource: MarketResource;
+    amount: number;
+    price: number;
+  }[];
+}
+
+/** A routine quest and how the player stands with it (the server's `quests` reply). */
+export interface QuestStatus {
+  id: string;
+  category: 'routine' | 'military' | 'economy';
+  name: string;
+  goal: Record<string, unknown>;
+  reward: {
+    resources?: Partial<Record<ResourceType, number>>;
+    items?: Record<string, number>;
+  };
+  done: boolean;
+  claimed: boolean;
 }

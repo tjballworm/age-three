@@ -21,6 +21,7 @@
     transition: width 0.25s linear;
   }
   .build,
+  .fort,
   .gold {
     background: linear-gradient(180deg, var(--gold-light), var(--gold-deep) 55%, #d98a12);
   }

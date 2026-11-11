@@ -34,6 +34,17 @@ defmodule Age3.World do
     end
   end
 
+  @doc """
+  A valley's terrain (grassland, swamp, lake, hill, desert or forest), from the map seed like terrainAt() in
+  packages/core/src/world. Only valleys have one; it decides which resource the valley's bonus goes to.
+  """
+  def terrain(x, y, seed \\ Game.world_seed()) do
+    size = Game.world_size()
+    terrains = Age3.Data.terrains()
+    i = floor(hash(Integer.mod(x, size), Integer.mod(y, size), seed, 3) * length(terrains))
+    Enum.at(terrains, min(i, length(terrains) - 1))
+  end
+
   # the first kind whose running share passes r (the shares are added one by one, as in the TypeScript loop)
   defp kind_for(r) do
     Enum.reduce_while(@mix, 0, fn {kind, share}, acc ->

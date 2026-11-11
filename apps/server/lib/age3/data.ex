@@ -32,9 +32,34 @@ defmodule Age3.Data do
   @external_resource @historic_path
   @historic @historic_path |> File.read!() |> Jason.decode!()
 
+  @forts_path Path.expand("../../priv/data/fortifications.json", __DIR__)
+  @external_resource @forts_path
+  @forts @forts_path |> File.read!() |> Jason.decode!()
+
+  @valleys_path Path.expand("../../priv/data/valleys.json", __DIR__)
+  @external_resource @valleys_path
+  @valleys @valleys_path |> File.read!() |> Jason.decode!()
+
+  @items_path Path.expand("../../priv/data/items.json", __DIR__)
+  @external_resource @items_path
+  @items @items_path |> File.read!() |> Jason.decode!()
+
+  @quests_path Path.expand("../../priv/data/quests.json", __DIR__)
+  @external_resource @quests_path
+  @quests @quests_path |> File.read!() |> Jason.decode!()
+
   @titles_path Path.expand("../../priv/data/titles.json", __DIR__)
   @external_resource @titles_path
   @titles @titles_path |> File.read!() |> Jason.decode!()
+
+  @doc "An item's spec (priv/data/items.json), or nil."
+  def item(id), do: @items["items"][id]
+
+  @doc "Every item id."
+  def item_ids, do: Map.keys(@items["items"])
+
+  @doc "The routine quests, in order (priv/data/quests.json)."
+  def quests, do: @quests["quests"]
 
   @doc "The nine medal ids, lowest first: cross ... nation."
   def medal_ids, do: Enum.map(@medals["medals"], & &1["id"])
@@ -138,4 +163,29 @@ defmodule Age3.Data do
 
   @doc ~s(One troop's spec: "name", "cost", "seconds", "population", "upkeep", "requires", "research", or nil.)
   def troop(id), do: @troops["troops"][id]
+
+  @doc ~s(One fortification's spec: "name", "space", "cost", "seconds", "walls", "research", or nil.)
+  def fort(id), do: @forts["forts"][id]
+
+  @doc "Every fortification id: trap, abatis, tower, log, trebuchet."
+  def fort_ids, do: Map.keys(@forts["forts"])
+
+  @doc "Fortified spaces the walls give at this level (0 without walls)."
+  def fort_spaces(level) when is_integer(level) and level in 1..10, do: Enum.at(@forts["spaces"], level - 1)
+  def fort_spaces(_level), do: 0
+
+  @doc "The six valley terrains, in the order World.terrain/2 picks from."
+  def terrains, do: @valleys["order"]
+
+  @doc ~s(One terrain: %{"name", "resource", "bonus" => [Lv1 % ... Lv10 %]}, or nil.)
+  def terrain(id), do: @valleys["terrains"][id]
+
+  @doc "A valley's garrison at this level, when nobody holds it: %{\"warrior\" => 25, ...}."
+  def valley_garrison(level) when is_integer(level) and level in 1..10,
+    do: Enum.at(@valleys["garrisons"], level - 1)
+
+  def valley_garrison(_level), do: %{}
+
+  @doc "Seconds an emptied valley takes to refill its garrison."
+  def valley_regen_seconds, do: @valleys["regenSeconds"]
 end

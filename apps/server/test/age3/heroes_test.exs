@@ -84,4 +84,25 @@ defmodule Age3.HeroesTest do
     assert Heroes.gain_exp(%{level: 99, exp: 0, points: 0}, 10_000_000) == %{level: 100, exp: 0, points: 1}
     assert Heroes.gain_exp(%{level: 100, exp: 0, points: 3}, 5) == %{level: 100, exp: 0, points: 3}
   end
+
+  test "points go into Politics, Attack and Intelligence, never more than the hero has" do
+    h = %{points: 3, politics: 10, attack: 20, intelligence: 30}
+
+    assert Heroes.assign(h, %{"politics" => 2, "intelligence" => 1}) ==
+             {:ok, [points: 0, politics: 12, attack: 20, intelligence: 31]}
+
+    assert Heroes.assign(h, %{"attack" => 4}) == {:error, "not_enough_points"}
+    assert Heroes.assign(h, %{"attack" => -1}) == {:error, "bad_message"}
+    assert Heroes.assign(h, %{"luck" => 1}) == {:error, "bad_message"}
+    assert Heroes.assign(h, %{}) == {:error, "bad_message"}
+  end
+
+  test "a mayor's stats speed up builds (Politics), research (Intelligence) and training (Attack)" do
+    mayor = %{politics: 100, attack: 100, intelligence: 0}
+    assert Heroes.mayor_seconds(1000, nil, :build) == 1000
+    assert Heroes.mayor_seconds(1000, mayor, :build) == round(1000 * :math.pow(0.995, 100))
+    assert Heroes.mayor_seconds(1000, mayor, :train) == round(1000 * :math.pow(0.9986, 100))
+    assert Heroes.mayor_seconds(1000, mayor, :research) == 1000
+    assert Heroes.mayor_seconds(1, mayor, :build) == 1
+  end
 end

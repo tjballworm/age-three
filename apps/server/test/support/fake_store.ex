@@ -73,6 +73,80 @@ defmodule Age3.FakeStore do
   def cancel_train(_player_id, _city_id, "t1", _now_ms), do: :ok
   def cancel_train(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
 
+  @impl true
+  def build_forts(_player_id, _city_id, "trap", 10, now_ms), do: {:ok, now_ms + 60_000}
+  def build_forts(_player_id, _city_id, _fort, _count, _now_ms), do: {:error, "no_wall_space"}
+
+  @impl true
+  def cancel_forts(_player_id, _city_id, "t1", _now_ms), do: :ok
+  def cancel_forts(_player_id, _city_id, _task_id, _now_ms), do: {:error, "bad_message"}
+
+  @impl true
+  def assign_points(_player_id, _city_id, "h1", %{"politics" => 1}, _now_ms), do: :ok
+  def assign_points(_player_id, _city_id, _hero_id, _add, _now_ms), do: {:error, "not_enough_points"}
+
+  @impl true
+  def alliance_info(_player_id), do: %{alliance: nil, invites: [], applied: [], embassy: 1, alliances: []}
+
+  @impl true
+  def alliance_action(_player_id, "apply", %{"name" => "Pact"}, _now_ms), do: :ok
+  def alliance_action(_player_id, _action, _args, _now_ms), do: {:error, "no_alliance"}
+
+  @impl true
+  def chat(_player_id, "world", "hi", now_ms),
+    do: {:ok, %{id: "l1", channel: "world", from: "Tester", text: "hi", at: now_ms}, :all}
+
+  def chat(_player_id, _channel, _text, _now_ms), do: {:error, "no_alliance"}
+
+  @impl true
+  def chat_history(_player_id), do: []
+
+  @impl true
+  def chat_audience(_to), do: []
+
+  @impl true
+  def send_mail(_player_id, "Other", _subject, _body, _now_ms), do: {:ok, "p2"}
+  def send_mail(_player_id, _to, _subject, _body, _now_ms), do: {:error, "player_not_found"}
+
+  @impl true
+  def mailbox(_player_id), do: %{inbox: [], sent: []}
+
+  @impl true
+  def read_mail(_player_id, "m1"), do: :ok
+  def read_mail(_player_id, _mail_id), do: {:error, "bad_message"}
+
+  @impl true
+  def delete_mail(_player_id, _mail_id), do: :ok
+
+  @impl true
+  def market(_player_id, "c1"), do: {:ok, %{level: 1, books: %{}, orders: []}}
+  def market(_player_id, _city_id), do: {:error, "bad_message"}
+
+  @impl true
+  def place_order(_player_id, "c1", "sell", "food", 100, 50, _now_ms), do: {:ok, []}
+  def place_order(_player_id, _city_id, _side, _r, _amount, _price, _now_ms), do: {:error, "market_full"}
+
+  @impl true
+  def cancel_order(_player_id, _city_id, _order_id, _now_ms), do: :ok
+
+  @impl true
+  def leaderboard(board), do: [%{rank: 1, name: board}]
+
+  @impl true
+  def buy_item(_player_id, _city_id, "speed1h", 1, _now_ms), do: :ok
+  def buy_item(_player_id, _city_id, _item, _count, _now_ms), do: {:error, "not_enough_resources"}
+
+  @impl true
+  def use_item(_player_id, _city_id, "speed1h", "t1", _now_ms), do: :ok
+  def use_item(_player_id, _city_id, _item, _task_id, _now_ms), do: {:error, "no_item"}
+
+  @impl true
+  def quests(_player_id), do: [%{id: "cottage1", done: true, claimed: false}]
+
+  @impl true
+  def claim_quest(_player_id, _city_id, "cottage1", _now_ms), do: :ok
+  def claim_quest(_player_id, _city_id, _quest_id, _now_ms), do: {:error, "already_claimed"}
+
   # task "t1" has under 5 minutes left; "t2" has more
   @impl true
   def speed_up(_player_id, _city_id, "t1", _now_ms), do: :ok
@@ -104,8 +178,14 @@ defmodule Age3.FakeStore do
   def set_mayor(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "bad_message"}
 
   @impl true
-  def march(_player_id, "c1", 10, 20, "h1", %{"warrior" => 100}, now_ms, camp),
-    do: {:ok, now_ms + (60 + camp) * 1000}
+  def march(_player_id, "c1", 10, 20, "h1", %{"warrior" => 100}, now_ms, %{
+        "camp" => camp,
+        "mission" => "attack"
+      }),
+      do: {:ok, now_ms + (60 + camp) * 1000}
+
+  def march(_player_id, "c1", 10, 20, nil, %{"scout" => 10}, now_ms, %{"mission" => "scout"}),
+    do: {:ok, now_ms + 5000}
 
   def march(_player_id, _city_id, _x, _y, _hero_id, _troops, _now_ms, _camp), do: {:error, "bad_target"}
 
@@ -123,4 +203,12 @@ defmodule Age3.FakeStore do
   @impl true
   def report(_player_id, "r1"), do: {:ok, %{id: "r1", won: true, result: %{"winner" => "attacker"}}}
   def report(_player_id, _report_id), do: {:error, "bad_message"}
+
+  @impl true
+  def set_garrison(_player_id, "c1", _allow, _now_ms), do: :ok
+  def set_garrison(_player_id, _city_id, _allow, _now_ms), do: {:error, "bad_message"}
+
+  @impl true
+  def abandon_valley(_player_id, "c1", 1, 2, _now_ms), do: :ok
+  def abandon_valley(_player_id, _city_id, _x, _y, _now_ms), do: {:error, "bad_message"}
 end

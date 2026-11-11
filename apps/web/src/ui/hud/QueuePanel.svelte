@@ -21,6 +21,7 @@
     train: 'train',
     research: 'research',
     march: 'march',
+    fort: 'walls',
   };
 
   /** Only building construction and upgrades (not walls) with 5 minutes or less left get a free Speedup button. */
@@ -30,7 +31,10 @@
    * A march still on its way (or camping) can be called back; it takes as long to come home as it has been out, at
    * most one trip.
    */
-  const canRecall = (t: TimedTask) => game.fromServer && t.kind === 'march' && t.march?.phase === 'out';
+  const canRecall = (t: TimedTask) =>
+    game.fromServer && t.kind === 'march' && (t.march?.phase === 'out' || t.march?.phase === 'stationed');
+  /** Troops staying in an ally's city until recalled: no end time. */
+  const stationed = (t: TimedTask) => t.kind === 'march' && t.march?.phase === 'stationed';
   /** A march waiting out its camp wave at the target. */
   const camping = (t: TimedTask) =>
     t.kind === 'march' &&
@@ -41,6 +45,29 @@
     command({ type: 'recall', payload: { cityId: t.cityId, taskId: t.id } }).catch((e) =>
       console.warn('Recall failed:', e),
     );
+
+  /**
+   * Other lords' marches heading for any of the player's cities, as their Beacon Towers see them (no tower, no
+   * warning). Lv2 tells the mission, Lv3 the arrival time, Lv4 the lord, Lv5 where from, Lv6+ the troops.
+   */
+  const incoming = $derived(
+    game.cities
+      .flatMap((c) => (c.incoming ?? []).map((m) => ({ ...m, city: c.name })))
+      .sort((a, b) => (a.arrivesAt ?? Infinity) - (b.arrivesAt ?? Infinity)),
+  );
+  const MISSION: Record<string, string> = {
+    attack: 'Attack',
+    scout: 'Scouts',
+    transport: 'Transport',
+    reinforce: 'Reinforcements',
+    found: 'March',
+  };
+  const troopsText = (t: Record<string, number | null | undefined> | undefined) =>
+    t
+      ? Object.entries(t)
+          .map(([k, n]) => (n == null ? k : `${n.toLocaleString('en-US')} ${k}`))
+          .join(', ')
+      : '';
 
   let filter = $state<Filter>('all');
   let collapsed = $state(false);
@@ -66,15 +93,35 @@
     </button>
     <span class="count">{rows.length}</span>
   </header>
+  {#each incoming as m (m.id)}
+    <div
+      class="incoming"
+      role="alert"
+      title={[
+        m.fromCity ? `From ${m.fromCity.name} (${m.fromCity.x},${m.fromCity.y})` : '',
+        troopsText(m.troops),
+        m.heroLevel ? `Hero Lv ${m.heroLevel}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')}
+    >
+      <span class="label"
+        >⚠ {m.mission ? MISSION[m.mission] : 'Enemy march'}{m.from ? ` from ${m.from}` : ''} → {m.city}</span
+      >
+      {#if m.arrivesAt}<span class="time">{formatDuration(Math.max(0, m.arrivesAt - clock.now))}</span>{/if}
+    </div>
+  {/each}
   {#if !collapsed}
     <Tabs tabs={TABS} bind:active={filter} size="small" />
     <div class="rows">
       {#each rows as task (task.id)}
         <div class="row" title={task.label}>
-          <ProgressBar value={progress(task, clock.now)} tone={task.kind} />
+          <ProgressBar value={stationed(task) ? 1 : progress(task, clock.now)} tone={task.kind} />
           <span class="ic"><Icon name={ICON[task.kind]} size={14} stroke={2.2} /></span>
           <span class="label">{task.label}{camping(task) ? ' (camping)' : ''}</span>
-          <span class="time">{formatDuration(remaining(task, clock.now))}</span>
+          <span class="time"
+            >{stationed(task) ? 'stationed' : formatDuration(remaining(task, clock.now))}</span
+          >
           {#if canRecall(task)}
             <button class="speedup" type="button" onclick={() => recall(task)}>Recall</button>
           {/if}
@@ -128,6 +175,19 @@
     text-align: center;
     font-weight: 700;
     font-size: 11px;
+  }
+  .incoming {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 3px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #7a1010cc;
+    border: 1px solid #e05050;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
   }
   .rows {
     display: flex;

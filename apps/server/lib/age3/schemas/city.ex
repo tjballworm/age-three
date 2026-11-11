@@ -20,6 +20,9 @@ defmodule Age3.City do
     # the Rally Spot's "open gate to fight": closed keeps the troops out of battles (they open by themselves at
     # loyalty 5 or less)
     field :gate_open, :boolean, default: false
+
+    # the Embassy's "let allies garrison this city" box: allies can station reinforcements here (Age3.Store.march)
+    field :allow_garrison, :boolean, default: false
     # the hero who leads the city's defence, chosen apart from the mayor (TJ, 2026-11-03)
     field :defender_hero_id, :binary_id
     field :tax_rate, :integer, default: 10
@@ -32,6 +35,8 @@ defmodule Age3.City do
     field :population, :map
     # trained troops, e.g. %{"warrior" => 100}; troops still training are tasks
     field :troops, :map, default: %{}
+    # fortifications on the walls: %{"trap" => 100, ...} (Age3.Forts)
+    field :forts, :map, default: %{}
     field :inn, :map, default: %{}
     # when the resources snapshot was taken; Age3.Economy.settle works forward from here
     field :synced_at, :utc_datetime_usec

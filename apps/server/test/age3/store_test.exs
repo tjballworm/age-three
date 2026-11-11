@@ -16,7 +16,7 @@ defmodule Age3.Store.PgTest do
     assert {:ok, ^id} = Pg.find_or_create_player("Test Lord")
 
     {:ok, player, [city], []} = Pg.state(id, System.system_time(:millisecond))
-    assert %{name: "Test Lord", title: "Civilian", alliance: nil, rank: 0} = player
+    assert %{name: "Test Lord", title: "Civilian", alliance: nil, rank: 1} = player
     assert city.name == "Test Lord's Town"
     assert city.x in 0..799 and city.y in 0..799
     # settled to now, so a moment's production may have been added

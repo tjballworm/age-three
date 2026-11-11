@@ -13,6 +13,7 @@
     techLevel,
     type BuildingType,
     type TechId,
+    mayorSeconds,
   } from '@age3/core';
   import { clock } from '$state/clock.svelte';
   import { currentCity, game, openBuild, type BuildSlot } from '$state/game.svelte';
@@ -23,6 +24,7 @@
   import Window from '$ui/components/Window.svelte';
   import { formatDuration, formatNumber } from '$ui/format';
   import { tooltip } from '$ui/tooltip.svelte';
+  import EmbassyPanel from './EmbassyPanel.svelte';
   import HallPanel from './HallPanel.svelte';
   import InnPanel from './InnPanel.svelte';
   import ResearchPanel from './ResearchPanel.svelte';
@@ -34,6 +36,7 @@
   let { slot }: { slot: BuildSlot } = $props();
 
   const city = $derived(currentCity());
+  const mayor = $derived(city.heroes?.find((h) => h.status === 'mayor'));
   const isField = $derived(typeof slot === 'string' && slot.startsWith('f'));
   /** The slot as the server names it, which is how tasks refer to it. */
   const key = $derived(String(slot));
@@ -131,10 +134,10 @@
           : 'Empty plot',
   );
   /**
-   * The Academy, Barracks, Inn, Feasting Hall and Walls get one window: the building and its Upgrade on top, what
+   * The Academy, Barracks, Inn, Feasting Hall, Walls and Embassy get one window: the building and its Upgrade on top, what
    * it does below.
    */
-  const PANELS = ['academy', 'barracks', 'inn', 'feastinghall', 'walls'] as const;
+  const PANELS = ['academy', 'barracks', 'inn', 'feastinghall', 'walls', 'embassy'] as const;
   type Panel = (typeof PANELS)[number];
   const panel = $derived(
     standing && (PANELS as readonly string[]).includes(standing.type) ? (standing.type as Panel) : null,
@@ -159,6 +162,10 @@
       icon: 'walls',
       text: 'The walls guard your city; open the gate to send your troops out to fight, or close it and let the walls hold.',
     },
+    embassy: {
+      icon: 'alliance',
+      text: 'The Embassy lets you join (Lv1) or found (Lv2) an alliance, and hosts allied troops: one wave per level.',
+    },
   } as const;
 </script>
 
@@ -169,7 +176,8 @@
       {#each RESOURCE_TYPES.filter((r) => lv.cost[r] > 0) as r (r)}
         <span><ResourceIcon type={r} size={14} /> {formatNumber(lv.cost[r])}</span>
       {/each}
-      <span>⏱ {formatDuration(buildSeconds(lv.seconds, research) * 1000)}</span>
+      <span>⏱ {formatDuration(mayorSeconds(buildSeconds(lv.seconds, research), mayor, 'build') * 1000)}</span
+      >
     </span>
   {/if}
 {/snippet}
@@ -223,6 +231,8 @@
         <HallPanel />
       {:else if panel === 'walls'}
         <WallsPanel />
+      {:else if panel === 'embassy'}
+        <EmbassyPanel />
       {:else if typeof slot === 'number'}
         <TrainPanel plot={slot} />
       {/if}

@@ -16,31 +16,43 @@ defmodule Age3.March do
   @troops_per_rally_level 10_000
   # the longest camp wave: a march waits at most this many seconds at its target before attacking
   @max_camp 24 * 3600
+  @missions ~w(attack scout transport reinforce found)
+  @cargo_types ~w(food lumber stone iron gold)
+  # (wiki) a new city needs 250 workers and 10,000 of each resource
+  @found_workers 250
+  @found_resources 10_000
 
   def speed, do: @speed
 
   @doc """
-  Can this attack leave? buildings and research are the city's (research capped with Research.in_city), troops
+  Can this march leave? buildings and research are the city's (research capped with Research.in_city), troops
   the city's troops, hero the hero sent (a map with :status, or nil), from the city's {x, y}, to the target
   {x, y}, food the city's settled food, send the troops to send (%{"warrior" => 100}).
 
-  target is what stands at `to` (Age3.Pvp.target/3): {:npc, level}, {:lord, level}, {:historic, level},
-  {:city, city} or {:error, code}; left out, only an NPC will do.
+  target is what stands at `to` for this mission (Age3.March.target/4): {:npc, level}, {:lord, level},
+  {:historic, level}, {:valley, level}, {:flat, 0}, {:city, city} or {:error, code}; left out, only an NPC will do.
 
-  opts: :rally_multiplier, a held historic city's Rally Spot sends more (Age3.Historic.rally_multiplier/1);
-  :marches, how many marches the city has out already (one per Rally Spot level at a time); :camp, the camp wave
-  in seconds (the army waits that long at the target before it attacks, and eats food meanwhile).
+  opts: :mission ("attack" by default, "scout", "transport", "reinforce" or "found"); :rally_multiplier, a held
+  historic city's Rally Spot sends more (Age3.Historic.rally_multiplier/1); :marches, how many marches the city
+  has out already (one per Rally Spot level at a time); :camp, the camp wave in seconds (attacks only: the army
+  waits that long at the target before it attacks, and eats food meanwhile); :cargo, resources a transport
+  carries (%{"food" => 100}), and :stock, the city's settled amounts to pay them from; :relief, how many times
+  faster a transport or reinforcement goes (the Relief Station, Age3.March.relief/1).
 
-  Returns {:ok, %{troops, seconds, camp, food, level}} (seconds each way, level of the NPC, lord's town or
-  historic city attacked, nil for a player city) or {:error, code}.
+  Returns {:ok, %{troops, seconds, camp, food, level, cargo}} (seconds each way, level of whatever stands there,
+  nil for a player city) or {:error, code}.
   """
   def check(buildings, research, troops, hero, from, to, food, send, target \\ nil, opts \\ []) do
     rally = level_of(buildings, "rallyspot")
     send = for {t, n} <- send || %{}, n > 0, into: %{}, do: {t, n}
     camp = Keyword.get(opts, :camp, 0)
+    mission = Keyword.get(opts, :mission, "attack")
+    cargo = mission_cargo(mission, Keyword.get(opts, :cargo))
 
-    with :ok <- valid_troops(send),
+    with :ok <- if(mission in @missions, do: :ok, else: {:error, "bad_message"}),
+         :ok <- valid_troops(send),
          :ok <- valid_camp(camp),
+         :ok <- if(camp == 0 or mission == "attack", do: :ok, else: {:error, "bad_message"}),
          :ok <- if(rally > 0, do: :ok, else: {:error, "no_rally_spot"}),
          :ok <-
            if(Keyword.get(opts, :marches, 0) < max_marches(rally),
@@ -57,16 +69,96 @@ defmodule Age3.March do
              do: :ok,
              else: {:error, "not_enough_troops"}
            ),
-         :ok <- hero_ready(hero),
+         :ok <- mission_troops(mission, send),
+         :ok <- mission_hero(mission, hero),
+         {:ok, cargo} <- valid_cargo(cargo),
+         :ok <- if(total(cargo) <= load(send, research), do: :ok, else: {:error, "too_much_cargo"}),
          {:ok, level} <- target_level(target, to) do
-      seconds = seconds(from, to, send, research)
+      relief = if mission in ["transport", "reinforce"], do: Keyword.get(opts, :relief, 1), else: 1
+      seconds = max(1, ceil(seconds(from, to, send, research) / relief))
       cost = food(send, seconds, camp)
+      stock = Keyword.get(opts, :stock, %{})
+      need = Map.update(cargo, "food", cost, &(&1 + cost))
 
-      if food >= cost,
-        do: {:ok, %{troops: send, seconds: seconds, camp: camp, food: cost, level: level}},
-        else: {:error, "not_enough_resources"}
+      cond do
+        food < cost ->
+          {:error, "not_enough_resources"}
+
+        cargo != %{} and Enum.any?(need, fn {k, v} -> Map.get(stock, k, 0) < v end) ->
+          {:error, "not_enough_resources"}
+
+        true ->
+          {:ok, %{troops: send, seconds: seconds, camp: camp, food: cost, level: level, cargo: cargo}}
+      end
     end
   end
+
+  @doc """
+  What a march with this mission can go to. city is the player city standing on the tile (or nil), tile
+  World.tile_at's %{kind, level}, player_id the sender. Returns {:city, city} | {:npc, level} | {:lord, level}
+  | {:historic, level} | {:valley, level} | {:flat, 0} | {:error, code}.
+
+  Attack: other players' cities, NPCs, lords' towns, historic cities and valleys (a won valley is taken). Scout:
+  the same, and flats. Transport and reinforce: any player's city, your own too (an ally's for reinforcing,
+  checked by the store). Found: an empty flat.
+  """
+  def target(mission, city, tile, player_id)
+
+  def target(m, %{player_id: owner}, _tile, player_id) when m in ["attack", "scout"] and owner == player_id,
+    do: {:error, "own_city"}
+
+  def target(m, %{} = city, _tile, _player_id) when m in ["attack", "scout", "transport", "reinforce"],
+    do: {:city, city}
+
+  def target(m, nil, %{kind: "npc", level: level}, _p) when m in ["attack", "scout"], do: {:npc, level}
+  def target(m, nil, %{kind: "city", level: level}, _p) when m in ["attack", "scout"], do: {:lord, level}
+  def target(m, nil, %{kind: "historic", level: l}, _p) when m in ["attack", "scout"], do: {:historic, l}
+  def target(m, nil, %{kind: "valley", level: level}, _p) when m in ["attack", "scout"], do: {:valley, level}
+  def target(m, nil, %{kind: "flat"}, _p) when m in ["scout", "found"], do: {:flat, 0}
+  def target(_m, _city, _tile, _player_id), do: {:error, "bad_target"}
+
+  @doc """
+  How many times faster transports and reinforcements go with the sending city's Relief Station (wiki: 2x at
+  Lv1, 3x at Lv4, 4x at Lv5, 5x at Lv8, 6x at Lv10). 1 without one.
+  """
+  def relief(level) when level >= 10, do: 6
+  def relief(level) when level >= 8, do: 5
+  def relief(level) when level >= 5, do: 4
+  def relief(level) when level >= 4, do: 3
+  def relief(level) when level >= 1, do: 2
+  def relief(_level), do: 1
+
+  @doc "Workers a Found City march takes along; they settle the new city (wiki: 250)."
+  def found_workers, do: @found_workers
+
+  @doc "Resources a Found City march takes along to build the new city (wiki: 10,000 of each)."
+  def found_cargo, do: Map.new(~w(food lumber stone iron), &{&1, @found_resources})
+
+  defp mission_cargo("found", _cargo), do: found_cargo()
+  defp mission_cargo("transport", cargo), do: cargo || %{}
+  defp mission_cargo(_mission, _cargo), do: %{}
+
+  defp valid_cargo(cargo) when is_map(cargo) do
+    if Enum.all?(cargo, fn {k, v} -> k in @cargo_types and is_integer(v) and v >= 0 end),
+      do: {:ok, for({k, v} <- cargo, v > 0, into: %{}, do: {k, v})},
+      else: {:error, "bad_message"}
+  end
+
+  defp valid_cargo(_cargo), do: {:error, "bad_message"}
+
+  defp mission_troops("scout", send),
+    do: if(Map.get(send, "scout", 0) > 0, do: :ok, else: {:error, "no_scouts"})
+
+  defp mission_troops("found", send),
+    do: if(Map.get(send, "worker", 0) >= @found_workers, do: :ok, else: {:error, "not_enough_workers"})
+
+  defp mission_troops(_mission, _send), do: :ok
+
+  defp mission_hero("attack", hero), do: hero_ready(hero)
+  defp mission_hero("scout", nil), do: :ok
+  defp mission_hero("scout", hero), do: hero_ready(hero)
+  defp mission_hero(_mission, nil), do: :ok
+  defp mission_hero(_mission, _hero), do: {:error, "bad_message"}
 
   @doc "How many marches a city can have out at once (going, camping or coming home): one per Rally Spot level."
   def max_marches(rally_level), do: max(0, rally_level)
@@ -90,6 +182,8 @@ defmodule Age3.March do
   defp target_level({:npc, level}, _to), do: {:ok, level}
   defp target_level({:lord, level}, _to), do: {:ok, level}
   defp target_level({:historic, level}, _to), do: {:ok, level}
+  defp target_level({:valley, level}, _to), do: {:ok, level}
+  defp target_level({:flat, _level}, _to), do: {:ok, 0}
   defp target_level({:city, _city}, _to), do: {:ok, nil}
   defp target_level({:error, code}, _to), do: {:error, code}
 

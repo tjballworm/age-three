@@ -27,9 +27,10 @@ defmodule Age3.Economy do
   plus gold from taxes, which is the people living in the city now x tax rate % (TJ, 2026-11-03; Loyalty.tax_gold),
   minus the food the city's troops eat and the gold its heroes are paid (salary, gold per hour:
   Heroes.salaries/1). buildings is a list of %{type, level}; troops is %{"warrior" => 100, ...}; people is the
-  population now (%{"current" => ...}), a full city when left out.
+  population now (%{"current" => ...}), a full city when left out. bonus is more production (%) per resource on
+  top of research, from the city's valleys and its mayor's Politics (%{"food" => 35}), applied like research.
   """
-  def rates(buildings, tax_rate, research \\ %{}, troops \\ %{}, salary \\ 0, people \\ nil) do
+  def rates(buildings, tax_rate, research \\ %{}, troops \\ %{}, salary \\ 0, people \\ nil, bonus \\ %{}) do
     research = Research.in_city(research, buildings)
     base = Data.base()["perHour"]
     gold = Loyalty.tax_gold(people || population(buildings), tax_rate)
@@ -49,7 +50,8 @@ defmodule Age3.Economy do
           _ -> 0
         end
 
-      {name, n + div(fields * (100 + Research.production_bonus(research, name)), 100) - upkeep}
+      extra = Map.get(bonus, name, 0)
+      {name, n + div(fields * (100 + Research.production_bonus(research, name) + extra), 100) - upkeep}
     end)
   end
 
@@ -126,8 +128,17 @@ defmodule Age3.Economy do
   research and the people living there now give. Amounts are kept, so settle them first: the new rates only
   apply from the moment this snapshot is saved.
   """
-  def recalc(resources, buildings, tax_rate, research \\ %{}, troops \\ %{}, salary \\ 0, people \\ nil) do
-    rates = rates(buildings, tax_rate, research, troops, salary, people)
+  def recalc(
+        resources,
+        buildings,
+        tax_rate,
+        research \\ %{},
+        troops \\ %{},
+        salary \\ 0,
+        people \\ nil,
+        bonus \\ %{}
+      ) do
+    rates = rates(buildings, tax_rate, research, troops, salary, people, bonus)
     cap = cap(buildings, research)
 
     Map.new(resources, fn {name, stock} ->
