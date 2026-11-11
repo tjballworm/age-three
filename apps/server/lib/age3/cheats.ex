@@ -16,6 +16,8 @@ defmodule Age3.Cheats do
   @max_hero_stat 9_999
   # gear stars: the battle multipliers stop growing at 15 (Combat.Units.star_multipliers)
   @max_stars 15
+  # (TJ's number) cottages in a maxTown city
+  @max_town_cottages 6
   @hero_fields [
     {"level", :level},
     {"points", :points},
@@ -39,6 +41,7 @@ defmodule Age3.Cheats do
     * "finishAll": every construction, research and training batch in the city finishes now
     * "setBuilding" {slot, type?, level}: the building on a slot at any level for free; level 0 removes it
     * "levelAll" {level}: every building and field in the city at that level
+    * "maxTown": the city's buildings replaced with a maxed-out layout (see max_town/0)
     * "setResearch" {tech, level} / "researchAll" {level}: research levels for the player (0 forgets them)
     * "heroExp" {amount}: exp for every hero in the city (they level up as it covers)
     * "setHero" {heroId, level?, points?, politics?, attack?, intelligence?, stars?}: one hero's level, stats and
@@ -146,7 +149,9 @@ defmodule Age3.Cheats do
 
   def parse("instantMarch", %{"on" => on}) when is_boolean(on), do: {:ok, %{on: on}}
 
-  def parse(action, _payload) when action in ["fillResources", "finishAll", "resetCity"], do: {:ok, %{}}
+  def parse(action, _payload) when action in ["fillResources", "finishAll", "resetCity", "maxTown"],
+    do: {:ok, %{}}
+
   def parse(_action, _payload), do: bad()
 
   @doc "Whether the action changes the player's research rather than a city."
@@ -196,6 +201,23 @@ defmodule Age3.Cheats do
     end
   end
 
+  @doc """
+  The buildings maxTown gives a city, as %{slot, type, level} maps, all at the top level: the Town Hall and walls,
+  one of every other town building, 6 cottages in all, and Barracks on every town plot left over (14 Barracks with
+  today's data); in the outskirts one farm, sawmill, quarry and iron mine, with the other field plots left empty.
+  """
+  def max_town do
+    town = buildings_in("town") -- ["townhall", "walls", "cottage", "barracks"]
+    town = town ++ List.duplicate("cottage", @max_town_cottages)
+    town = town ++ List.duplicate("barracks", length(Build.town_plots()) - length(town))
+
+    slots =
+      [{"townhall", "townhall"}, {"walls", "walls"}] ++
+        Enum.zip(Build.town_plots(), town) ++ Enum.zip(Build.field_plots(), buildings_in("field"))
+
+    for {slot, type} <- slots, do: %{slot: slot, type: type, level: Data.max_level()}
+  end
+
   @doc "Research levels with tech at level (0 drops it)."
   def set_research(research, tech, 0), do: Map.delete(research || %{}, tech)
   def set_research(research, tech, level), do: Map.put(research || %{}, tech, level)
@@ -203,6 +225,10 @@ defmodule Age3.Cheats do
   @doc "Every tech at level (0 forgets all research)."
   def all_research(0), do: %{}
   def all_research(level), do: Map.new(Data.tech_ids(), &{&1, level})
+
+  # the building types of one area ("town" or "field"), in name order so the layout is always the same
+  defp buildings_in(area),
+    do: Data.building_types() |> Enum.filter(&(Data.building(&1)["area"] == area)) |> Enum.sort()
 
   defp taken?(buildings, slot, type) do
     not Data.building(type)["multiple"] and Enum.any?(buildings, &(&1.type == type and &1.slot != slot))

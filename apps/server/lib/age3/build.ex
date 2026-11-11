@@ -8,6 +8,12 @@ defmodule Age3.Build do
   @town_plots for n <- 0..31, do: Integer.to_string(n)
   @field_plots for n <- 0..12, do: "f#{n}"
 
+  @doc "The town plots (\"0\" to \"31\"), in order."
+  def town_plots, do: @town_plots
+
+  @doc "The outskirts field plots (\"f0\" to \"f12\"), in order."
+  def field_plots, do: @field_plots
+
   @doc """
   Can `type` be built on `slot`, or the building already there be upgraded? buildings is a list of
   %{slot, type, level} (structs or maps); resources is the settled Record<ResourceType, ResourceStock> map.

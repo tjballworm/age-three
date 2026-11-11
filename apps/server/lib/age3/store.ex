@@ -2186,6 +2186,15 @@ defmodule Age3.Store.Pg do
     resnapshot(city, to_datetime(now_ms))
   end
 
+  # the whole layout is replaced, so constructions and training queues are dropped without a refund; troops,
+  # heroes, research, fortifications and resources stay (warehouses and cottages raise the caps at once)
+  defp cheat_city(city, "maxTown", _args, now_ms) do
+    Repo.delete_all(from t in Task, where: t.city_id == ^city.id and t.kind in ["build", "train"])
+    Repo.delete_all(from b in Building, where: b.city_id == ^city.id)
+    Repo.insert_all(Building, Enum.map(Cheats.max_town(), &Map.put(&1, :city_id, city.id)))
+    resnapshot(city, to_datetime(now_ms))
+  end
+
   defp cheat_city(city, "heroExp", %{amount: amount}, now_ms) do
     for h <- Repo.all(from h in Hero, where: h.city_id == ^city.id) do
       up = Heroes.gain_exp(h, amount)

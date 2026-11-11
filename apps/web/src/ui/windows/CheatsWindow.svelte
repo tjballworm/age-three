@@ -192,6 +192,15 @@
   let allTechLevel = $state(MAX_TECH_LEVEL);
   const clampLevel = (n: number, max: number, min = 0) => Math.min(max, Math.max(min, whole(n)));
 
+  function maxTown() {
+    if (
+      confirm(
+        `Replace every building in ${targetName} with a maxed-out town? Constructions and training are lost.`,
+      )
+    )
+      cheat({ action: 'maxTown' }, 'maxed-out town built');
+  }
+
   function resetCity() {
     if (confirm(`Reset ${targetName} to a new city? Buildings, troops and resources are lost.`))
       cheat({ action: 'resetCity' }, 'city reset');
@@ -540,6 +549,12 @@
             const lv = clampLevel(allLevel, MAX_BUILDING_LEVEL, 1);
             cheat({ action: 'levelAll', level: lv }, `every building set to Lv ${lv}`);
           }}>Level all</Button
+        >
+      </div>
+      <div class="row">
+        <Button disabled={!game.fromServer || sending} onclick={maxTown}>Max town</Button>
+        <span class="note"
+          >Everything Lv10: one of each building, 6 cottages, Barracks on every plot left, one of each field.</span
         >
       </div>
     </section>
