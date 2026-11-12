@@ -58,7 +58,8 @@ defmodule Age3.Pvp do
       | troops: troops,
         tech: tech,
         hero: hero || Combat.default_army().hero,
-        heal_percent: 0
+        # a player's troops get wounded too (Age3.Heal); the report shows them
+        heal_percent: Age3.Heal.percent()
     }
 
     {defender, forts || %{}, %{Combat.default_settings() | walls: walls, closed_gates: not open?, npc: false}}

@@ -2,8 +2,9 @@
   import { FORT_NAME, TROOP_DATA, type BattleResult, type TroopOutcome } from '@age3/core';
   import { formatNumber } from '$ui/format';
 
-  // One battle in the game's own window style: who won, each side's troops (sent, lost, survived), the NPC's
-  // fortifications and wall, and the battle round by round (hidden until asked for).
+  // One battle in the game's own window style: who won, each side's troops (sent, lost, wounded, survived), the
+  // NPC's fortifications and wall, and the battle round by round (hidden until asked for). Wounded are a share of
+  // the lost (in Lost too) sent to the Rally Spot to be healed; the column only shows for a side that has some.
 
   // defending: the report of a battle at your own city, so Victory means the attacker lost
   let {
@@ -14,10 +15,12 @@
   }: { result: BattleResult; attacker: string; defender: string; defending?: boolean } = $props();
 
   const won = $derived((result.winner === 'attacker') !== defending);
-  const sides = $derived([
-    { title: attacker, side: result.attacker, rows: result.attacker.troops.filter((t) => t.initial > 0) },
-    { title: defender, side: result.defender, rows: result.defender.troops.filter((t) => t.initial > 0) },
-  ]);
+  const sides = $derived(
+    [
+      { title: attacker, side: result.attacker, rows: result.attacker.troops.filter((t) => t.initial > 0) },
+      { title: defender, side: result.defender, rows: result.defender.troops.filter((t) => t.initial > 0) },
+    ].map((s) => ({ ...s, wounded: (s.side.totalHealed ?? 0) > 0 })),
+  );
   const forts = $derived(result.fortifications.filter((f) => f.initial > 0));
   const troopName = (t: TroopOutcome) => TROOP_DATA[t.type].name;
 
@@ -39,17 +42,22 @@
       <div class="side" class:enemy={i === 1}>
         <h4>{s.title}</h4>
         <table>
-          <thead><tr><th>Troop</th><th>Sent</th><th>Lost</th><th>Survived</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Troop</th><th>Sent</th><th>Lost</th>{#if s.wounded}<th>Wounded</th>{/if}<th>Survived</th>
+            </tr>
+          </thead>
           <tbody>
             {#each s.rows as r (r.type)}
               <tr>
                 <td class="name">{troopName(r)}</td>
                 <td>{formatNumber(r.initial)}</td>
                 <td class="lost">{r.lost ? `-${formatNumber(r.lost)}` : '0'}</td>
+                {#if s.wounded}<td class="wounded">{formatNumber(r.healed ?? 0)}</td>{/if}
                 <td>{formatNumber(r.survived)}</td>
               </tr>
             {:else}
-              <tr><td colspan="4" class="none">No troops</td></tr>
+              <tr><td colspan={s.wounded ? 5 : 4} class="none">No troops</td></tr>
             {/each}
           </tbody>
           {#if s.rows.length > 1}
@@ -58,6 +66,7 @@
                 <td class="name">Total</td>
                 <td>{formatNumber(s.side.totalInitial)}</td>
                 <td class="lost">-{formatNumber(s.side.totalLost)}</td>
+                {#if s.wounded}<td class="wounded">{formatNumber(s.side.totalHealed)}</td>{/if}
                 <td>{formatNumber(s.side.totalSurvived)}</td>
               </tr>
             </tfoot>
@@ -197,6 +206,9 @@
   }
   td.name {
     font-weight: 800;
+  }
+  td.wounded {
+    color: #b07a10;
   }
   td.lost {
     color: var(--err);

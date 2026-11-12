@@ -104,6 +104,13 @@ defmodule Age3.Store do
   @callback set_gate(player_id :: String.t(), city_id :: String.t(), open :: boolean, now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
 
+  @doc """
+  Heals wounded troops in a city's Rally Spot (Age3.Heal): troops is %{"warrior" => 10, ...}. Pays the gold now and
+  the troops rejoin the city's troops at once.
+  """
+  @callback heal(player_id :: String.t(), city_id :: String.t(), troops :: map, now_ms :: integer) ::
+              :ok | {:error, code :: String.t()}
+
   @doc "Chooses the hero who leads a city's defence (any free hero in the city, the mayor too), or nobody (nil)."
   @callback set_defender(
               player_id :: String.t(),
@@ -420,6 +427,7 @@ defmodule Age3.Store.Pg do
     Beacon,
     Economy,
     Forts,
+    Heal,
     Market,
     MarketOrder,
     MarketTrade,
@@ -1044,6 +1052,37 @@ defmodule Age3.Store.Pg do
     Repo.transaction(fn ->
       city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
       Repo.update_all(from(c in City, where: c.id == ^city.id), set: [gate_open: open])
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def heal(player_id, city_id, troops, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+    now = to_datetime(now_ms)
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      city = if complete_due(city.id, now) == [], do: city, else: Repo.get!(City, city.id)
+      resources = settled(city, now_ms).resources
+
+      case Heal.check(city.wounded, resources, troops) do
+        {:ok, plan} ->
+          # healed troops eat again, so the food rate changes from now on
+          save_resources(city, Build.spend(resources, plan.cost), now_ms)
+
+          Repo.update_all(from(c in City, where: c.id == ^city.id),
+            set: [
+              wounded: Heal.take(city.wounded, troops),
+              troops: Heal.add(city.troops, troops)
+            ]
+          )
+
+          resnapshot(Repo.get!(City, city.id), now)
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
     end)
     |> ok()
   end
@@ -2321,6 +2360,12 @@ defmodule Age3.Store.Pg do
     resnapshot(city, to_datetime(now_ms))
   end
 
+  defp cheat_city(city, "addWounded", %{troops: troops}, _now_ms) do
+    Repo.update_all(from(c in City, where: c.id == ^city.id),
+      set: [wounded: Cheats.add_troops(city.wounded, troops)]
+    )
+  end
+
   # the population can't go above the limit (it would be cut back at the next change); cottages raise the limit
   defp cheat_city(city, "setPopulation", %{amount: amount}, now_ms) do
     %{resources: resources, population: pop} = settled(city, now_ms)
@@ -2426,6 +2471,7 @@ defmodule Age3.Store.Pg do
         grievance: 0,
         comfort_at: nil,
         troops: %{},
+        wounded: %{},
         inn: %{},
         resources: Game.starter_resources(),
         population: Game.starter_population(),
@@ -2864,7 +2910,7 @@ defmodule Age3.Store.Pg do
       | troops: d["troops"],
         tech: combat_tech(att_research),
         hero: combat_hero(hero),
-        heal_percent: 0
+        heal_percent: Heal.percent()
     }
 
     result =
@@ -2885,13 +2931,14 @@ defmodule Age3.Store.Pg do
 
     save_resources(def, Build.spend(resources, loot), at_ms)
 
+    def_left = Pvp.troops_left(def.troops, result, open?, garrison)
+
     Repo.update_all(from(c in City, where: c.id == ^def.id),
-      set: [
-        troops: Pvp.troops_left(def.troops, result, open?, garrison),
-        forts: Forts.after_battle(def.forts, result)
-      ]
+      set: [troops: def_left, forts: Forts.after_battle(def.forts, result)]
     )
 
+    add_wounded(att.id, Heal.wounded(d["troops"], survivors))
+    add_wounded(def.id, Heal.wounded(def.troops, def_left))
     if open?, do: thin_stationed(def.id, result, garrison)
 
     hero_report = hero && gain_hero_exp(hero, March.hero_exp(result))
@@ -2988,15 +3035,36 @@ defmodule Age3.Store.Pg do
   end
 
   # Allies' stationed troops after a battle at the city they guard: each loses the same share of each type as
-  # the whole garrison did; a group with nobody left is gone.
+  # the whole garrison did; a group with nobody left is gone. Their wounded go to their own city's Rally Spot.
   defp thin_stationed(city_id, result, garrison) do
     for t <- stationed_in(city_id) do
       left = Pvp.share_left(t.data["troops"], result, garrison)
+      add_wounded(t.city_id, Heal.wounded(t.data["troops"], left))
 
       if Enum.all?(left, fn {_k, n} -> n == 0 end),
         do: Repo.delete!(t),
         else: t |> Ecto.Changeset.change(data: Map.put(t.data, "troops", left)) |> Repo.update!()
     end
+  end
+
+  # A battle's wounded (Age3.Heal) into a city's Rally Spot, however many. The merge is one UPDATE, so it is safe
+  # for an ally's city that this battle didn't lock.
+  defp add_wounded(_city_id, new) when map_size(new) == 0, do: :ok
+
+  defp add_wounded(city_id, new) do
+    Repo.query!(
+      """
+      UPDATE cities SET wounded = (
+        SELECT coalesce(jsonb_object_agg(k, n), '{}'::jsonb)
+        FROM (SELECT key AS k, sum(value::bigint) AS n
+              FROM (SELECT * FROM jsonb_each_text(wounded) UNION ALL SELECT * FROM jsonb_each_text($1::jsonb)) w
+              GROUP BY key) s
+      ) WHERE id = $2
+      """,
+      [new, Ecto.UUID.dump!(city_id)]
+    )
+
+    :ok
   end
 
   # The way home for a march that has arrived: a new task back to its city, as long as the way out took.
@@ -3053,6 +3121,7 @@ defmodule Age3.Store.Pg do
       set: [
         player_id: new_owner,
         troops: %{},
+        wounded: %{},
         loyalty: Pvp.captured_loyalty(),
         grievance: 0,
         comfort_at: nil,
@@ -3261,7 +3330,7 @@ defmodule Age3.Store.Pg do
       | troops: d["troops"],
         tech: combat_tech(research),
         hero: combat_hero(hero),
-        heal_percent: 0
+        heal_percent: Heal.percent()
     }
 
     result =
@@ -3269,6 +3338,7 @@ defmodule Age3.Store.Pg do
 
     won = result.winner == :attacker
     survivors = for s <- result.attacker.troops, s.survived > 0, into: %{}, do: {s.type, s.survived}
+    add_wounded(city.id, Heal.wounded(d["troops"], survivors))
     loot = if won, do: March.loot(npc["resources"], March.load(survivors, research)), else: %{}
     left = Npc.after_battle(npc, result, loot)
 
@@ -3479,7 +3549,7 @@ defmodule Age3.Store.Pg do
       | troops: d["troops"],
         tech: combat_tech(research),
         hero: combat_hero(hero),
-        heal_percent: 0
+        heal_percent: Heal.percent()
     }
 
     result =
@@ -3487,6 +3557,7 @@ defmodule Age3.Store.Pg do
 
     won = result.winner == :attacker
     survivors = for s <- result.attacker.troops, s.survived > 0, into: %{}, do: {s.type, s.survived}
+    add_wounded(city.id, Heal.wounded(d["troops"], survivors))
 
     if npc do
       left = Npc.after_battle(npc, result, %{})
@@ -3844,6 +3915,7 @@ defmodule Age3.Store.Pg do
       buildings: Enum.map(town, &building_json(&1, busy)),
       fields: Enum.map(fields, &building_json(&1, busy)),
       troops: c.troops,
+      wounded: c.wounded || %{},
       forts: c.forts || %{},
       allowGarrison: c.allow_garrison,
       valleys:

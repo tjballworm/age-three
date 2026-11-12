@@ -28,6 +28,7 @@
   import EmbassyPanel from './EmbassyPanel.svelte';
   import HallPanel from './HallPanel.svelte';
   import InnPanel from './InnPanel.svelte';
+  import RallyPanel from './RallyPanel.svelte';
   import ResearchPanel from './ResearchPanel.svelte';
   import TrainPanel, { recruitWindow } from './TrainPanel.svelte';
   import WallsPanel from './WallsPanel.svelte';
@@ -148,10 +149,10 @@
           : 'Empty plot',
   );
   /**
-   * The Academy, Barracks, Inn, Feasting Hall, Walls and Embassy get one window: the building and its Upgrade on top, what
+   * The Academy, Barracks, Inn, Feasting Hall, Walls, Embassy and Rally Spot get one window: the building and its Upgrade on top, what
    * it does below.
    */
-  const PANELS = ['academy', 'barracks', 'inn', 'feastinghall', 'walls', 'embassy'] as const;
+  const PANELS = ['academy', 'barracks', 'inn', 'feastinghall', 'walls', 'embassy', 'rallyspot'] as const;
   type Panel = (typeof PANELS)[number];
   const panel = $derived(
     standing && (PANELS as readonly string[]).includes(standing.type) ? (standing.type as Panel) : null,
@@ -179,6 +180,10 @@
     embassy: {
       icon: 'alliance',
       text: 'The Embassy lets you join (Lv1) or found (Lv2) an alliance, and hosts allied troops: one wave per level.',
+    },
+    rallyspot: {
+      icon: 'march',
+      text: 'Armies gather and march out from the Rally Spot: 10,000 troops and one march per level. Its Medic Camp heals the wounded.',
     },
   } as const;
 </script>
@@ -288,6 +293,8 @@
         <WallsPanel />
       {:else if panel === 'embassy'}
         <EmbassyPanel />
+      {:else if panel === 'rallyspot'}
+        <RallyPanel />
       {:else if typeof slot === 'number'}
         <TrainPanel plot={slot} />
       {/if}

@@ -61,6 +61,10 @@ defmodule Age3.FakeStore do
   def set_gate(_player_id, _city_id, _open, _now_ms), do: {:error, "bad_message"}
 
   @impl true
+  def heal(_player_id, "c1", %{"warrior" => n}, _now_ms) when is_integer(n) and n > 0, do: :ok
+  def heal(_player_id, _city_id, _troops, _now_ms), do: {:error, "not_enough_wounded"}
+
+  @impl true
   def set_defender(_player_id, "c1", hero_id, _now_ms) when hero_id in ["h1", nil], do: :ok
   def set_defender(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "bad_message"}
 

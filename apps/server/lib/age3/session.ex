@@ -89,6 +89,7 @@ defmodule Age3.Session do
               "demolish",
               "abandonCity",
               "setGate",
+              "heal",
               "setDefender",
               "persuade",
               "research",
@@ -649,6 +650,13 @@ defmodule Age3.Session do
   defp handle("setGate", _payload, id, session),
     do: {error(id, "bad_message", "Open or close the gate with true or false."), session}
 
+  # The Rally Spot's Medic Camp: {cityId, troops: {warrior: 10, ...}} heals those wounded for gold, at once.
+  defp handle("heal", %{"cityId" => city_id, "troops" => %{} = troops}, id, session) when is_binary(city_id),
+    do: command(id, session, &session.store.heal(session.player_id, city_id, troops, &1))
+
+  defp handle("heal", _payload, id, session),
+    do: {error(id, "bad_message", "Heal with a city and the wounded troops to heal."), session}
+
   # The Embassy's "let allies garrison this city" box: {cityId, allow}.
   defp handle("setGarrison", %{"cityId" => city_id, "allow" => allow}, id, session)
        when is_binary(city_id) and is_boolean(allow),
@@ -864,6 +872,7 @@ defmodule Age3.Session do
   defp slot_key(_slot), do: nil
 
   defp message("not_enough_resources"), do: "Not enough resources."
+  defp message("not_enough_wounded"), do: "There aren't that many wounded."
   defp message("no_item"), do: "You don't have that item."
   defp message("not_started"), do: "That batch hasn't started yet."
   defp message("already_claimed"), do: "That reward was already claimed."

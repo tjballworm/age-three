@@ -37,6 +37,8 @@ defmodule Age3.City do
     field :population, :map
     # trained troops, e.g. %{"warrior" => 100}; troops still training are tasks
     field :troops, :map, default: %{}
+    # wounded troops waiting in the Rally Spot's Medic Camp to be healed for gold (Age3.Heal)
+    field :wounded, :map, default: %{}
     # fortifications on the walls: %{"trap" => 100, ...} (Age3.Forts)
     field :forts, :map, default: %{}
     field :inn, :map, default: %{}

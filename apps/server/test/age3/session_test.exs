@@ -412,6 +412,23 @@ defmodule Age3.SessionTest do
              ])
   end
 
+  test "heal heals wounded for gold, or says there aren't that many" do
+    assert [
+             _,
+             %{"type" => "state"},
+             %{
+               "payload" => %{"code" => "not_enough_wounded", "message" => "There aren't that many wounded."}
+             },
+             %{"payload" => %{"code" => "bad_message"}}
+           ] =
+             run([
+               login("secret123"),
+               ~s({"type":"heal","id":2,"payload":{"cityId":"c1","troops":{"warrior":10}}}),
+               ~s({"type":"heal","id":3,"payload":{"cityId":"c1","troops":{"archer":10}}}),
+               ~s({"type":"heal","id":4,"payload":{"cityId":"c1"}})
+             ])
+  end
+
   test "promote goes up the rank or title ladder" do
     assert [
              _,

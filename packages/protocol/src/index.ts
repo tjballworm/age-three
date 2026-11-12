@@ -111,6 +111,11 @@ export type PersuadeMessage = Envelope<'persuade', { cityId: string; heroId: str
 /** Opens or closes the Rally Spot's gate. Closed, the troops stay out of battles. Replies with state. */
 export type SetGateMessage = Envelope<'setGate', { cityId: string; open: boolean }>;
 /**
+ * Heals wounded troops in the Rally Spot's Medic Camp, at once, for gold (healGold in core); they rejoin the city's
+ * troops. Errors: not_enough_wounded, not_enough_resources. Replies with state.
+ */
+export type HealMessage = Envelope<'heal', { cityId: string; troops: Partial<Record<TroopType, number>> }>;
+/**
  * Send a march from a city to x, y. `mission` (default 'attack'):
  * - 'attack': an NPC, lord's town, historic city, another player's city or a valley (a win takes it); needs an
  *   idle hero. `camp` is the camp wave: seconds (0 to 24 hours) the army waits at the target before it attacks.
@@ -260,6 +265,8 @@ export type CheatAction =
   | { action: 'fillResources' }
   /** Adds troops (negative takes away, never below 0). */
   | { action: 'addTroops'; troops: Partial<Record<TroopType, number>> }
+  /** Adds wounded to the Rally Spot, past its cap (negative takes away, never below 0). */
+  | { action: 'addWounded'; troops: Partial<Record<TroopType, number>> }
   /** The population, from 0 up to the city's limit (cottages raise the limit). */
   | { action: 'setPopulation'; amount: number }
   /** loyalty and/or grievance, 0-100 each; also clears the comfort cooldown */
@@ -339,6 +346,7 @@ export type ClientMessage =
   | SetDefenderMessage
   | PersuadeMessage
   | SetGateMessage
+  | HealMessage
   | MarchMessage
   | RecallMessage
   | AbandonValleyMessage

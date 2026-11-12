@@ -37,6 +37,8 @@ defmodule Age3.Cheats do
     * "addResources" {amounts: {gold, food, lumber, stone, iron}}: adds each (negative takes away, not below 0)
     * "fillResources": every resource up to the storage limit
     * "addTroops" {troops: {warrior: 100, ...}}: adds troops (negative takes away, not below 0)
+    * "addWounded" {troops: {warrior: 100, ...}}: adds wounded to the Rally Spot, past its cap (negative takes
+      away, not below 0)
     * "setPopulation" {amount}: the population, from 0 up to the city's limit
     * "finishAll": every construction, research and training batch in the city finishes now
     * "setBuilding" {slot, type?, level}: the building on a slot at any level for free; level 0 removes it
@@ -65,6 +67,8 @@ defmodule Age3.Cheats do
       do: {:ok, %{troops: troops}},
       else: bad()
   end
+
+  def parse("addWounded", troops), do: parse("addTroops", troops)
 
   def parse("setPopulation", %{"amount" => n}) when is_integer(n) and n >= 0, do: {:ok, %{amount: n}}
 

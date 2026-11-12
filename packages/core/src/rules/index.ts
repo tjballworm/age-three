@@ -9,6 +9,7 @@ export * from './loyalty';
 export * from './scout';
 export * from './mayor';
 export * from './townhall';
+export * from './heal';
 
 /** Shortest distance between two tiles on the wrapping world, in tiles. */
 export function distance(a: Coord, b: Coord): number {
