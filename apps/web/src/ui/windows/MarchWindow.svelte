@@ -1,10 +1,6 @@
 <script lang="ts">
   import {
     FORT_NAME,
-    HISTORIC_FORTIFICATIONS,
-    HISTORIC_RESEARCH,
-    HISTORIC_RESOURCES,
-    HISTORIC_WALLS,
     MAX_CAMP_SECONDS,
     TROOPS,
     TROOP_DATA,
@@ -56,7 +52,7 @@
   const heroMode = $derived(mission === 'attack' ? 'needed' : mission === 'scout' ? 'optional' : 'none');
   /** Another lord's city (a player's, or a made-up town): no garrison to show, as there is no scouting yet. */
   const lord = $derived(target.kind === 'city' || !!target.cityId);
-  /** A historic city: its garrison slots (each holds one of its types), ruler, walls and research 10. */
+  /** A historic city that nobody holds yet. Its garrison stays hidden: scout it to see what is there. */
   const hc = $derived(target.kind === 'historic' && !lord ? historicSpec(target.level) : undefined);
   const npc = $derived(target.kind === 'npc' ? npcSpec(target.level) : undefined);
   const beacon = $derived(city.buildings.find((b) => b.type === 'beacontower')?.level ?? 0);
@@ -72,7 +68,6 @@
             ? 'the flat'
             : `the Lv ${target.level} NPC`,
   );
-  const hcLoot = Object.values(HISTORIC_RESOURCES).reduce((n, v) => n + v, 0);
   const rally = $derived(city.buildings.find((b) => b.type === 'rallyspot')?.level ?? 0);
   const academy = $derived(city.buildings.find((b) => b.type === 'academy')?.level ?? 0);
   const research = $derived(researchInCity(game.player.research, academy));
@@ -460,35 +455,8 @@
           don't protect and takes 3 loyalty. A win when loyalty is already 0 captures the city.
         </p>
       {:else if hc}
-        <h3>{target.name} <span class="note">Lv {target.level} historic city · when full</span></h3>
-        <table>
-          <tbody>
-            {#each hc.garrison as slot, i (i)}
-              <tr>
-                <td class="name">{slot.types.map((t) => TROOP_DATA[t].name).join(' or ')}</td>
-                <td
-                  >{slot.counts
-                    ? slot.types.map((t) => formatNumber(slot.counts?.[t] ?? slot.count)).join(' / ')
-                    : formatNumber(slot.count)}</td
-                >
-              </tr>
-            {/each}
-            {#each Object.entries(HISTORIC_FORTIFICATIONS) as [f, n] (f)}
-              <tr
-                ><td class="name">{FORT_NAME[f as keyof typeof FORT_NAME]}</td><td>{formatNumber(n ?? 0)}</td
-                ></tr
-              >
-            {/each}
-            <tr><td class="name">Walls</td><td>Lv {HISTORIC_WALLS}</td></tr>
-            <tr><td class="name">Research</td><td>Lv {HISTORIC_RESEARCH}</td></tr>
-            <tr
-              ><td class="name">Ruler</td><td
-                >Lv {hc.ruler.level} · ATK {hc.ruler.attack} · INT {hc.ruler.intelligence}</td
-              ></tr
-            >
-            <tr><td class="name">Resources</td><td>{formatNumber(hcLoot)}</td></tr>
-          </tbody>
-        </table>
+        <h3>{target.name} <span class="note">Lv {target.level} historic city</span></h3>
+        <p class="note">Scout it first to see its troops.</p>
       {:else if npc}
         <h3>Lv {target.level} NPC garrison <span class="note">when full</span></h3>
       {/if}
