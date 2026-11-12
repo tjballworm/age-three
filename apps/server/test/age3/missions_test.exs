@@ -324,6 +324,45 @@ defmodule Age3.MissionsTest do
       assert Map.get(city.forts, "trap", 0) < 1000
       assert city.troops["cavalry"] < 20_000
       assert Enum.all?(city.garrisons, &(&1.troops["cavalry"] < 100))
+
+      # a tenth of each side's losses are wounded: the city's own, the attacker's and the ally's (sent home)
+      assert city.wounded["cavalry"] == div((20_000 - city.troops["cavalry"]) * 10, 100)
+      {:ok, _, [raider], _} = Pg.state(a.id, hit)
+      assert raider.wounded["cavalry"] > 0
+      [left] = Enum.map(city.garrisons, & &1.troops["cavalry"])
+      {:ok, _, [friend], _} = Pg.state(c.id, hit)
+      assert friend.wounded == if(left < 90, do: %{"cavalry" => div((100 - left) * 10, 100)}, else: %{})
+    end
+  end
+
+  describe "wounded" do
+    test "a battle's wounded wait in the Rally Spot and heal for gold" do
+      a = lord("Medic")
+      npc = nearest(a.city, &(&1.kind == "npc" and &1.level >= 8))
+      {:ok, at} = march(a, npc, %{"cavalry" => 2000}, %{}, a.hero)
+      {:ok, _, [city], _} = settle(a, at)
+      [report] = Age3.Repo.all(from r in Age3.Report, where: r.player_id == ^a.id)
+      healed = report.result["attacker"]["totalHealed"]
+      assert healed > 0
+      assert city.wounded == %{"cavalry" => healed}
+
+      assert {:error, "not_enough_wounded"} = Pg.heal(a.id, a.city.id, %{"cavalry" => healed + 1}, at)
+      gold = city.resources["gold"]["amount"]
+      troops = city.troops["cavalry"]
+      assert :ok = Pg.heal(a.id, a.city.id, %{"cavalry" => healed}, at)
+      {:ok, _, [city], _} = settle(a, at)
+      assert city.wounded == %{}
+      assert city.troops["cavalry"] == troops + healed
+      assert_in_delta city.resources["gold"]["amount"], gold - healed * 525, 1
+    end
+
+    test "there's no limit on wounded; the cheat adds them" do
+      a = lord("Crowded")
+      {:ok, _} = Pg.cheat(a.id, {:city, a.city.id}, "addWounded", %{troops: %{"cavalry" => 1_000_000}}, a.now)
+      npc = nearest(a.city, &(&1.kind == "npc" and &1.level >= 8))
+      {:ok, at} = march(a, npc, %{"cavalry" => 2000}, %{}, a.hero)
+      {:ok, _, [city], _} = settle(a, at)
+      assert city.wounded["cavalry"] > 1_000_000
     end
   end
 end

@@ -62,6 +62,8 @@ export interface City extends Coord {
   fields?: Field[];
   /** Trained troops in the city, by type (troops still training are tasks). Missing from older servers. */
   troops?: Partial<Record<TroopType, number>>;
+  /** Wounded troops in the Rally Spot's Medic Camp, waiting to be healed for gold (healGold). */
+  wounded?: Partial<Record<TroopType, number>>;
   /** Heroes living in the city's Feasting Hall, highest level first. Missing from older servers. */
   heroes?: CityHero[];
   /** Heroes the city's Inn offers for hire; null without an Inn. Missing from older servers. */

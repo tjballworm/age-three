@@ -105,6 +105,7 @@ export function sampleCities(): City[] {
       buildings: sampleTown(9),
       fields: sampleFields(9),
       troops: { worker: 500, warrior: 2_400, pike: 1_200, archer: 1_500, cavalry: 300 },
+      wounded: { warrior: 240, archer: 150, cavalry: 30 },
       heroes: [
         sampleHero('h1', 'Linda', 10, 56, 27, 45, 'mayor'),
         sampleHero('h2', 'Rodney', 2, 41, 65, 45, 'idle'),
