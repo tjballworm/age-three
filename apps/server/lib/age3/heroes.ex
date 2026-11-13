@@ -43,7 +43,7 @@ defmodule Age3.Heroes do
   heroes, so tests can check them. Each offer gets an id (seed-index), which hire uses to make sure the hero
   being hired is the one the player saw.
 
-  (tunable) A hero's level is 1 to 5 x Inn level. One stat is its strong one, with a base of 45-78 (the wiki: 65+
+  (tunable) A hero's level is 1 to 5 x Inn level. One stat is its strong one, with a base of 45-80 (the wiki: 65+
   makes a good hero); the other two have bases of 15-50. Then each level adds one point to a random stat.
   """
   def roll_offers(inn_level, seed) do
@@ -66,7 +66,7 @@ defmodule Age3.Heroes do
 
     {base, rand} =
       Enum.reduce(@stats, {%{}, rand}, fn stat, {acc, rand} ->
-        {n, rand} = if stat == main, do: between(45, 78, rand), else: between(15, 50, rand)
+        {n, rand} = if stat == main, do: between(45, 80, rand), else: between(15, 50, rand)
         {Map.put(acc, stat, n), rand}
       end)
 

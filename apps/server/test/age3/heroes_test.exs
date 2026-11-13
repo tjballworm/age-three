@@ -28,9 +28,9 @@ defmodule Age3.HeroesTest do
     for o <- offers do
       assert o["level"] in 1..15
       assert is_binary(o["name"])
-      # one strong stat (45-78) plus the other two (15-50) plus one point per level
+      # one strong stat (45-80) plus the other two (15-50) plus one point per level
       total = o["politics"] + o["attack"] + o["intelligence"]
-      assert total in (45 + 30 + o["level"])..(78 + 100 + o["level"])
+      assert total in (45 + 30 + o["level"])..(80 + 100 + o["level"])
       assert Enum.max([o["politics"], o["attack"], o["intelligence"]]) >= 45
     end
   end
