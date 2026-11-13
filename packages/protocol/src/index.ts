@@ -15,6 +15,7 @@ import type {
   MarketView,
   MarchMission,
   MedalCounts,
+  MedalId,
   Player,
   PolicyId,
   QuestStatus,
@@ -106,6 +107,22 @@ export type DismissMessage = Envelope<'dismiss', { cityId: string; heroId: strin
 export type SetMayorMessage = Envelope<'setMayor', { cityId: string; heroId: string | null }>;
 /** Chooses the hero who leads the city's defence (any free hero, the mayor too), or nobody. Replies with state. */
 export type SetDefenderMessage = Envelope<'setDefender', { cityId: string; heroId: string | null }>;
+/**
+ * Rewards a hero for loyalty (max 100), once per hero every 15 minutes: `kind: 'gold'` pays 100 x the hero's level
+ * from the city for +5; `kind: 'medal'` spends one of the player's `medal` medals for its loyalty (Cross 5 ...
+ * Nation 60). Replies with state.
+ */
+export type RewardHeroMessage = Envelope<
+  'rewardHero',
+  { cityId: string; heroId: string; kind: 'gold' | 'medal'; medal?: MedalId }
+>;
+/** Renames a hero: 1-20 letters, digits, spaces and ' - . (like city names). Replies with state. */
+export type RenameHeroMessage = Envelope<'renameHero', { cityId: string; heroId: string; name: string }>;
+/**
+ * Gives back every stat point spent on the hero (`hero.added`) as unspent points, for level x 1,000 gold, once a
+ * day. Replies with state.
+ */
+export type ResetPointsMessage = Envelope<'resetPoints', { cityId: string; heroId: string }>;
 /** Persuades a captive hero (from a captured city) to join for their hiring fee in gold. Release one with dismiss. */
 export type PersuadeMessage = Envelope<'persuade', { cityId: string; heroId: string }>;
 /** Opens or closes the Rally Spot's gate. Closed, the troops stay out of battles. Replies with state. */
@@ -345,6 +362,9 @@ export type ClientMessage =
   | SetMayorMessage
   | SetDefenderMessage
   | PersuadeMessage
+  | RewardHeroMessage
+  | RenameHeroMessage
+  | ResetPointsMessage
   | SetGateMessage
   | HealMessage
   | MarchMessage
@@ -516,6 +536,16 @@ export type ErrorCode =
   | 'population_full'
   /** a city name that is empty, too long or has other characters */
   | 'bad_city_name'
+  /** a hero name that is empty, too long or has other characters */
+  | 'bad_hero_name'
+  /** rewarding a hero less than 15 minutes after their last reward */
+  | 'reward_cooldown'
+  /** rewarding a hero whose loyalty is already 100 */
+  | 'loyalty_full'
+  /** resetting a hero who has no tracked spent points */
+  | 'nothing_to_reset'
+  /** resetting a hero's points less than a day after the last reset */
+  | 'reset_cooldown'
   /** demolishing the Town Hall, or walls at Lv1 */
   | 'cant_demolish'
   /** demolishing a Barracks with troops in training */

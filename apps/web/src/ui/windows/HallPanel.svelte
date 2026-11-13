@@ -1,9 +1,23 @@
 <script lang="ts">
-  import type { CityHero } from '@age3/core';
+  import {
+    CAPTURE_BELOW_LOYALTY,
+    GOLD_REWARD_LOYALTY,
+    MAX_HERO_LOYALTY,
+    MEDALS,
+    nextResetAt,
+    nextRewardAt,
+    resetPointsGold,
+    resettablePoints,
+    rewardGold,
+    settleCity,
+    type CityHero,
+    type MedalId,
+  } from '@age3/core';
+  import { clock } from '$state/clock.svelte';
   import { currentCity, game } from '$state/game.svelte';
   import { command } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
-  import { formatNumber } from '$ui/format';
+  import { formatDuration, formatNumber } from '$ui/format';
   import HeroStatsRow from './HeroStatsRow.svelte';
 
   // The Feasting Hall half of its window: the city's heroes, with Appoint Mayor and Dismiss. A mayor stays home
@@ -11,6 +25,8 @@
   // faster training, Intelligence: faster research); only idle heroes can be dismissed or appointed. Dismissing can't be undone, so it
   // asks once more first. Any free hero can also be the city's defender, who leads its troops when it is attacked.
   // Captives come with a captured city: persuade them for their hiring fee, or release them.
+  // Manage opens a hero's extras: rename, reward for loyalty (gold or a medal, once per 15 minutes) and taking back
+  // spent stat points (once a day, for their hiring fee).
 
   const city = $derived(currentCity());
   const hall = $derived(city.buildings.find((b) => b.type === 'feastinghall')?.level ?? 0);
@@ -60,6 +76,25 @@
     send(() => command({ type: 'assignPoints', payload: { cityId: city.id, heroId: hero.id, [stat]: n } }));
   const persuade = (heroId: string) =>
     send(() => command({ type: 'persuade', payload: { cityId: city.id, heroId } }));
+
+  let managing = $state<string | null>(null);
+  let newName = $state('');
+  const manage = (hero: CityHero) => {
+    managing = managing === hero.id ? null : hero.id;
+    newName = hero.name;
+  };
+  const rename = (hero: CityHero) =>
+    send(() => command({ type: 'renameHero', payload: { cityId: city.id, heroId: hero.id, name: newName } }));
+  const rewardWithGold = (hero: CityHero) =>
+    send(() => command({ type: 'rewardHero', payload: { cityId: city.id, heroId: hero.id, kind: 'gold' } }));
+  const rewardWithMedal = (hero: CityHero, medal: MedalId) =>
+    send(() =>
+      command({ type: 'rewardHero', payload: { cityId: city.id, heroId: hero.id, kind: 'medal', medal } }),
+    );
+  const resetPoints = (hero: CityHero) =>
+    send(() => command({ type: 'resetPoints', payload: { cityId: city.id, heroId: hero.id } }));
+  const medals = $derived(game.player.medals ?? {});
+  const gold = $derived(settleCity(city, game.syncedAt, clock.now).resources.gold.amount);
 </script>
 
 <div class="hall">
@@ -105,6 +140,11 @@
             >{STATUS[hero.status]}{hero.id === city.defenderHeroId ? ' · Defender' : ''}</span
           >
           <span>{formatNumber(hero.salary)} gold/h</span>
+          <span
+            class:low={hero.loyalty < CAPTURE_BELOW_LOYALTY}
+            title="Under {CAPTURE_BELOW_LOYALTY}, a hero who loses an attack on a player's city can be captured"
+            >Loyalty {hero.loyalty}</span
+          >
         </div>
         <div class="actions">
           {#if hero.status === 'captive'}
@@ -147,6 +187,11 @@
               onclick={() => appoint(hero.id)}>Appoint Mayor</Button
             >
           {/if}
+          {#if hero.status !== 'captive'}
+            <Button small disabled={!game.fromServer} onclick={() => manage(hero)}
+              >{managing === hero.id ? 'Close' : 'Manage'}</Button
+            >
+          {/if}
           {#if hero.status === 'captive'}
             <!-- released above -->
           {:else if confirming === hero.id}
@@ -163,6 +208,68 @@
           {/if}
         </div>
       </div>
+      {#if managing === hero.id && hero.status !== 'captive'}
+        {@const rewardWait = Math.max(0, nextRewardAt(hero) - clock.now)}
+        {@const resetWait = Math.max(0, nextResetAt(hero) - clock.now)}
+        {@const full = hero.loyalty >= MAX_HERO_LOYALTY}
+        {@const back = resettablePoints(hero)}
+        <div class="manage">
+          <div class="line">
+            <b>Name</b>
+            <input maxlength="20" bind:value={newName} aria-label="Hero name" />
+            <Button
+              small
+              variant="blue"
+              disabled={sending || newName.trim() === '' || newName.trim() === hero.name}
+              onclick={() => rename(hero)}>Rename</Button
+            >
+          </div>
+          <div class="line">
+            <b>Reward</b>
+            {#if full}
+              <span class="note">Loyalty is already {MAX_HERO_LOYALTY}.</span>
+            {:else if rewardWait > 0}
+              <span class="note">Next reward in {formatDuration(rewardWait)}.</span>
+            {:else}
+              <Button
+                small
+                disabled={sending || gold < rewardGold(hero.level)}
+                title="Pay {formatNumber(rewardGold(hero.level))} gold for +{GOLD_REWARD_LOYALTY} loyalty"
+                onclick={() => rewardWithGold(hero)}
+                >{formatNumber(rewardGold(hero.level))} gold: +{GOLD_REWARD_LOYALTY}</Button
+              >
+              {#each MEDALS as m (m.id)}
+                {@const have = medals[m.id] ?? 0}
+                {#if have > 0}
+                  <Button
+                    small
+                    disabled={sending}
+                    title="Spend one {m.name} (you have {have}) for +{m.loyalty} loyalty"
+                    onclick={() => rewardWithMedal(hero, m.id)}>{m.name}: +{m.loyalty}</Button
+                  >
+                {/if}
+              {/each}
+            {/if}
+          </div>
+          <div class="line">
+            <b>Points</b>
+            {#if back === 0}
+              <span class="note">No spent points to take back yet (only points spent from now on count).</span
+              >
+            {:else if resetWait > 0}
+              <span class="note">Next reset in {formatDuration(resetWait)}.</span>
+            {:else}
+              <Button
+                small
+                variant="red"
+                disabled={sending || gold < resetPointsGold(hero.level)}
+                onclick={() => resetPoints(hero)}
+                >Take back {back} point{back > 1 ? 's' : ''} ({formatNumber(resetPointsGold(hero.level))} gold)</Button
+              >
+            {/if}
+          </div>
+        </div>
+      {/if}
     {:else}
       <p class="note">No heroes yet. Recruit them at the Inn.</p>
     {/each}
@@ -280,6 +387,33 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+  }
+  .low {
+    color: var(--err);
+  }
+  .manage {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: -4px 0 4px 60px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px dashed #6d8aa8;
+    background: #f6fbff;
+    color: var(--navy);
+    font-size: 12px;
+  }
+  .manage .line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .manage .line > b {
+    width: 52px;
+  }
+  .manage input {
+    width: 160px;
   }
   .note {
     margin: 0;

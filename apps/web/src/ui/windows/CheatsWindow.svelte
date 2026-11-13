@@ -160,6 +160,7 @@
     { key: 'politics', label: 'Politics', min: 0, max: MAX_HERO_STAT },
     { key: 'stars', label: 'Stars', min: 0, max: MAX_STARS },
     { key: 'points', label: 'Unspent points', min: 0, max: MAX_HERO_STAT },
+    { key: 'loyalty', label: 'Loyalty', min: 0, max: 100 },
   ] as const;
   type HeroField = (typeof HERO_FIELDS)[number]['key'];
 
@@ -495,7 +496,8 @@
         </div>
         <p class="note">
           Level 1-{MAX_HERO_LEVEL} (Leadership follows it, and so does the salary), stats 0-{MAX_HERO_STAT.toLocaleString()},
-          stars 0-{MAX_STARS} (they boost troop life and Leadership in battle). A new level starts at 0 exp.
+          stars 0-{MAX_STARS} (they boost troop life and Leadership in battle), loyalty 0-100. A new level starts
+          at 0 exp.
         </p>
       {/if}
     </section>

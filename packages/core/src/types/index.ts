@@ -154,6 +154,14 @@ export interface CityHero extends HeroStats {
   status: HeroStatus;
   /** Gold per hour, already taken off the city's gold rate. */
   salary: number;
+  /** 0-100. Hired heroes start at 70, captives at 0. Under 20, a hero who loses an attack on a player's city can be captured. */
+  loyalty: number;
+  /** When the hero was last rewarded (epoch ms); one reward per HERO_REWARD_COOLDOWN_MS. */
+  rewardAt: number | null;
+  /** When the hero's points were last reset (epoch ms); one reset per POINTS_RESET_COOLDOWN_MS. */
+  resetAt: number | null;
+  /** Stat points spent since they were tracked, by stat: what a reset gives back. */
+  added: Partial<Record<'politics' | 'attack' | 'intelligence', number>>;
 }
 
 /** A hero the Inn offers for hire. */

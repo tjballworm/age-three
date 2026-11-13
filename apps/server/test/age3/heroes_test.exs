@@ -89,7 +89,14 @@ defmodule Age3.HeroesTest do
     h = %{points: 3, politics: 10, attack: 20, intelligence: 30}
 
     assert Heroes.assign(h, %{"politics" => 2, "intelligence" => 1}) ==
-             {:ok, [points: 0, politics: 12, attack: 20, intelligence: 31]}
+             {:ok,
+              [
+                points: 0,
+                politics: 12,
+                attack: 20,
+                intelligence: 31,
+                added: %{"politics" => 2, "attack" => 0, "intelligence" => 1}
+              ]}
 
     assert Heroes.assign(h, %{"attack" => 4}) == {:error, "not_enough_points"}
     assert Heroes.assign(h, %{"attack" => -1}) == {:error, "bad_message"}
@@ -104,5 +111,70 @@ defmodule Age3.HeroesTest do
     assert Heroes.mayor_seconds(1000, mayor, :train) == round(1000 * :math.pow(0.9986, 100))
     assert Heroes.mayor_seconds(1000, mayor, :research) == 1000
     assert Heroes.mayor_seconds(1, mayor, :build) == 1
+  end
+
+  test "raw cost and the mayor's exp from city work" do
+    assert Heroes.raw_cost(%{"food" => 100, "lumber" => 100, "stone" => 100, "iron" => 100, "gold" => 10}) ==
+             100 + 100 + 200 + 250 + 100
+
+    assert Heroes.raw_cost(nil) == 0
+    assert Heroes.city_work_exp(%{"food" => 1999}) == 9
+    assert Heroes.city_work_exp(%{"iron" => 800}) == 10
+  end
+
+  test "rewarding a hero: gold or a medal, at most 100, once per 15 minutes" do
+    hero = %{level: 10, loyalty: 70, reward_at: nil, status: "idle"}
+
+    assert Heroes.check_reward(hero, "gold", nil, 0, 1_000, %{}) ==
+             {:ok, %{gold: 1_000, medal: nil, loyalty: 75}}
+
+    assert Heroes.check_reward(hero, "gold", nil, 0, 999, %{}) == {:error, "not_enough_resources"}
+
+    assert Heroes.check_reward(hero, "medal", "nation", 0, 0, %{"nation" => 1}) ==
+             {:ok, %{gold: 0, medal: "nation", loyalty: 100}}
+
+    assert Heroes.check_reward(hero, "medal", "cross", 0, 0, %{}) == {:error, "not_enough_medals"}
+    assert Heroes.check_reward(hero, "medal", "gem", 0, 0, %{"gem" => 1}) == {:error, "bad_message"}
+    assert Heroes.check_reward(hero, "wine", nil, 0, 0, %{}) == {:error, "bad_message"}
+
+    rewarded = %{hero | reward_at: 1_000}
+
+    assert Heroes.check_reward(rewarded, "gold", nil, 1_000 + 15 * 60_000 - 1, 9_999, %{}) ==
+             {:error, "reward_cooldown"}
+
+    assert {:ok, _} = Heroes.check_reward(rewarded, "gold", nil, 1_000 + 15 * 60_000, 9_999, %{})
+
+    assert Heroes.check_reward(%{hero | loyalty: 100}, "gold", nil, 0, 9_999, %{}) == {:error, "loyalty_full"}
+
+    assert Heroes.check_reward(%{hero | status: "captive"}, "gold", nil, 0, 9_999, %{}) ==
+             {:error, "hero_busy"}
+  end
+
+  test "a lost attack costs 5 loyalty; under 20 the hero is captured if the defender has room" do
+    assert Heroes.after_lost_attack(70, true) == {65, false}
+    assert Heroes.after_lost_attack(24, true) == {19, true}
+    assert Heroes.after_lost_attack(24, false) == {19, false}
+    assert Heroes.after_lost_attack(3, false) == {0, false}
+  end
+
+  test "reset_points gives back the spent points for level x 1,000 gold, once a day" do
+    hero = %{
+      level: 5,
+      points: 1,
+      politics: 12,
+      attack: 20,
+      intelligence: 31,
+      added: %{"politics" => 2, "intelligence" => 1},
+      reset_at: nil,
+      status: "idle"
+    }
+
+    assert Heroes.check_reset(hero, 0, 5_000) ==
+             {:ok, [points: 4, politics: 10, attack: 20, intelligence: 30, added: %{}], 5_000}
+
+    assert Heroes.check_reset(hero, 0, 4_999) == {:error, "not_enough_resources"}
+    assert Heroes.check_reset(%{hero | added: %{}}, 0, 5_000) == {:error, "nothing_to_reset"}
+    assert Heroes.check_reset(%{hero | reset_at: 0}, 86_400_000 - 1, 5_000) == {:error, "reset_cooldown"}
+    assert {:ok, _, _} = Heroes.check_reset(%{hero | reset_at: 0}, 86_400_000, 5_000)
   end
 end

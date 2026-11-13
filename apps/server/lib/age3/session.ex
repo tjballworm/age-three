@@ -102,6 +102,9 @@ defmodule Age3.Session do
               "dismiss",
               "setMayor",
               "assignPoints",
+              "rewardHero",
+              "renameHero",
+              "resetPoints",
               "march",
               "recall",
               "setGarrison",
@@ -683,6 +686,43 @@ defmodule Age3.Session do
   defp handle("assignPoints", _payload, id, session),
     do: {error(id, "bad_message", "Not a valid point assignment."), session}
 
+  # Reward a hero for loyalty: {cityId, heroId, kind: "gold"} or {cityId, heroId, kind: "medal", medal: "cross"}.
+  defp handle("rewardHero", %{"cityId" => city_id, "heroId" => hero_id, "kind" => kind} = p, id, session)
+       when is_binary(city_id) and is_binary(hero_id) and kind in ["gold", "medal"] do
+    medal = if kind == "medal", do: p["medal"]
+
+    if kind == "medal" and not is_binary(medal),
+      do: {error(id, "bad_message", "Not a valid reward."), session},
+      else:
+        command(id, session, &session.store.reward_hero(session.player_id, city_id, hero_id, kind, medal, &1))
+  end
+
+  defp handle("rewardHero", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid reward."), session}
+
+  # Rename a hero: {cityId, heroId, name}, same rules as city names.
+  defp handle("renameHero", %{"cityId" => city_id, "heroId" => hero_id, "name" => name}, id, session)
+       when is_binary(city_id) and is_binary(hero_id) do
+    case Age3.Game.city_name(name) do
+      {:ok, name} ->
+        command(id, session, &session.store.rename_hero(session.player_id, city_id, hero_id, name, &1))
+
+      {:error, _} ->
+        {error(id, "bad_hero_name", message("bad_hero_name")), session}
+    end
+  end
+
+  defp handle("renameHero", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid hero."), session}
+
+  # Take back a hero's spent stat points for gold: {cityId, heroId}.
+  defp handle("resetPoints", %{"cityId" => city_id, "heroId" => hero_id}, id, session)
+       when is_binary(city_id) and is_binary(hero_id),
+       do: command(id, session, &session.store.reset_points(session.player_id, city_id, hero_id, &1))
+
+  defp handle("resetPoints", _payload, id, session),
+    do: {error(id, "bad_message", "Not a valid hero."), session}
+
   # The hero who leads a city's defence: {cityId, heroId} (null for nobody).
   defp handle("setDefender", %{"cityId" => city_id} = payload, id, session) when is_binary(city_id) do
     hero_id = payload["heroId"]
@@ -927,6 +967,11 @@ defmodule Age3.Session do
   defp message("hall_full"), do: "The Feasting Hall is full. Upgrade it or dismiss a hero."
   defp message("offer_gone"), do: "That hero has left the Inn. Here are the new ones."
   defp message("hero_busy"), do: "That hero is busy."
+  defp message("bad_hero_name"), do: "Hero names are 1 to 20 letters, digits, spaces and ' - ."
+  defp message("reward_cooldown"), do: "That hero was rewarded less than 15 minutes ago."
+  defp message("loyalty_full"), do: "That hero's loyalty is already 100."
+  defp message("nothing_to_reset"), do: "That hero has no spent points to take back."
+  defp message("reset_cooldown"), do: "That hero's points were reset less than a day ago."
   defp message("no_rally_spot"), do: "Build a Rally Spot to send troops out."
   defp message("too_many_troops"), do: "Too many troops. Each Rally Spot level sends 10,000."
 

@@ -5,6 +5,7 @@ defmodule Age3.Store.PgTest do
   @moduletag :db
 
   alias Age3.Store.Pg
+  import Ecto.Query, only: [from: 2]
 
   setup do
     # each test runs in a transaction that is rolled back afterwards, so tests leave no rows behind
@@ -684,6 +685,55 @@ defmodule Age3.Store.PgTest do
       assert level == o.level + 1
     end
 
+    test "rewards raise loyalty, rename and reset points work, and the mayor learns from city work" do
+      {id, city_id, now} = innkeeper("Rewarder")
+      {:ok, _, [city], _} = Pg.state(id, now)
+      [o | _] = city.inn.offers
+      :ok = Pg.hire(id, city_id, o.id, now)
+      {:ok, _, [%{heroes: [hero]} = city], _} = Pg.state(id, now)
+      assert hero.loyalty == 70 and hero.rewardAt == nil
+      gold = city.resources["gold"]["amount"]
+
+      assert :ok = Pg.reward_hero(id, city_id, hero.id, "gold", nil, now)
+      {:ok, _, [%{heroes: [rewarded]} = city], _} = Pg.state(id, now)
+      assert rewarded.loyalty == 75 and rewarded.rewardAt == now
+      assert_in_delta city.resources["gold"]["amount"], gold - 100 * hero.level, 1
+
+      # one medal a quarter of an hour later
+      assert {:error, "reward_cooldown"} = Pg.reward_hero(id, city_id, hero.id, "gold", nil, now + 1)
+      later = now + 15 * 60_000
+      assert {:error, "not_enough_medals"} = Pg.reward_hero(id, city_id, hero.id, "medal", "rose", later)
+      {:ok, _} = Pg.cheat(id, {:player, "Rewarder"}, "addMedals", %{medals: %{"rose" => 1}}, later)
+      assert :ok = Pg.reward_hero(id, city_id, hero.id, "medal", "rose", later)
+      {:ok, _, [%{heroes: [%{loyalty: 85}]}], _} = Pg.state(id, later)
+      assert Map.get(Age3.Repo.get!(Age3.Player, id).medals, "rose", 0) == 0
+
+      assert :ok = Pg.rename_hero(id, city_id, hero.id, "Sir Bob", later)
+
+      # spent points come back (only the ones spent from now on)
+      {:ok, _} =
+        Pg.cheat(id, {:city, city_id}, "setHero", %{hero_id: hero.id, changes: [points: 2]}, later)
+
+      assert :ok = Pg.assign_points(id, city_id, hero.id, %{"attack" => 2}, later)
+      assert :ok = Pg.reset_points(id, city_id, hero.id, later)
+      {:ok, _, [%{heroes: [reset]}], _} = Pg.state(id, later)
+      assert %{name: "Sir Bob", points: 2, added: %{}} = reset
+      assert reset.attack == hero.attack and reset.resetAt == later
+      assert {:error, "nothing_to_reset"} = Pg.reset_points(id, city_id, hero.id, later)
+
+      # the mayor gets raw cost / 200 exp when a build finishes
+      assert :ok = Pg.set_mayor(id, city_id, hero.id, later)
+      assert {:ok, ends_at} = Pg.build(id, city_id, "3", "cottage", later)
+
+      cost =
+        Age3.Repo.one!(
+          from t in Age3.Task, where: t.city_id == ^city_id and t.kind == "build", select: t.cost
+        )
+
+      {:ok, _, [%{heroes: [mayor]}], _} = Pg.state(id, ends_at)
+      assert mayor.exp == Age3.Heroes.city_work_exp(cost) and mayor.exp > 0
+    end
+
     test "the setHero cheat sets one hero's level and stats" do
       {id, city_id, now} = innkeeper("Statter")
       {:ok, _, [city], _} = Pg.state(id, now)
@@ -1334,6 +1384,34 @@ defmodule Age3.Store.PgTest do
 
       # the old owner sees it on the map as someone else's now
       assert Enum.any?(Pg.lords(r.def), &(&1.id == r.def_city and &1.owner == "Conqueror"))
+    end
+
+    test "a lost attack costs the hero loyalty; under 20 the defender captures it if its Hall has room" do
+      r = rivals("Loser Lord", "Holdout")
+      {:ok, _} = Pg.cheat(r.def, {:city, r.def_city}, "addTroops", %{troops: %{"archer" => 50_000}}, r.now)
+      assert :ok = Pg.set_gate(r.def, r.def_city, true, r.now)
+      Age3.Repo.update_all(from(h in Age3.Hero, where: h.id == ^r.hero), set: [loyalty: 30])
+
+      # no Feasting Hall yet: 30 -> 25, and the hero comes home
+      arrives = attack(r, %{"cavalry" => 10})
+      {:ok, _, [home], _} = Pg.state(r.att, arrives + 1000)
+      assert [%{loyalty: 25, status: "idle"}] = home.heroes
+
+      assert [%{side: "attack", won: false, hero: %{"loyalty" => 25, "captured" => false}}] =
+               Pg.reports(r.att)
+
+      Age3.Repo.insert_all(Age3.Building, [%{city_id: r.def_city, slot: "9", type: "feastinghall", level: 1}])
+      Age3.Repo.update_all(from(h in Age3.Hero, where: h.id == ^r.hero), set: [loyalty: 22])
+      arrives = attack(r, %{"cavalry" => 10}, arrives + 1000)
+      [held] = city_of(r.def, arrives)
+      assert [%{id: hero_id, status: "captive", loyalty: 0}] = held.heroes
+      assert hero_id == r.hero
+      assert [%{side: "defence", title: title} | _] = Pg.reports(r.def)
+      assert title =~ "captured"
+
+      # the army comes home without its hero
+      {:ok, _, [home], []} = Pg.state(r.att, arrives + 1000)
+      assert home.heroes == []
     end
 
     test "a march out of a captured city goes home to its owner's new city" do

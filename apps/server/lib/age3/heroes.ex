@@ -187,7 +187,8 @@ defmodule Age3.Heroes do
   @doc """
   Spends a hero's unspent points: add is %{"politics" => n, "attack" => n, "intelligence" => n} (any left out
   are 0), each a whole number 0 or more, at most points in all. Returns {:ok, changes} for the hero's row, or
-  {:error, "bad_message"} / {:error, "not_enough_points"}.
+  {:error, "bad_message"} / {:error, "not_enough_points"}. The points are also kept in added, so reset_points can
+  give them back.
   """
   def assign(hero, add) do
     stats = ~w(politics attack intelligence)
@@ -208,14 +209,124 @@ defmodule Age3.Heroes do
 
       true ->
         [p, a, i] = adds
+        added = Map.get(hero, :added) || %{}
 
         {:ok,
          [
            points: hero.points - p - a - i,
            politics: hero.politics + p,
            attack: hero.attack + a,
-           intelligence: hero.intelligence + i
+           intelligence: hero.intelligence + i,
+           added: Map.new(Enum.zip(stats, adds), fn {s, n} -> {s, Map.get(added, s, 0) + n} end)
          ]}
+    end
+  end
+
+  # (tunable) Bundle 2 and 3 of plans/age2-features-plan.md
+  @hired_loyalty 70
+  @max_loyalty 100
+  @reward_cooldown_ms 15 * 60_000
+  @reset_cooldown_ms 24 * 3_600_000
+  @lost_attack_loyalty 5
+  @capture_below 20
+
+  def hired_loyalty, do: @hired_loyalty
+  def reward_cooldown_ms, do: @reward_cooldown_ms
+  def reset_cooldown_ms, do: @reset_cooldown_ms
+
+  @doc """
+  Raw cost of something paid for (wiki, Experience): food + lumber + 2 x stone + 2.5 x iron + 10 x gold. cost is a
+  map of resource => amount (missing ones are 0). Rounded down.
+  """
+  def raw_cost(cost) do
+    cost = cost || %{}
+    n = fn k -> Map.get(cost, k, 0) || 0 end
+    trunc(n.("food") + n.("lumber") + 2 * n.("stone") + 2.5 * n.("iron") + 10 * n.("gold"))
+  end
+
+  @doc "Exp the city's mayor gets when a build, research, fortification or training task it paid for finishes."
+  def city_work_exp(cost), do: div(raw_cost(cost), 200)
+
+  @doc """
+  Can the player reward this hero (Feasting Hall, wiki)? kind "gold" pays 100 x level gold for 5 loyalty; kind
+  "medal" spends one medal for its loyalty (medals.json). One reward per hero per 15 minutes, and not above 100.
+  hero has :level, :loyalty, :reward_at (epoch ms or nil). Returns {:ok, %{gold, medal, loyalty}} with what to
+  pay and the new loyalty, or {:error, code}.
+  """
+  def check_reward(hero, kind, medal_id, now_ms, gold, medals) do
+    cond do
+      hero.status == "captive" ->
+        {:error, "hero_busy"}
+
+      hero.reward_at && now_ms < hero.reward_at + @reward_cooldown_ms ->
+        {:error, "reward_cooldown"}
+
+      hero.loyalty >= @max_loyalty ->
+        {:error, "loyalty_full"}
+
+      kind == "gold" ->
+        cost = 100 * hero.level
+
+        if gold >= cost,
+          do: {:ok, %{gold: cost, medal: nil, loyalty: min(@max_loyalty, hero.loyalty + 5)}},
+          else: {:error, "not_enough_resources"}
+
+      kind == "medal" ->
+        case Age3.Data.medal_loyalty(medal_id) do
+          nil ->
+            {:error, "bad_message"}
+
+          gain ->
+            if Map.get(medals || %{}, medal_id, 0) >= 1,
+              do: {:ok, %{gold: 0, medal: medal_id, loyalty: min(@max_loyalty, hero.loyalty + gain)}},
+              else: {:error, "not_enough_medals"}
+        end
+
+      true ->
+        {:error, "bad_message"}
+    end
+  end
+
+  @doc """
+  What a lost attack on a player's city does to the hero who led it: -5 loyalty (floor 0); a hero left under 20 is
+  captured by the defender, if the defender's Feasting Hall has room (room?). Returns {loyalty, captured?}.
+  """
+  def after_lost_attack(loyalty, room?) do
+    left = max(0, loyalty - @lost_attack_loyalty)
+    {left, room? and left < @capture_below}
+  end
+
+  @doc """
+  Takes back every point the player spent on the hero (added) as unspent points, for level x 1,000 gold, once a
+  day. Points spent before this was tracked can't come back. Returns {:ok, changes, gold} or {:error, code}.
+  """
+  def check_reset(hero, now_ms, gold) do
+    added = hero.added || %{}
+    back = Enum.sum(Map.values(added))
+    cost = fee(hero.level)
+
+    cond do
+      hero.status == "captive" ->
+        {:error, "hero_busy"}
+
+      back == 0 ->
+        {:error, "nothing_to_reset"}
+
+      hero.reset_at && now_ms < hero.reset_at + @reset_cooldown_ms ->
+        {:error, "reset_cooldown"}
+
+      gold < cost ->
+        {:error, "not_enough_resources"}
+
+      true ->
+        {:ok,
+         [
+           points: hero.points + back,
+           politics: hero.politics - Map.get(added, "politics", 0),
+           attack: hero.attack - Map.get(added, "attack", 0),
+           intelligence: hero.intelligence - Map.get(added, "intelligence", 0),
+           added: %{}
+         ], cost}
     end
   end
 end

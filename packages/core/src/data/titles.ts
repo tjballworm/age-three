@@ -24,7 +24,7 @@ export interface MedalSpec {
   id: MedalId;
   /** e.g. "Cross Medal". */
   name: string;
-  /** Loyalty it would give a hero (not used yet). */
+  /** Loyalty it gives a hero when spent as a reward in the Feasting Hall. */
   loyalty: number;
 }
 
