@@ -25,9 +25,10 @@ defmodule Age3.BuildTest do
   end
 
   test "nothing goes more than one level above the Town Hall, except the Town Hall" do
-    assert {:ok, %{type: "walls", level: 2}} = Build.check(@town, rich(), "walls", nil)
-    walls2 = [%{slot: "walls", type: "walls", level: 2}, hd(@town)]
-    assert {:error, "requirement_not_met"} = Build.check(walls2, rich(), "walls", nil)
+    warehouse1 = [%{slot: "3", type: "warehouse", level: 1} | @town]
+    assert {:ok, %{type: "warehouse", level: 2}} = Build.check(warehouse1, rich(), "3", nil)
+    warehouse2 = [%{slot: "3", type: "warehouse", level: 2} | @town]
+    assert {:error, "requirement_not_met"} = Build.check(warehouse2, rich(), "3", nil)
     assert {:ok, %{type: "townhall", level: 2}} = Build.check(@town, rich(), "townhall", nil)
   end
 
