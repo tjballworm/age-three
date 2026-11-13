@@ -242,6 +242,9 @@ defmodule Age3.FakeStore do
   def report(_player_id, _report_id), do: {:error, "bad_message"}
 
   @impl true
+  def read_all_reports(_player_id, _now_ms), do: :ok
+
+  @impl true
   def set_garrison(_player_id, "c1", _allow, _now_ms), do: :ok
   def set_garrison(_player_id, _city_id, _allow, _now_ms), do: {:error, "bad_message"}
 

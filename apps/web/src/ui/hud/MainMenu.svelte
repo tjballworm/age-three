@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { game, openWindow, type WindowId } from '$state/game.svelte';
+  import { game, hostileMarch, incomingMarches, openWindow, type WindowId } from '$state/game.svelte';
   import Icon, { type IconName } from '$ui/components/Icon.svelte';
 
   const ITEMS: { id: WindowId & IconName; label: string; color: string }[] = [
@@ -12,12 +12,22 @@
     { id: 'shop', label: 'Shop', color: '#c89a1a' },
     { id: 'leaderboard', label: 'Leaderboard', color: '#a83a2a' },
   ];
+
+  // Reports flashes red while a hostile march (or one the Beacon Tower can't tell) is on its way.
+  const underAttack = $derived(incomingMarches().some(hostileMarch));
 </script>
 
 <nav class="menu" aria-label="Main menu">
   {#each ITEMS as item (item.id)}
     {@const badge = game.badges[item.id] ?? 0}
-    <button type="button" class="item" onclick={() => openWindow(item.id)} style:--c={item.color}>
+    <button
+      type="button"
+      class="item"
+      class:alert={item.id === 'reports' && underAttack}
+      title={item.id === 'reports' && underAttack ? 'Enemy marches are on their way!' : undefined}
+      onclick={() => openWindow(item.id)}
+      style:--c={item.color}
+    >
       <span class="glyph"><Icon name={item.id} size={20} /></span>
       <span class="label">{item.label}</span>
       {#if badge > 0}<span class="badge">{badge > 99 ? '99+' : badge}</span>{/if}
@@ -55,6 +65,27 @@
   }
   .item:hover {
     border-color: var(--bronze);
+  }
+  .item.alert {
+    animation: alert 1s ease-in-out infinite alternate;
+  }
+  @keyframes alert {
+    from {
+      border-color: #6d5a2a;
+      box-shadow: none;
+    }
+    to {
+      border-color: #ff4a3a;
+      background: linear-gradient(180deg, #8a2a1a, #3a0e06);
+      box-shadow: 0 0 10px #ff3a2a;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .item.alert {
+      animation: none;
+      border-color: #ff4a3a;
+      background: linear-gradient(180deg, #8a2a1a, #3a0e06);
+    }
   }
   .item:active {
     transform: translateY(1px);

@@ -196,7 +196,8 @@ defmodule Age3.SessionTest do
              %{"type" => "error", "payload" => %{"code" => "already_returning"}},
              %{"type" => "reports", "payload" => %{"reports" => [%{"id" => "r1"}]}},
              %{"type" => "report", "payload" => %{"report" => %{"result" => %{"winner" => "attacker"}}}},
-             %{"type" => "error", "payload" => %{"code" => "bad_message"}}
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}},
+             %{"type" => "state"}
            ] =
              run([
                login("secret123"),
@@ -209,7 +210,8 @@ defmodule Age3.SessionTest do
                msg.("recall", %{cityId: "c1", taskId: "m2"}),
                msg.("getReports", %{}),
                msg.("getReport", %{reportId: "r1"}),
-               msg.("getReport", %{reportId: "r2"})
+               msg.("getReport", %{reportId: "r2"}),
+               msg.("readAllReports", %{})
              ])
 
     assert target =~ "NPC"

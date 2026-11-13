@@ -223,6 +223,9 @@ defmodule Age3.Store do
   @doc "The player's latest battle reports, newest first, without the battle details."
   @callback reports(player_id :: String.t()) :: [map]
 
+  @doc "Marks all the player's reports read."
+  @callback read_all_reports(player_id :: String.t(), now_ms :: integer) :: :ok
+
   @doc "One of the player's battle reports with the whole battle (BattleResult), marking it read."
   @callback report(player_id :: String.t(), report_id :: String.t()) ::
               {:ok, map} | {:error, code :: String.t()}
@@ -2293,8 +2296,38 @@ defmodule Age3.Store.Pg do
     end
   end
 
+  @impl true
+  def read_all_reports(player_id, _now_ms) do
+    Repo.update_all(from(r in Report, where: r.player_id == ^player_id and not r.read), set: [read: true])
+    :ok
+  end
+
   defp unread_reports(player_id),
     do: Repo.aggregate(from(r in Report, where: r.player_id == ^player_id and not r.read), :count)
+
+  # Unread reports by the Reports window's tab: policies (side policy/policied), scouting (kind scout), battles
+  # (kind battle) and missions (the rest: transports, reinforcements, founding, valleys).
+  defp unread_report_tabs(player_id) do
+    counts =
+      Repo.all(
+        from r in Report,
+          where: r.player_id == ^player_id and not r.read,
+          group_by: [r.side, r.kind],
+          select: {r.side, r.kind, count(r.id)}
+      )
+
+    Enum.reduce(counts, %{battles: 0, scouting: 0, missions: 0, policies: 0}, fn {side, kind, n}, acc ->
+      tab =
+        cond do
+          side in ["policy", "policied"] -> :policies
+          kind == "scout" -> :scouting
+          kind in [nil, "battle"] -> :battles
+          true -> :missions
+        end
+
+      Map.update!(acc, tab, &(&1 + n))
+    end)
+  end
 
   # Promotions: one step up the rank or title ladder (Age3.Titles), paid with gold from city_id (whose Town Hall
   # counts for ranks) and the player's medals. Locks the city, then the player, like research.
@@ -4019,6 +4052,7 @@ defmodule Age3.Store.Pg do
       research: p.research,
       instantMarch: p.instant_march,
       unreadReports: unread_reports(p.id),
+      unreadReportTabs: unread_report_tabs(p.id),
       unreadMail: Social.unread(p.id),
       items: p.items || %{},
       allianceRank: p.alliance_rank,

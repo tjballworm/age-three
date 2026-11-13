@@ -826,6 +826,7 @@ defmodule Age3.Store.PgTest do
                Age3.March.loot(Age3.Npc.full(1)["resources"], Age3.March.load(%{"cavalry" => survivors}, %{}))
 
       assert player.unreadReports == 1
+      assert player.unreadReportTabs == %{battles: 1, scouting: 0, missions: 0, policies: 0}
       # a full clear of a full NPC: whatever medals it dropped are the player's already
       assert [%{medals: medals}] = Pg.reports(id)
       assert player.medals == medals
@@ -858,6 +859,9 @@ defmodule Age3.Store.PgTest do
       {:ok, _, _, [again]} = Pg.state(id, later)
       {:ok, _, _, [_back]} = Pg.state(id, again.endsAt)
       [newest | _] = Pg.reports(id)
+      assert newest.read == false
+      assert :ok = Pg.read_all_reports(id, again.endsAt)
+      assert Enum.all?(Pg.reports(id), & &1.read)
       {:ok, %{result: r}} = Pg.report(id, newest.id)
       warriors = Enum.find(r["defender"]["troops"], &(&1["type"] == "warrior"))["initial"]
       assert warriors == min(50, div(50 * div(again.endsAt - arrives, 1000), 3600))

@@ -15,7 +15,7 @@
     type TroopType,
   } from '@age3/core';
   import { game, goToCoord } from '$state/game.svelte';
-  import { ask } from '$state/sync';
+  import { ask, command } from '$state/sync';
   import Button from '$ui/components/Button.svelte';
   import MedalBadge from '$ui/components/MedalBadge.svelte';
   import ResourceIcon from '$ui/components/ResourceIcon.svelte';
@@ -26,14 +26,14 @@
   // (BattleReport). Opening one marks it read. The list loads when the window opens and again
   // whenever the unread count changes (a battle just happened).
 
-  /** Which reports this tab lists: battles, scouting, or the other missions (transports, reinforcements, ...). */
-  let { tab = 'battles' }: { tab?: 'battles' | 'scouting' | 'missions' } = $props();
+  /** Which reports this tab lists: battles, scouting, policies, or the other missions (transports, ...). */
+  let { tab = 'battles' }: { tab?: 'battles' | 'scouting' | 'missions' | 'policies' } = $props();
 
   let all = $state<ReportSummary[]>([]);
   const kindOf = (r: ReportSummary) =>
     r.kind === 'scout' ? 'scouting' : (r.kind ?? 'battle') === 'battle' ? 'battles' : 'missions';
   const reports = $derived(
-    all.filter((r) => (r.side === 'policy' || r.side === 'policied' ? 'missions' : kindOf(r)) === tab),
+    all.filter((r) => (r.side === 'policy' || r.side === 'policied' ? 'policies' : kindOf(r)) === tab),
   );
   /** result is null for a policy report (no battle). */
   let open = $state<(ReportSummary & { result: BattleResult | null }) | null>(null);
@@ -74,6 +74,15 @@
     load();
   });
 
+  async function readAll() {
+    error = '';
+    try {
+      await command({ type: 'readAllReports', payload: {} });
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   const FAILED: Record<string, string> = {
     no_informatics: 'this city needs both Informatics research and a Beacon Tower to scout',
     too_few_scouts: 'too few scouts for its level (10 per level)',
@@ -96,6 +105,9 @@
   <div class="list">
     {#if !game.fromServer}<p class="note">Reports need the game server.</p>{/if}
     {#if error}<p class="error" role="alert">{error}</p>{/if}
+    {#if (game.player.unreadReports ?? 0) > 0}
+      <Button small onclick={readAll}>Mark all read ({game.player.unreadReports})</Button>
+    {/if}
     {#each reports as r (r.id)}
       <button
         type="button"
@@ -130,8 +142,10 @@
           {tab === 'scouting'
             ? 'No scouting yet. Scout a tile from the world map.'
             : tab === 'missions'
-              ? 'No transports, reinforcements or policies yet.'
-              : 'No battles yet. Attack an NPC city from the world map.'}
+              ? 'No transports, reinforcements or new cities yet.'
+              : tab === 'policies'
+                ? 'No policies yet.'
+                : 'No battles yet. Attack an NPC city from the world map.'}
         </p>{/if}
     {/each}
   </div>
@@ -149,7 +163,9 @@
           <span>
             Hero <b>{open.hero.name}</b> +{formatNumber(open.hero.exp)} exp{#if open.hero.levelsGained > 0},
               now
-              <b>Lv {open.hero.level}</b>{/if}
+              <b>Lv {open.hero.level}</b>{/if}{#if open.hero.loyalty != null}
+              · loyalty <b>{open.hero.loyalty}</b>{/if}{#if open.hero.captured}
+              · <b class="lost">captured by the defender!</b>{/if}
           </span>
         {/if}
         {#if open.loyalty}

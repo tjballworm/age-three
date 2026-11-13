@@ -129,6 +129,7 @@ defmodule Age3.Session do
               "deleteMail",
               "alliance",
               "getReport",
+              "readAllReports",
               "cheat"
             ],
        do: {error(id, "not_logged_in", "Log in first."), session}
@@ -518,6 +519,10 @@ defmodule Age3.Session do
   # The latest battle reports, without the battles: replies "reports" {reports: [...]}.
   defp handle("getReports", _payload, id, session),
     do: {reply(id, "reports", %{reports: session.store.reports(session.player_id)}), session}
+
+  # Marks every report read: {}. Replies with state (the unread counts are on the player).
+  defp handle("readAllReports", _payload, id, session),
+    do: command(id, session, &session.store.read_all_reports(session.player_id, &1))
 
   # One report with its whole battle: {reportId}. Marks it read. Replies "report" {report}.
   defp handle("getReport", %{"reportId" => report_id}, id, session) when is_binary(report_id) do
