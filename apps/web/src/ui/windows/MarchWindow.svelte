@@ -1,6 +1,5 @@
 <script lang="ts">
   import {
-    FORT_NAME,
     MAX_CAMP_SECONDS,
     TROOPS,
     TROOP_DATA,
@@ -22,7 +21,6 @@
     historicRallyMultiplier,
     historicSpec,
     maxMarches,
-    npcSpec,
     researchInCity,
     stockAt,
     type ResourceType,
@@ -54,7 +52,8 @@
   const lord = $derived(target.kind === 'city' || !!target.cityId);
   /** A historic city that nobody holds yet. Its garrison stays hidden: scout it to see what is there. */
   const hc = $derived(target.kind === 'historic' && !lord ? historicSpec(target.level) : undefined);
-  const npc = $derived(target.kind === 'npc' ? npcSpec(target.level) : undefined);
+  /** An NPC town. Like a historic city, its garrison stays hidden: scout it to see what is there. */
+  const npc = $derived(target.kind === 'npc');
   const beacon = $derived(city.buildings.find((b) => b.type === 'beacontower')?.level ?? 0);
   const relief = $derived(city.buildings.find((b) => b.type === 'reliefstation')?.level ?? 0);
   const what = $derived(
@@ -132,7 +131,6 @@
   const food = $derived(marchFood(army, seconds, camp));
   const load = $derived(marchLoad(army, research));
   const foodNow = $derived(stockAt(city.resources.food, game.syncedAt, clock.now));
-  const npcLoot = $derived(npc ? Object.values(npc.resources).reduce((n, v) => n + v, 0) : 0);
 
   const problem = $derived(
     !game.fromServer
@@ -458,25 +456,8 @@
         <h3>{target.name} <span class="note">Lv {target.level} historic city</span></h3>
         <p class="note">Scout it first to see its troops.</p>
       {:else if npc}
-        <h3>Lv {target.level} NPC garrison <span class="note">when full</span></h3>
-      {/if}
-      {#if npc && mission === 'attack'}
-        <table>
-          <tbody>
-            {#each Object.entries(npc.troops) as [t, n] (t)}
-              <tr><td class="name">{TROOP_DATA[t as TroopType].name}</td><td>{formatNumber(n ?? 0)}</td></tr>
-            {/each}
-            {#each Object.entries(npc.fortifications) as [f, n] (f)}
-              <tr
-                ><td class="name">{FORT_NAME[f as keyof typeof FORT_NAME]}</td><td>{formatNumber(n ?? 0)}</td
-                ></tr
-              >
-            {/each}
-            <tr><td class="name">Walls</td><td>Lv {target.level}</td></tr>
-            <tr><td class="name">Research</td><td>Lv {target.level}</td></tr>
-            <tr><td class="name">Resources</td><td>{formatNumber(npcLoot)}</td></tr>
-          </tbody>
-        </table>
+        <h3>Lv {target.level} NPC</h3>
+        <p class="note">Scout it first to see its troops.</p>
       {/if}
     </div>
   </div>
