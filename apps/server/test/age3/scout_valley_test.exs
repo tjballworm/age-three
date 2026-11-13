@@ -110,10 +110,39 @@ defmodule Age3.ScoutValleyTest do
       assert Age3.Beacon.seen(1, @march) == %{id: "m1"}
       assert Age3.Beacon.seen(3, @march) == %{id: "m1", mission: "attack", arrivesAt: 5000}
       assert %{from: "Raider", fromCity: %{x: 1}, troops: %{"cavalry" => nil}} = Age3.Beacon.seen(6, @march)
-      assert Age3.Beacon.seen(7, @march).troops == %{"cavalry" => 12_000}
+      assert Age3.Beacon.seen(7, @march).troops == %{"cavalry" => "Giga"}
       assert Age3.Beacon.seen(8, @march).troops == %{"cavalry" => 12_345}
       refute Map.has_key?(Age3.Beacon.seen(8, @march), :heroLevel)
       assert %{heroLevel: 30, research: %{"archery" => 4}} = Age3.Beacon.seen(10, @march)
+    end
+
+    test "troop words for rough numbers" do
+      words =
+        for n <- [
+              1,
+              24,
+              25,
+              49,
+              50,
+              99,
+              100,
+              249,
+              250,
+              499,
+              500,
+              999,
+              1000,
+              2499,
+              2500,
+              4999,
+              5000,
+              10_000,
+              10_001
+            ],
+            do: Age3.Beacon.troop_word(n)
+
+      assert words ==
+               ~w(Few Few Pack Pack Lots Lots Horde Horde Throng Throng Swarm Swarm Zounds Zounds Legion Legion Bulk Bulk Giga)
     end
   end
 end

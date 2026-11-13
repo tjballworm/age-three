@@ -101,7 +101,8 @@ export interface IncomingMarch {
   arrivesAt?: number;
   from?: string;
   fromCity?: Coord & { name: string };
-  troops?: Partial<Record<TroopType, number | null>>;
+  /** Beacon Lv6: types only (null), Lv7: a troop word (troopWord), Lv8+: exact counts. */
+  troops?: Partial<Record<TroopType, number | string | null>>;
   heroLevel?: number;
   research?: Partial<Record<TechId, number>>;
 }
@@ -268,6 +269,8 @@ export interface Player {
   instantMarch?: boolean;
   /** Battle reports not opened yet. */
   unreadReports?: number;
+  /** The same, by the Reports window's tab. */
+  unreadReportTabs?: Record<'battles' | 'scouting' | 'missions' | 'policies', number>;
   /** Mail not read yet. */
   unreadMail?: number;
   /** Items held: item id -> count. */
@@ -347,7 +350,15 @@ export interface ReportSummary {
   /** Medals the battle dropped (a full clear of a full-strength NPC). */
   medals?: MedalCounts;
   /** The hero who led it: exp gained and the level they reached. */
-  hero: { name: string; exp: number; level: number; levelsGained: number } | null;
+  /** loyalty and captured: only for a lost attack on a player's city (the hero's loyalty after it). */
+  hero: {
+    name: string;
+    exp: number;
+    level: number;
+    levelsGained: number;
+    loyalty?: number;
+    captured?: boolean;
+  } | null;
   /**
    * "attack" for your attacks, "defence" for battles at your cities, "policy" for a policy your historic city
    * imposed and "policied" for one imposed on your city. Missing from older servers.

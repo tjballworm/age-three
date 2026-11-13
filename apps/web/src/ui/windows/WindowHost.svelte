@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { closeWindow, game, type WindowId } from '$state/game.svelte';
+  import { untrack } from 'svelte';
+  import { closeWindow, game, incomingMarches, type WindowId } from '$state/game.svelte';
   import Button from '$ui/components/Button.svelte';
   import Tabs from '$ui/components/Tabs.svelte';
   import Window from '$ui/components/Window.svelte';
   import AllianceWindow from './AllianceWindow.svelte';
   import CheatsWindow from './CheatsWindow.svelte';
   import CityOverview from './CityOverview.svelte';
+  import EnemyPanel from './EnemyPanel.svelte';
   import HeroesOverview from './HeroesOverview.svelte';
   import ItemsWindow from './ItemsWindow.svelte';
   import LeaderboardWindow from './LeaderboardWindow.svelte';
@@ -35,7 +37,7 @@
     alliance: { title: 'Alliance', tabs: ['Info', 'Members', 'Diplomacy'] },
     reports: {
       title: 'Reports',
-      tabs: ['Battles', 'Scouting', 'Missions'],
+      tabs: ['Enemy', 'Battles', 'Scouting', 'Missions', 'Policies'],
       width: 1200,
       height: 860,
       minWidth: 720,
@@ -57,11 +59,23 @@
 
   let tab = $state('');
   const def = $derived(game.openWindow ? WINDOWS[game.openWindow] : null);
-  const tabList = $derived(def ? def.tabs.map((t) => ({ id: t, label: t })) : []);
+  // Reports tabs show their unread count, and Enemy how many marches are on their way.
+  const tabCount = (t: string): number => {
+    if (game.openWindow !== 'reports') return 0;
+    if (t === 'Enemy') return incomingMarches().length;
+    const key = t.toLowerCase() as keyof NonNullable<typeof game.player.unreadReportTabs>;
+    return game.player.unreadReportTabs?.[key] ?? 0;
+  };
+  const tabList = $derived(
+    def ? def.tabs.map((t) => ({ id: t, label: tabCount(t) > 0 ? `${t} (${tabCount(t)})` : t })) : [],
+  );
 
-  // Reset to the first tab whenever a different window opens.
+  // Reset to the first tab whenever a different window opens; Reports opens on Battles unless something is coming.
   $effect(() => {
-    tab = def?.tabs[0] ?? '';
+    tab =
+      game.openWindow === 'reports'
+        ? untrack(() => (incomingMarches().length > 0 ? 'Enemy' : 'Battles'))
+        : (def?.tabs[0] ?? '');
   });
 </script>
 
@@ -92,9 +106,19 @@
     {:else if game.openWindow === 'cheats'}
       <CheatsWindow page={tab === 'Buildings & research' ? 'buildings' : 'resources'} />
     {:else if game.openWindow === 'reports'}
-      {#key tab}<ReportsWindow
-          tab={tab === 'Scouting' ? 'scouting' : tab === 'Missions' ? 'missions' : 'battles'}
-        />{/key}
+      {#if tab === 'Enemy'}
+        <EnemyPanel />
+      {:else}
+        {#key tab}<ReportsWindow
+            tab={tab === 'Scouting'
+              ? 'scouting'
+              : tab === 'Missions'
+                ? 'missions'
+                : tab === 'Policies'
+                  ? 'policies'
+                  : 'battles'}
+          />{/key}
+      {/if}
     {:else if game.openWindow === 'items'}
       <ItemsWindow {tab} mode="items" />
     {:else if game.openWindow === 'shop'}

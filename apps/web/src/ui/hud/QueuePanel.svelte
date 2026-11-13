@@ -1,7 +1,7 @@
 <script lang="ts">
   import { canFreeSpeedUp, progress, remaining, type TaskKind, type TimedTask } from '@age3/core';
   import { clock } from '$state/clock.svelte';
-  import { game } from '$state/game.svelte';
+  import { game, incomingMarches } from '$state/game.svelte';
   import { command, speedUp } from '$state/sync';
   import Icon, { type IconName } from '$ui/components/Icon.svelte';
   import ProgressBar from '$ui/components/ProgressBar.svelte';
@@ -50,11 +50,7 @@
    * Other lords' marches heading for any of the player's cities, as their Beacon Towers see them (no tower, no
    * warning). Lv2 tells the mission, Lv3 the arrival time, Lv4 the lord, Lv5 where from, Lv6+ the troops.
    */
-  const incoming = $derived(
-    game.cities
-      .flatMap((c) => (c.incoming ?? []).map((m) => ({ ...m, city: c.name })))
-      .sort((a, b) => (a.arrivesAt ?? Infinity) - (b.arrivesAt ?? Infinity)),
-  );
+  const incoming = $derived(incomingMarches());
   const MISSION: Record<string, string> = {
     attack: 'Attack',
     scout: 'Scouts',
@@ -62,10 +58,10 @@
     reinforce: 'Reinforcements',
     found: 'March',
   };
-  const troopsText = (t: Record<string, number | null | undefined> | undefined) =>
+  const troopsText = (t: Record<string, number | string | null | undefined> | undefined) =>
     t
       ? Object.entries(t)
-          .map(([k, n]) => (n == null ? k : `${n.toLocaleString('en-US')} ${k}`))
+          .map(([k, n]) => (n == null ? k : `${typeof n === 'number' ? n.toLocaleString('en-US') : n} ${k}`))
           .join(', ')
       : '';
 

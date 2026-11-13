@@ -115,6 +115,19 @@ export function openWindow(id: WindowId) {
   game.buildSlot = null;
 }
 
+/**
+ * Other lords' marches heading for any of the player's cities, as their Beacon Towers see them (no tower, no
+ * warning), soonest first, with the city they are heading for.
+ */
+export const incomingMarches = () =>
+  game.cities
+    .flatMap((c) => (c.incoming ?? []).map((m) => ({ ...m, city: c.name, cityId: c.id })))
+    .sort((a, b) => (a.arrivesAt ?? Infinity) - (b.arrivesAt ?? Infinity));
+
+/** A march that may be hostile: an attack, scouts, or one whose mission the Beacon Tower can't tell (Lv1). */
+export const hostileMarch = (m: { mission?: string }) =>
+  !m.mission || m.mission === 'attack' || m.mission === 'scout';
+
 export function closeWindow() {
   game.openWindow = null;
 }

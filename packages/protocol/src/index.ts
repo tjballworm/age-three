@@ -233,6 +233,8 @@ export type AllianceActionMessage = Envelope<
 >;
 /** One report with the whole battle; marks it read. Replies with `report`. */
 export type GetReportMessage = Envelope<'getReport', { reportId: string }>;
+/** Marks every report read. Replies with state (the player's unread counts). */
+export type ReadAllReportsMessage = Envelope<'readAllReports', Record<string, never>>;
 /**
  * One step up the rank or title ladder (nextPromotion in core shows what it needs). The gold comes from the city
  * (whose Town Hall counts for ranks), the medals from the player. Replies with state.
@@ -374,6 +376,7 @@ export type ClientMessage =
   | ImposePolicyMessage
   | GetReportsMessage
   | GetReportMessage
+  | ReadAllReportsMessage
   | GetAllianceMessage
   | AllianceActionMessage
   | BuyItemMessage
