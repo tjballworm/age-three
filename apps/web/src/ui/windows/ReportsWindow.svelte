@@ -84,7 +84,7 @@
   }
 
   const FAILED: Record<string, string> = {
-    no_informatics: 'this city needs both Informatics research and a Beacon Tower to scout',
+    no_informatics: 'this city needs Informatics research to scout',
     too_few_scouts: 'too few scouts for its level (10 per level)',
     scouts_beaten: "the city's scouts beat yours",
     no_scouts: 'no scouts were sent',

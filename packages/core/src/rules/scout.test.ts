@@ -13,11 +13,11 @@ describe('scouting', () => {
     );
   });
 
-  it('scout level is min(Informatics, Beacon Tower) plus up to 2 for the hero', () => {
-    expect(scoutLevel(5, 3, null)).toBe(3);
-    expect(scoutLevel(5, 3, 30)).toBe(4);
-    expect(scoutLevel(5, 3, 99)).toBe(5);
-    expect(scoutLevel(0, 10, 99)).toBe(0);
+  it('scout level is Informatics plus up to 2 for the hero', () => {
+    expect(scoutLevel(3, null)).toBe(3);
+    expect(scoutLevel(3, 30)).toBe(4);
+    expect(scoutLevel(3, 99)).toBe(5);
+    expect(scoutLevel(0, 99)).toBe(0);
   });
   it('detail', () => {
     expect(scoutDetail(5, 5)).toBe('exact');

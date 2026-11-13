@@ -54,7 +54,6 @@
   const hc = $derived(target.kind === 'historic' && !lord ? historicSpec(target.level) : undefined);
   /** An NPC town. Like a historic city, its garrison stays hidden: scout it to see what is there. */
   const npc = $derived(target.kind === 'npc');
-  const beacon = $derived(city.buildings.find((b) => b.type === 'beacontower')?.level ?? 0);
   const relief = $derived(city.buildings.find((b) => b.type === 'reliefstation')?.level ?? 0);
   const what = $derived(
     lord
@@ -125,7 +124,7 @@
   const carriedTotal = $derived(Object.values(carried).reduce((n, v) => n + (v ?? 0), 0));
   const hero = $derived(idle.find((h) => h.id === heroId));
   const scouting = $derived(
-    scoutLevel(research.informatics ?? 0, beacon, heroMode === 'none' ? 0 : hero?.intelligence),
+    scoutLevel(research.informatics ?? 0, heroMode === 'none' ? 0 : hero?.intelligence),
   );
   const stockNow = (r: ResourceType) => stockAt(city.resources[r], game.syncedAt, clock.now);
   const food = $derived(marchFood(army, seconds, camp));
@@ -386,9 +385,9 @@
     <div class="side enemy">
       {#if mission === 'scout'}
         <p class="note">
-          Scout level {scouting} = the lower of your Informatics ({research.informatics ?? 0}) and Beacon
-          Tower ({beacon}), plus 1 for every 25 of the hero's Intelligence (at most 2).
-          {#if scouting === 0}Without both, scouts see nothing and die.{/if}
+          Scout level {scouting} = your Informatics ({research.informatics ?? 0}), plus 1 for every 25 of the
+          hero's Intelligence (at most 2).
+          {#if scouting === 0}Without Informatics, scouts see nothing and die.{/if}
           {#if lord}
             Against a lord's city the owner's Informatics and defending hero make it harder to read; with its
             gate open its scouts fight yours, and you need more than it has.

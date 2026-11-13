@@ -27,10 +27,9 @@ export const troopWord = (n: number): string => TROOP_WORDS.find(([from]) => n >
 export const scoutHeroBonus = (intelligence: number | null | undefined): number =>
   intelligence ? Math.min(2, Math.floor(Math.max(0, intelligence) / 25)) : 0;
 
-/** min(Informatics, Beacon Tower) plus the hero's bonus; 0 without either (a scout then always fails). */
-export function scoutLevel(informatics: number, beacon: number, intelligence?: number | null): number {
-  const base = Math.min(informatics, beacon);
-  return base === 0 ? 0 : base + scoutHeroBonus(intelligence);
+/** Informatics plus the hero's bonus; 0 without Informatics (a scout then always fails). No Beacon Tower needed. */
+export function scoutLevel(informatics: number, intelligence?: number | null): number {
+  return informatics === 0 ? 0 : informatics + scoutHeroBonus(intelligence);
 }
 
 /** How much a successful scout sees against a target of level `target`. */
