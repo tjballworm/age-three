@@ -220,6 +220,10 @@ function sampleHero(
     intelligence,
     status,
     salary: level * 20,
+    loyalty: status === 'captive' ? 0 : 70,
+    rewardAt: null,
+    resetAt: null,
+    added: {},
   };
 }
 

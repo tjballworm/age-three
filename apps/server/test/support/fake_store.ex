@@ -110,6 +110,19 @@ defmodule Age3.FakeStore do
   def assign_points(_player_id, _city_id, _hero_id, _add, _now_ms), do: {:error, "not_enough_points"}
 
   @impl true
+  def reward_hero(_player_id, "c1", "h1", "gold", nil, _now_ms), do: :ok
+  def reward_hero(_player_id, "c1", "h1", "medal", "cross", _now_ms), do: :ok
+  def reward_hero(_player_id, _city_id, _hero_id, _kind, _medal, _now_ms), do: {:error, "reward_cooldown"}
+
+  @impl true
+  def rename_hero(_player_id, "c1", "h1", _name, _now_ms), do: :ok
+  def rename_hero(_player_id, _city_id, _hero_id, _name, _now_ms), do: {:error, "bad_message"}
+
+  @impl true
+  def reset_points(_player_id, "c1", "h1", _now_ms), do: :ok
+  def reset_points(_player_id, _city_id, _hero_id, _now_ms), do: {:error, "nothing_to_reset"}
+
+  @impl true
   def alliance_info(_player_id), do: %{alliance: nil, invites: [], applied: [], embassy: 1, alliances: []}
 
   @impl true

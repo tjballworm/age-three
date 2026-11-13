@@ -268,6 +268,35 @@ defmodule Age3.SessionTest do
     assert_received {:wake, 61_000}
   end
 
+  test "rewardHero, renameHero and resetPoints" do
+    msg = fn type, payload ->
+      Jason.encode!(%{type: type, id: 2, payload: Map.merge(%{cityId: "c1", heroId: "h1"}, payload)})
+    end
+
+    assert [
+             _,
+             %{"type" => "state"},
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "bad_message"}},
+             %{"type" => "error", "payload" => %{"code" => "reward_cooldown"}},
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "bad_hero_name"}},
+             %{"type" => "state"},
+             %{"type" => "error", "payload" => %{"code" => "nothing_to_reset"}}
+           ] =
+             run([
+               login("secret123"),
+               msg.("rewardHero", %{kind: "gold"}),
+               msg.("rewardHero", %{kind: "medal", medal: "cross"}),
+               msg.("rewardHero", %{kind: "medal"}),
+               msg.("rewardHero", %{heroId: "h2", kind: "gold"}),
+               msg.("renameHero", %{name: "  Sir   Bob "}),
+               msg.("renameHero", %{name: "<script>"}),
+               msg.("resetPoints", %{}),
+               msg.("resetPoints", %{heroId: "h2"})
+             ])
+  end
+
   test "chat and mail" do
     msg = fn type, payload -> Jason.encode!(%{type: type, id: 2, payload: payload}) end
 

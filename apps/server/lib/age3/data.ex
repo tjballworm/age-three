@@ -64,6 +64,9 @@ defmodule Age3.Data do
   @doc "The nine medal ids, lowest first: cross ... nation."
   def medal_ids, do: Enum.map(@medals["medals"], & &1["id"])
 
+  @doc "Loyalty a hero gains when rewarded with this medal (Feasting Hall), or nil for no such medal."
+  def medal_loyalty(id), do: Enum.find_value(@medals["medals"], &(&1["id"] == id && &1["loyalty"]))
+
   @doc "Chance of each medal for a full clear of an NPC of this level, e.g. %{\"cross\" => 0.225}; %{} outside 1-10."
   def npc_medal_drops(level) when is_integer(level) and level in 1..10,
     do: Enum.at(@medals["drops"]["npc"], level - 1)

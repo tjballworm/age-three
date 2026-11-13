@@ -382,6 +382,37 @@ defmodule Age3.Store do
   @callback levy(player_id :: String.t(), city_id :: String.t(), kind :: String.t(), now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
 
+  @doc """
+  Rewards a hero for loyalty (Age3.Heroes.check_reward/6): kind "gold" pays from the hero's city, kind "medal"
+  spends one of the player's medal_id medals.
+  """
+  @callback reward_hero(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              hero_id :: String.t(),
+              kind :: String.t(),
+              medal_id :: String.t() | nil,
+              now_ms :: integer
+            ) :: :ok | {:error, code :: String.t()}
+
+  @doc "Renames one of the player's heroes. The name is already checked (Age3.Game.city_name/1)."
+  @callback rename_hero(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              hero_id :: String.t(),
+              name :: String.t(),
+              now_ms :: integer
+            ) :: :ok | {:error, code :: String.t()}
+
+  @doc "Gives back a hero's spent stat points for gold (Age3.Heroes.check_reset/3)."
+  @callback reset_points(
+              player_id :: String.t(),
+              city_id :: String.t(),
+              hero_id :: String.t(),
+              now_ms :: integer
+            ) ::
+              :ok | {:error, code :: String.t()}
+
   @doc "Renames one of the player's cities. The name is already checked (Age3.Game.city_name/1)."
   @callback rename_city(player_id :: String.t(), city_id :: String.t(), name :: String.t(), now_ms :: integer) ::
               :ok | {:error, code :: String.t()}
@@ -1731,6 +1762,75 @@ defmodule Age3.Store.Pg do
     |> ok()
   end
 
+  @impl true
+  def reward_hero(player_id, city_id, hero_id, kind, medal_id, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      hero = find_hero(city.id, hero_id) || Repo.rollback("bad_message")
+      resources = settled(city, now_ms).resources
+
+      medals =
+        Repo.one!(from p in Player, where: p.id == ^player_id, lock: "FOR UPDATE", select: p.medals)
+
+      rule_hero = %{hero | reward_at: hero.reward_at && to_ms(hero.reward_at)}
+
+      case Heroes.check_reward(rule_hero, kind, medal_id, now_ms, resources["gold"]["amount"], medals) do
+        {:ok, %{gold: gold, medal: medal, loyalty: loyalty}} ->
+          if gold > 0, do: save_resources(city, Build.spend(resources, %{"gold" => gold}), now_ms)
+          if medal, do: add_medals(player_id, %{medal => -1})
+
+          Repo.update_all(from(h in Hero, where: h.id == ^hero.id),
+            set: [loyalty: loyalty, reward_at: to_datetime(now_ms)]
+          )
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def rename_hero(player_id, city_id, hero_id, name, _now_ms) do
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      hero = find_hero(city.id, hero_id) || Repo.rollback("bad_message")
+      if hero.status == "captive", do: Repo.rollback("hero_busy")
+      Repo.update_all(from(h in Hero, where: h.id == ^hero.id), set: [name: name])
+    end)
+    |> ok()
+  end
+
+  @impl true
+  def reset_points(player_id, city_id, hero_id, now_ms) do
+    arrivals([city_id], to_datetime(now_ms))
+
+    Repo.transaction(fn ->
+      city = lock_city(player_id, city_id) || Repo.rollback("bad_message")
+      hero = find_hero(city.id, hero_id) || Repo.rollback("bad_message")
+      resources = settled(city, now_ms).resources
+      rule_hero = %{hero | reset_at: hero.reset_at && to_ms(hero.reset_at)}
+
+      case Heroes.check_reset(rule_hero, now_ms, resources["gold"]["amount"]) do
+        {:ok, changes, gold} ->
+          save_resources(city, Build.spend(resources, %{"gold" => gold}), now_ms)
+
+          Repo.update_all(from(h in Hero, where: h.id == ^hero.id),
+            set: [{:reset_at, to_datetime(now_ms)} | changes]
+          )
+
+          # a mayor's Politics changes production
+          if hero.status == "mayor", do: resnapshot(Repo.get!(City, city.id), to_datetime(now_ms))
+
+        {:error, code} ->
+          Repo.rollback(code)
+      end
+    end)
+    |> ok()
+  end
+
   defp ok({:ok, _}), do: :ok
   defp ok({:error, code}), do: {:error, code}
 
@@ -2943,6 +3043,10 @@ defmodule Age3.Store.Pg do
 
     hero_report = hero && gain_hero_exp(hero, March.hero_exp(result))
     guard_report = guard && gain_hero_exp(guard, result.attacker.total_lost)
+
+    {hero_report, hero_taken} =
+      if hero && not won, do: lost_attack(hero, def, hero_report), else: {hero_report, false}
+
     owned = Repo.aggregate(from(c in City, where: c.player_id == ^att.player_id), :count)
     change = won && Pvp.after_loss(loyalty, def.grievance, owned)
     captured = change != false and change.captured
@@ -2986,6 +3090,7 @@ defmodule Age3.Store.Pg do
     def_title =
       cond do
         captured -> "#{where} was captured by #{names[att.player_id]}"
+        hero_taken -> "#{where} held against #{names[att.player_id]} and captured #{hero.name}"
         won -> "#{where} lost to #{names[att.player_id]}"
         true -> "#{where} held against #{names[att.player_id]}"
       end
@@ -3028,10 +3133,31 @@ defmodule Age3.Store.Pg do
       )
     )
 
-    return_home(att, t, survivors, loot)
+    # a captured hero stays behind
+    back = if hero_taken, do: %{t | data: Map.delete(d, "heroId")}, else: t
+    return_home(att, back, survivors, loot)
+    # their salary stops
+    if hero_taken, do: resnapshot(Repo.get!(City, att.id), t.ends_at)
     unless captured, do: resnapshot(Repo.get!(City, def.id), t.ends_at)
 
     {%{t | data: Map.merge(d, %{"won" => won, "reportId" => report.id, "loot" => loot})}, [def.player_id]}
+  end
+
+  # The hero who led a lost attack on a player's city loses loyalty and, if it falls low enough and the defender's
+  # Feasting Hall has room, is captured (Age3.Heroes.after_lost_attack/2). Returns the hero's report with the
+  # loyalty added, and whether it was captured.
+  defp lost_attack(hero, def, report) do
+    hall = Heroes.capacity(Repo.all(from b in Building, where: b.city_id == ^def.id))
+    held = Repo.aggregate(from(h in Hero, where: h.city_id == ^def.id), :count)
+    {loyalty, taken} = Heroes.after_lost_attack(hero.loyalty, held < hall)
+
+    set =
+      if taken,
+        do: [loyalty: 0, status: "captive", city_id: def.id],
+        else: [loyalty: loyalty]
+
+    Repo.update_all(from(h in Hero, where: h.id == ^hero.id), set: set)
+    {Map.merge(report, %{"loyalty" => loyalty, "captured" => taken}), taken}
   end
 
   # Allies' stationed troops after a battle at the city they guard: each loses the same share of each type as
@@ -3115,7 +3241,7 @@ defmodule Age3.Store.Pg do
     unless Repo.exists?(from c in City, where: c.player_id == ^old_owner and c.id != ^city.id),
       do: new_city(old_owner, Repo.get!(Player, old_owner).name)
 
-    Repo.update_all(from(h in Hero, where: h.city_id == ^city.id), set: [status: "captive"])
+    Repo.update_all(from(h in Hero, where: h.city_id == ^city.id), set: [status: "captive", loyalty: 0])
 
     Repo.update_all(from(c in City, where: c.id == ^city.id),
       set: [
@@ -3179,6 +3305,7 @@ defmodule Age3.Store.Pg do
       for t <- tasks do
         city = Repo.get!(City, city_id)
         applied = apply_task(city, t)
+        mayor_exp(city_id, t)
         Repo.delete!(t)
         # read again: a returning march has already added its loot to a new snapshot
         resnapshot(Repo.get!(City, city_id), t.ends_at)
@@ -3305,6 +3432,19 @@ defmodule Age3.Store.Pg do
         {Npc.full(level), "Lv#{level} NPC", Data.npc_regen_seconds()}
     end
   end
+
+  # City work teaches the city's mayor (wiki, Experience): a finished build, research, fortification or training
+  # task gives raw cost / 200 exp. Demolitions and marches give none; a mayor who is away gets nothing.
+  defp mayor_exp(_city_id, %Task{kind: "build", data: %{"demolish" => true}}), do: :ok
+
+  defp mayor_exp(city_id, %Task{kind: kind, cost: cost}) when kind in ~w(build research train fort) do
+    exp = Heroes.city_work_exp(cost)
+    mayor = exp > 0 && Repo.one(from h in Hero, where: h.city_id == ^city_id and h.status == "mayor")
+    if mayor, do: gain_hero_exp(mayor, exp)
+    :ok
+  end
+
+  defp mayor_exp(_city_id, _task), do: :ok
 
   # A demolition's refund, added (up to the caps) as of the moment it finished.
   defp refund(city, %Task{data: %{"refund" => refund}} = t) do
@@ -3990,7 +4130,11 @@ defmodule Age3.Store.Pg do
       intelligence: h.intelligence,
       stars: h.stars,
       status: h.status,
-      salary: Heroes.salary(h.level)
+      salary: Heroes.salary(h.level),
+      loyalty: h.loyalty,
+      rewardAt: h.reward_at && to_ms(h.reward_at),
+      resetAt: h.reset_at && to_ms(h.reset_at),
+      added: h.added || %{}
     }
   end
 

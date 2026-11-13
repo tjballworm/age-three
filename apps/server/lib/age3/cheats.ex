@@ -24,7 +24,8 @@ defmodule Age3.Cheats do
     {"politics", :politics},
     {"attack", :attack},
     {"intelligence", :intelligence},
-    {"stars", :stars}
+    {"stars", :stars},
+    {"loyalty", :loyalty}
   ]
 
   @doc "Whether cheat messages are accepted. Always true for now (see the note at the top)."
@@ -46,8 +47,8 @@ defmodule Age3.Cheats do
     * "maxTown": the city's buildings replaced with a maxed-out layout (see max_town/0)
     * "setResearch" {tech, level} / "researchAll" {level}: research levels for the player (0 forgets them)
     * "heroExp" {amount}: exp for every hero in the city (they level up as it covers)
-    * "setHero" {heroId, level?, points?, politics?, attack?, intelligence?, stars?}: one hero's level, stats and
-      gear stars (0-15), set
+    * "setHero" {heroId, level?, points?, politics?, attack?, intelligence?, stars?, loyalty?}: one hero's level,
+      stats, gear stars (0-15) and loyalty (0-100), set
       straight (only the fields sent change; a new level starts with 0 exp). The hero has to be in the target's
       cities.
     * "addMedals" {medals: {cross: 10, ...}}: adds medals to the player (negative takes away, not below 0)
@@ -240,6 +241,7 @@ defmodule Age3.Cheats do
 
   defp hero_value?(:level, v), do: is_integer(v) and v in 1..Age3.Heroes.max_level()
   defp hero_value?(:stars, v), do: is_integer(v) and v in 0..@max_stars
+  defp hero_value?(:loyalty, v), do: is_integer(v) and v in 0..100
   defp hero_value?(_stat, v), do: is_integer(v) and v in 0..@max_hero_stat
 
   defp amount?(v), do: is_integer(v) and abs(v) <= @max_amount
