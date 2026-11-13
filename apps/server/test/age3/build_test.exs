@@ -24,8 +24,10 @@ defmodule Age3.BuildTest do
     assert {:error, "bad_slot"} = Build.check(town, rich(), "3", "inn")
   end
 
-  test "nothing goes above the Town Hall's level, except the Town Hall" do
-    assert {:error, "requirement_not_met"} = Build.check(@town, rich(), "walls", nil)
+  test "nothing goes more than one level above the Town Hall, except the Town Hall" do
+    assert {:ok, %{type: "walls", level: 2}} = Build.check(@town, rich(), "walls", nil)
+    walls2 = [%{slot: "walls", type: "walls", level: 2}, hd(@town)]
+    assert {:error, "requirement_not_met"} = Build.check(walls2, rich(), "walls", nil)
     assert {:ok, %{type: "townhall", level: 2}} = Build.check(@town, rich(), "townhall", nil)
   end
 
