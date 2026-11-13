@@ -3,8 +3,8 @@ defmodule Age3.Scout do
   # approved on 2026-11-03, widened to every target now that valleys and players' cities can be scouted:
   #
   #   * A scout mission needs at least one scout. Other troops may go along; a hero is optional.
-  #   * The scout level S = min(Informatics, the sending city's Beacon Tower level), plus 1 for every 25 points of
-  #     the hero's Intelligence (at most +2). S = 0 always fails: a city needs both to see anything.
+  #   * The scout level S = the sending city's Informatics, plus 1 for every 25 points of the hero's Intelligence
+  #     (at most +2). No Beacon Tower is needed (TJ, 2026-11-13). Without Informatics S = 0, which always fails.
   #   * Against an NPC city, a lord's town, a historic city or a valley of level L, it needs 10 scouts per level
   #     (wiki); fewer and it fails. Flats have nothing to see and always succeed.
   #   * Against a player's city, its level L is the owner's Informatics there plus 1 for every 25 points of its
@@ -26,13 +26,9 @@ defmodule Age3.Scout do
   def hero_bonus(nil), do: 0
   def hero_bonus(intelligence), do: min(@max_hero_bonus, div(max(0, intelligence), @int_per_level))
 
-  @doc "The scout level of a march: min(Informatics, Beacon Tower) + the hero's bonus; 0 without either."
-  def level(informatics, beacon, intelligence) do
-    case min(informatics, beacon) do
-      0 -> 0
-      n -> n + hero_bonus(intelligence)
-    end
-  end
+  @doc "The scout level of a march: Informatics + the hero's bonus; 0 without Informatics."
+  def level(0, _intelligence), do: 0
+  def level(informatics, intelligence), do: informatics + hero_bonus(intelligence)
 
   @doc "A player city's scouting level: the owner's Informatics there plus its defending hero's bonus."
   def city_level(research, guard_intelligence),

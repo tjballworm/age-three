@@ -2775,7 +2775,7 @@ defmodule Age3.Store.Pg do
     end
   end
 
-  # Scouting a player's city (Age3.Scout): what the sender's Informatics, Beacon Tower and hero can see of it,
+  # Scouting a player's city (Age3.Scout): what the sender's Informatics and hero can see of it,
   # against the owner's Informatics and defending hero; with its gate open, its scouts fight yours. Both get a
   # report; the scouted lord only learns who looked and whether it worked.
   defp scout_city(%City{player_id: owner} = att, %City{player_id: owner}, %Task{data: d} = t) do
@@ -2949,17 +2949,13 @@ defmodule Age3.Store.Pg do
     end)
   end
 
-  # The scout level of a march from city (Age3.Scout.level/3): its Informatics and Beacon Tower, and its hero.
+  # The scout level of a march from city (Age3.Scout.level/2): its Informatics and its hero.
   defp scout_level(city, d) do
     buildings = Repo.all(from b in Building, where: b.city_id == ^city.id)
     research = Research.in_city(research_of(city.player_id), buildings)
     hero = d["heroId"] && Repo.get(Hero, d["heroId"])
 
-    Scout.level(
-      Research.level_of(research, "informatics"),
-      Build.level_of(buildings, "beacontower"),
-      hero && hero.intelligence
-    )
+    Scout.level(Research.level_of(research, "informatics"), hero && hero.intelligence)
   end
 
   # What comes home from a scout: everything, or everything but the scouts after a failure.

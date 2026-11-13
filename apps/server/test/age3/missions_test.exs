@@ -96,7 +96,7 @@ defmodule Age3.MissionsTest do
   end
 
   describe "scouting" do
-    test "an NPC: enough scouts see the garrison, too few die; no Beacon Tower sees nothing" do
+    test "an NPC: enough scouts see the garrison, too few die" do
       l = lord("Spymaster")
       npc = nearest(l.city, &(&1 == %{kind: "npc", level: 5}))
 
@@ -121,6 +121,16 @@ defmodule Age3.MissionsTest do
       {:ok, _, [city], []} = settle(l, at2 + 10_000)
       assert city.troops["scout"] == 951
       assert [%{won: false, scout: %{"failed" => "too_few_scouts"}} | _] = Pg.reports(l.id)
+    end
+
+    test "no Beacon Tower is needed: Informatics alone sets the scout level" do
+      l = lord("Lookout")
+      Repo.delete_all(from b in Building, where: b.city_id == ^l.city.id and b.type == "beacontower")
+      npc = nearest(l.city, &(&1 == %{kind: "npc", level: 5}))
+
+      {:ok, at} = march(l, npc, %{"scout" => 50}, %{"mission" => "scout"})
+      settle(l, at)
+      assert [%{kind: "scout", won: true, scout: %{"detail" => "exact"}}] = Pg.reports(l.id)
     end
 
     test "a lower scout level sees rounded or no counts; a scout march needs scouts" do

@@ -5,11 +5,10 @@ defmodule Age3.ScoutValleyTest do
 
   describe "Scout" do
     test "level: min(Informatics, Beacon Tower) plus up to 2 for the hero; 0 without either" do
-      assert Scout.level(5, 3, nil) == 3
-      assert Scout.level(5, 3, 30) == 4
-      assert Scout.level(5, 3, 99) == 5
-      assert Scout.level(0, 10, 99) == 0
-      assert Scout.level(4, 0, 99) == 0
+      assert Scout.level(3, nil) == 3
+      assert Scout.level(3, 30) == 4
+      assert Scout.level(3, 99) == 5
+      assert Scout.level(0, 99) == 0
     end
 
     test "outcome: 10 scouts per level, flats always, cities with open gates need more scouts than the defenders" do
