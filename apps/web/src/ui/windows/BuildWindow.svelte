@@ -77,7 +77,7 @@
   function blocker(type: BuildingType, level: number): string | null {
     const spec = BUILDINGS[type];
     if (level > MAX_BUILDING_LEVEL) return 'Already at the highest level';
-    if (type !== 'townhall' && level > levelOf('townhall')) return `Needs Town Hall Lv ${level}`;
+    if (type !== 'townhall' && level > levelOf('townhall') + 1) return `Needs Town Hall Lv ${level - 1}`;
     const { cost, requires, research } = buildingLevel(type, level)!;
     for (const [need, lv] of Object.entries(requires ?? {}))
       if (levelOf(need as BuildingType) < lv!)

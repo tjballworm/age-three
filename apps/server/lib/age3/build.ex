@@ -64,11 +64,11 @@ defmodule Age3.Build do
 
   def fits?(_slot, _type), do: false
 
-  # Nothing goes above the Town Hall's level, except the Town Hall itself.
+  # Nothing goes more than one level above the Town Hall, except the Town Hall itself.
   defp below_town_hall(_buildings, "townhall", _level), do: :ok
 
   defp below_town_hall(buildings, _type, level) do
-    if level <= level_of(buildings, "townhall"), do: :ok, else: {:error, "requirement_not_met"}
+    if level <= level_of(buildings, "townhall") + 1, do: :ok, else: {:error, "requirement_not_met"}
   end
 
   # The other buildings and research this level needs first (from the data file), and for new buildings the
